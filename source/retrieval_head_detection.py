@@ -44,7 +44,10 @@ from source.modeling_llama import LlamaForCausalLM
 from source.modeling_qwen2 import Qwen2ForCausalLM
 from source.modeling_mixtral import MixtralForCausalLM
 from source.modeling_mistral import MistralForCausalLM
-from source.modeling_phi3 import Phi3ForCausalLM
+try:
+    from source.modeling_phi3 import Phi3ForCausalLM
+except ImportError:
+    pass
 import numpy as np
 import argparse
 from rouge_score import rouge_scorer
