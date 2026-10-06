@@ -1,0 +1,9 @@
+/.venv/
+/models/
+/outputs/
+/results/
+/contexts/
+/head_score/
+/attention/
+__pycache__/
+*.pyc
