@@ -45,10 +45,7 @@ from source.modeling_llama import LlamaForCausalLM, LlamaConfig
 from source.modeling_qwen2 import Qwen2ForCausalLM
 from source.modeling_mixtral import MixtralForCausalLM
 from source.modeling_mistral import MistralForCausalLM
-try:
-    from source.modeling_phi3 import Phi3ForCausalLM
-except ImportError:
-    pass
+from source.modeling_phi3 import Phi3ForCausalLM
 
 import numpy as np
 import argparse
@@ -179,11 +176,8 @@ class LLMNeedleHaystackTester:
             self.layer_num, self.head_num = config.num_hidden_layers, config.num_attention_heads
             print(f"layer number: {self.layer_num}, head number {self.head_num}")
             if "Qwen" in self.model_version:
-                # self.model_to_test = Qwen2ForCausalLM.from_pretrained(
-                #        model_name,torch_dtype="auto",device_map='auto',use_flash_attention_2="flash_attention_2"
-                #     )
                 self.model_to_test = Qwen2ForCausalLM.from_pretrained(
-                       model_name,torch_dtype="auto",device_map='auto', attn_implementation="sdpa"
+                       model_name,torch_dtype="auto",device_map='auto',use_flash_attention_2="flash_attention_2"
                     )
             elif "Mixtral" in self.model_version:
                 self.model_to_test = MixtralForCausalLM.from_pretrained(
@@ -344,7 +338,8 @@ class LLMNeedleHaystackTester:
         self.real_needle = "eat a sandwich and sit in Dolores Park on a sunny day"
         #self.prompt_ids = torch.concat([context_ids, question_ids], dim=1)[0, :]
         self.prompt_ids = input_ids[0, :]
-        input_ids = input_ids.to(self.model_to_test.device)
+        if not self.multi_gpus:
+            input_ids = input_ids.to(self.model_to_test.device)
 
         self.needle_start, self.needle_end = self.find_needle_idx(self.real_needle)
         with torch.no_grad():
