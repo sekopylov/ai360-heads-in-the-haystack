@@ -169,8 +169,11 @@ class LLMNeedleHaystackTester:
         self.layer_num, self.head_num = config.num_hidden_layers, config.num_attention_heads
         print(f"layer number: {self.layer_num}, head number {self.head_num}")
         if "Qwen" in self.model_version:
+            # self.model_to_test = Qwen2ForCausalLM.from_pretrained(
+            #         model_name,torch_dtype="auto",device_map='auto',use_flash_attention_2="flash_attention_2"
+            #     ).eval()
             self.model_to_test = Qwen2ForCausalLM.from_pretrained(
-                    model_name,torch_dtype="auto",device_map='auto',use_flash_attention_2="flash_attention_2"
+                    model_name,torch_dtype="auto",device_map='auto'
                 ).eval()
         elif "Mixtral" in self.model_version:
             self.model_to_test = MixtralForCausalLM.from_pretrained(
