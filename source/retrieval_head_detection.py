@@ -288,8 +288,7 @@ class LLMNeedleHaystackTester:
         # Prepare your message to send to the model you're going to evaluate
         test_start_time = time.time()
         self.prompt_ids = input_ids[0, :]
-        if not self.multi_gpus:
-            input_ids = input_ids.to(self.model_to_test.device)
+        input_ids = input_ids.to(self.model_to_test.device)
         self.needle_start, self.needle_end = self.find_needle_idx(self.real_needle)
         with torch.no_grad():
             q_outputs = self.model_to_test(input_ids=input_ids[:,:-1], use_cache=True, return_dict=True)

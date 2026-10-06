@@ -344,8 +344,7 @@ class LLMNeedleHaystackTester:
         self.real_needle = "eat a sandwich and sit in Dolores Park on a sunny day"
         #self.prompt_ids = torch.concat([context_ids, question_ids], dim=1)[0, :]
         self.prompt_ids = input_ids[0, :]
-        if not self.multi_gpus:
-            input_ids = input_ids.to(self.model_to_test.device)
+        input_ids = input_ids.to(self.model_to_test.device)
 
         self.needle_start, self.needle_end = self.find_needle_idx(self.real_needle)
         with torch.no_grad():
