@@ -173,7 +173,7 @@ class LLMNeedleHaystackTester:
             #         model_name,torch_dtype="auto",device_map='auto',use_flash_attention_2="flash_attention_2"
             #     ).eval()
             self.model_to_test = Qwen2ForCausalLM.from_pretrained(
-                    model_name,torch_dtype="auto",device_map='auto', attn_implementation="sdpa"
+                    model_name,torch_dtype="auto",device_map='auto', attn_implementation="eager"
                 ).eval()
         elif "Mixtral" in self.model_version:
             self.model_to_test = MixtralForCausalLM.from_pretrained(
