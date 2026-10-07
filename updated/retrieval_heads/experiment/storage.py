@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -52,6 +53,9 @@ def result_payload(
         "version": 2,
         "needle": prepared.case.needle,
         "expected_answer": prepared.case.expected_answer,
+        "prompt_sha256": hashlib.sha256(
+            json.dumps(prepared.prompt.token_ids).encode("utf-8")
+        ).hexdigest(),
         "model_response": result.generation.text,
         "score": result.score,
         "test_duration_seconds": result.duration_seconds,

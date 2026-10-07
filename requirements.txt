@@ -1,3 +1,0 @@
-pytorch==2.0.1
-transformers==4.37.2
-flash-attn==2.5.6

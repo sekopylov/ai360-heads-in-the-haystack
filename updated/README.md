@@ -36,6 +36,8 @@ output to Qwen; the rest of the model is never replaced.
 
 Python 3.11 or 3.12 and CUDA are recommended. Native Windows setup and all
 experiment commands are documented in [WINDOWS_GUIDE.md](WINDOWS_GUIDE.md).
+Running the same experiment as a Yandex DataSphere Job is documented in
+[DATASPHERE_GUIDE.md](DATASPHERE_GUIDE.md).
 
 Install the appropriate PyTorch build first, then:
 
@@ -70,6 +72,9 @@ Qwen3.5 is hybrid. Only `full_attention` layers have ordinary token-to-token
 attention matrices. Gated DeltaNet layers remain untouched.
 
 ## Detection
+
+The input corpora live in `data/haystack_for_detect/` (detection) and
+`data/PaulGrahamEssays/` (masking).
 
 Small smoke run:
 
@@ -120,7 +125,6 @@ Run detection first, then run all three paired conditions:
 python needle_in_haystack_with_mask.py --mask-topk 0 --lengths 1000,2000
 python needle_in_haystack_with_mask.py --mask-topk 8 --lengths 1000,2000
 python needle_in_haystack_with_mask.py --mask-topk -8 --seed 42 --lengths 1000,2000
-python compare_masking_results.py --topk 8
 ```
 
 The default `legacy_uniform` mode exactly preserves the source intervention:

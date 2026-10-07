@@ -1,0 +1,28 @@
+name: qwen35-retrieval-smoke
+desc: Qwen3.5-0.8B retrieval-head smoke test
+
+cmd: >
+  python3 job.py
+  --profile smoke
+  --output-root updated/datasphere-results/smoke
+  --detection-data ${DETECTION_DATA}
+  --dtype float32
+
+inputs:
+  - updated/data/haystack_for_detect: DETECTION_DATA
+
+outputs:
+  - updated/datasphere-results/smoke
+
+env:
+  python:
+    type: manual
+    version: "3.12"
+    requirements-file: updated/requirements.txt
+    local-paths:
+      - updated/datasphere/job.py
+      - updated/retrieval_head_detection.py
+      - updated/retrieval_heads
+
+cloud-instance-types:
+  - c1.4

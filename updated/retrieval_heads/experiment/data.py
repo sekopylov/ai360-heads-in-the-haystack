@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 from pathlib import Path
 
 from .types import ExperimentCase
@@ -89,6 +90,7 @@ class ContextBuilder:
         max_context_length: int,
         period_tokens: list[int],
         final_context_length_buffer: int = 200,
+        context_seed: int | None = None,
     ) -> None:
         if max_context_length < 1:
             raise ValueError("max_context_length must be positive")
@@ -97,6 +99,7 @@ class ContextBuilder:
         if not period_tokens:
             raise ValueError("period_tokens must not be empty")
         self.tokenizer = tokenizer
+        self.context_seed = context_seed
         self.max_context_length = max_context_length
         self.period_tokens = period_tokens
         self.final_context_length_buffer = final_context_length_buffer
@@ -106,6 +109,10 @@ class ContextBuilder:
         if directory in self._tokens:
             return self._tokens[directory]
         files = sorted(directory.glob("*.txt"))
+        if self.context_seed is not None:
+            # Local RNG: head sampling and condition execution order cannot
+            # change the haystack. Seed the canonical file list anew per corpus.
+            random.Random(self.context_seed).shuffle(files)
         if not files:
             raise FileNotFoundError(f"No .txt files found in {directory}")
         base = "".join(path.read_text(encoding="utf-8") for path in files)

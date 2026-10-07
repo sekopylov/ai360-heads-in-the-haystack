@@ -1,0 +1,37 @@
+name: qwen35-retrieval-full
+desc: Qwen3.5-0.8B detection plus paired masking sweep
+
+cmd: >
+  python3 job.py
+  --profile full
+  --output-root updated/datasphere-results/full
+  --detection-data ${DETECTION_DATA}
+  --mask-data ${MASK_DATA}
+  --dtype float16
+  --lengths 6000
+  --depths 25,50,75
+  --topks 4,8,16
+  --context-count 3
+  --random-repeats 3
+  --seed 42
+
+inputs:
+  - updated/data/haystack_for_detect: DETECTION_DATA
+  - updated/data/PaulGrahamEssays: MASK_DATA
+
+outputs:
+  - updated/datasphere-results/full
+
+env:
+  python:
+    type: manual
+    version: "3.12"
+    requirements-file: updated/requirements.txt
+    local-paths:
+      - updated/datasphere/job.py
+      - updated/retrieval_head_detection.py
+      - updated/needle_in_haystack_with_mask.py
+      - updated/retrieval_heads
+
+cloud-instance-types:
+  - gt4.1

@@ -9,5 +9,6 @@
 /runs/
 /detection/
 /evaluation/
+/datasphere-results/
 __pycache__/
 *.pyc

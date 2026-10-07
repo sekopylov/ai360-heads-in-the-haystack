@@ -31,7 +31,6 @@ from retrieval_heads.experiment.storage import (
 from retrieval_heads.models import available_models, create_model
 
 HERE = Path(__file__).resolve().parent
-REPO_ROOT = HERE.parent
 
 
 def parse_args() -> argparse.Namespace:
@@ -62,6 +61,7 @@ def parse_args() -> argparse.Namespace:
         help="explicit comma-separated context lengths; overrides --s/--e",
     )
     parser.add_argument("--depths")
+    parser.add_argument("--context-seed", type=int)
     parser.add_argument("--max-new-tokens", type=int, default=50)
     parser.add_argument("--success-threshold", type=float, default=50.0)
     parser.add_argument(
@@ -76,7 +76,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--haystack-root",
         type=Path,
-        default=REPO_ROOT / "source" / "haystack_for_detect",
+        default=HERE / "data" / "haystack_for_detect",
     )
     parser.add_argument("--output-root", type=Path, default=HERE)
     return parser.parse_args()
@@ -102,6 +102,7 @@ def main() -> None:
         model.tokenizer,
         max_context_length=max(lengths),
         period_tokens=model.period_tokens,
+        context_seed=args.context_seed,
     )
     runner = ExperimentRunner(
         model,
@@ -128,6 +129,7 @@ def main() -> None:
         "lengths": lengths,
         "depths": depths,
         "capture": args.capture,
+        "context_seed": args.context_seed,
         "success_threshold": args.success_threshold,
         "max_new_tokens": args.max_new_tokens,
         "total_cases": total,

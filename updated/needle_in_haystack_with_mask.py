@@ -25,7 +25,6 @@ from retrieval_heads.experiment.storage import (
 from retrieval_heads.models import available_models, create_model
 
 HERE = Path(__file__).resolve().parent
-REPO_ROOT = HERE.parent
 
 
 def parse_args() -> argparse.Namespace:
@@ -65,6 +64,8 @@ def parse_args() -> argparse.Namespace:
         help="positive: top retrieval heads; negative: random non-retrieval heads",
     )
     parser.add_argument("--seed", type=int)
+    parser.add_argument("--context-seed", type=int,
+                        help="shuffle haystack texts reproducibly; defaults to --seed")
     parser.add_argument(
         "--random-exclusion-top",
         type=int,
@@ -82,7 +83,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--haystack-dir",
         type=Path,
-        default=REPO_ROOT / "source" / "PaulGrahamEssays",
+        default=HERE / "data" / "PaulGrahamEssays",
     )
     parser.add_argument("--output-root", type=Path, default=HERE)
     parser.add_argument("--head-scores", type=Path)
@@ -151,6 +152,7 @@ def choose_blocked_heads(
 
 def main() -> None:
     args = parse_args()
+    context_seed = args.context_seed if args.context_seed is not None else args.seed
     if args.seed is not None:
         random.seed(args.seed)
     lengths = (
@@ -171,6 +173,7 @@ def main() -> None:
         model.tokenizer,
         max_context_length=max(lengths),
         period_tokens=model.period_tokens,
+        context_seed=context_seed,
     )
     runner = ExperimentRunner(
         model,
@@ -213,6 +216,7 @@ def main() -> None:
         ),
         "randomized_per_case": args.mask_topk < 0,
         "seed": args.seed,
+        "context_seed": context_seed,
         "random_exclusion_top": (
             abs(args.mask_topk)
             if args.mask_topk < 0 and args.random_exclusion_top is None
