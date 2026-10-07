@@ -1,0 +1,2 @@
+python sanity_check_qwen35.py --model_path Qwen/Qwen3.5-0.8B-Base
+python -u head_ablation_qwen35.py --model_path Qwen/Qwen3.5-0.8B-Base --scores head_score\Qwen3.5-0.8B-Base.json --s_len 1000 --e_len 8000 --num_lengths 4 --num_depths 5 --ks 0 2 4 8 16 --n_seeds 3 2>&1 | Tee-Object -FilePath logs\ablation.log
