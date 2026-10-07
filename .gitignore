@@ -1,3 +1,6 @@
 .venv/
 .*
 !.gitignore
+results/
+contexts/
+__pycache__
