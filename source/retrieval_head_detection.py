@@ -44,7 +44,7 @@ from source.modeling_llama import LlamaForCausalLM
 from source.modeling_qwen2 import Qwen2ForCausalLM
 from source.modeling_mixtral import MixtralForCausalLM
 from source.modeling_mistral import MistralForCausalLM
-from source.modeling_phi3 import Phi3ForCausalLM
+# from source.modeling_phi3 import Phi3ForCausalLM
 import numpy as np
 import argparse
 from rouge_score import rouge_scorer
@@ -282,8 +282,8 @@ class LLMNeedleHaystackTester:
         # Prepare your message to send to the model you're going to evaluate
         test_start_time = time.time()
         self.prompt_ids = input_ids[0, :]
-        if not self.multi_gpus:
-            input_ids = input_ids.to(self.model_to_test.device)
+        input_ids = input_ids.to(self.model_to_test.device)
+        # if not self.multi_gpus:
         self.needle_start, self.needle_end = self.find_needle_idx(self.real_needle)
         with torch.no_grad():
             q_outputs = self.model_to_test(input_ids=input_ids[:,:-1], use_cache=True, return_dict=True)
