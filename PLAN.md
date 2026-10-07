@@ -83,7 +83,7 @@
 |---|---|---|
 | `faiss_attn/source/modeling_qwen2.py` | **Починено маскирование голов.** У авторов список голов доходил до слоя декодера, но не передавался в модуль внимания, и `--mask_topk` для Qwen ничего не делал. Теперь он передаётся, а во flash-ветке запрос замаскированной головы зануляется — так же, как в `modeling_llama.py` | Да: без этого маскирования на Qwen нет. Детекцию не затрагивает |
 | `needle_in_haystack_with_mask.py` | `--head_score_dir`: откуда брать скоры голов | Нет при значении по умолчанию |
-| `needle_in_haystack_with_mask.py` | `--seed` для случайных голов; seed добавляется в имя папки результатов | Нет, если не задан |
+| `needle_in_haystack_with_mask.py` | `--random_seed` для случайных голов; seed добавляется в имя папки результатов | Нет, если не задан |
 | `retrieval_head_detection.py` | `--dump_dir`, `--dump_full_steps`, `--head_score_dir` | Нет |
 | `retrieval_head_detection.py`, `needle_in_haystack_with_mask.py` | `--context-intervals`, `--depths`; вход всегда переносится на устройство модели; импорт Phi-3 отключён | Нет при сетке авторов |
 

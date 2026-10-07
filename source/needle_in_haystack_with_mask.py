@@ -95,7 +95,8 @@ class LLMNeedleHaystackTester:
                  seconds_to_sleep_between_completions = None,
                  print_ongoing_status = True,
                  head_score_dir = "head_score",
-                 seed = None):
+                 seed = None,
+                 dump_dir = None):
         """        
         :param needle: The needle to be found in the haystack. Default is None.
         :param haystack_dir: The directory of text files to use as background context (or a haystack) in which the needle is to be found. Default is Paul Graham Essays.
@@ -141,6 +142,8 @@ class LLMNeedleHaystackTester:
         # [OUR CHANGE, not in the authors' code] seed for the random heads, off by default
         self.seed = seed
         if seed is not None: random.seed(seed)
+        # [OUR CHANGE, not in the authors' code] dump of per-sample data, off by default
+        self.dump_dir = dump_dir
         if "CUDA_VISIBLE_DEVICES" in os.environ:
             self.multi_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"])>1
         else:
@@ -358,6 +361,18 @@ class LLMNeedleHaystackTester:
         test_elapsed_time = test_end_time - test_start_time
         
         score = scorer.score(self.real_needle, response)['rouge1'].recall*100
+        if self.dump_dir is not None:
+            d = f"{self.dump_dir}/{save_name}"
+            os.makedirs(d, exist_ok=True)
+            np.savez_compressed(
+                f"{d}/len{int(context_length)}_depth{int(depth_percent)}.npz",
+                input_ids=self.prompt_ids.cpu().numpy().astype(np.int32),
+                output_ids=np.array(output, dtype=np.int32),
+                block_list=np.array(block_list if block_list else [], dtype=np.int32).reshape(-1, 2),
+                needle_start=self.needle_start, needle_end=self.needle_end,
+                context_length=int(context_length), depth_percent=float(depth_percent),
+                mask_topk=self.mask_topk, seed=-1 if self.seed is None else self.seed,
+                rouge=score, response=response)
         results = {
             'model' : self.model_to_test_description,
             'context_length' : int(context_length),
@@ -563,7 +578,8 @@ if __name__ == "__main__":
     parser.add_argument('--depths', type=str, default=None, help='comma separated list of depths, e.g. 10,30,50,70,90')
     
     parser.add_argument('--head_score_dir', type=str, default="head_score", help='where to read head scores from')
-    parser.add_argument('--seed', type=int, default=None, help='seed for the random heads')
+    parser.add_argument('--random_seed', type=int, default=None, help='seed for the random heads')
+    parser.add_argument('--dump_dir', type=str, default=None, help='where to dump per-sample data, e.g. results/dump')
 
     # parser = add_args(parser)
     args = parser.parse_args()
@@ -589,7 +605,8 @@ if __name__ == "__main__":
                                  context_lengths_num_intervals=args.context_intervals,
                                  document_depth_percents=custom_depths,
                                  head_score_dir=args.head_score_dir,
-                                 seed=args.seed
+                                 seed=args.random_seed,
+                                 dump_dir=args.dump_dir
                                  )
 
     ht.start_test(args)
