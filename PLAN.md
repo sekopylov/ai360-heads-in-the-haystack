@@ -90,6 +90,7 @@
 | `needle_in_haystack_with_mask.py` | `--random_seed` для случайных голов; seed добавляется в имя папки результатов | Нет, если не задан |
 | `retrieval_head_detection.py` | `--dump_dir`, `--dump_full_steps`, `--head_score_dir` | Нет |
 | `retrieval_head_detection.py`, `needle_in_haystack_with_mask.py` | Контекст прогоняется через базовую модель, без расчёта логитов: у авторов логиты всего контекста на 30k токенов занимали около 25 ГБ и не помещались в 80 ГБ. Используется только кэш, он тот же | Нет |
+| `retrieval_head_detection.py`, `needle_in_haystack_with_mask.py` | Кэш передаётся в генерацию как `DynamicCache` и дополняется на месте. У авторов на каждом шаге генерации строилась полная копия кэша, пока живы предыдущая копия и кэш прогона контекста (до трёх копий по ~25 ГБ на 30k токенов). Значения в кэше те же | Нет |
 | `retrieval_head_detection.py`, `needle_in_haystack_with_mask.py` | `--context-intervals`, `--depths`; вход всегда переносится на устройство модели; импорт Phi-3 отключён | Нет при сетке авторов |
 
 Следствия починки:

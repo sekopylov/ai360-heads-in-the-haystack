@@ -52,6 +52,7 @@ from datetime import datetime, timezone
 from collections import defaultdict
 import time
 import torch
+from transformers.cache_utils import DynamicCache
 
 
 
@@ -242,7 +243,7 @@ class LLMNeedleHaystackTester:
 
     def decode(self, q_outputs, inp, decode_len, block_list=None):
         output, retrieval_score = [], [[[0, ''] for _ in range(self.head_num)] for _ in range(self.layer_num)]
-        past_kv = q_outputs.past_key_values
+        past_kv = q_outputs  # [OUR CHANGE] q_outputs is already the cache, see evaluate_and_log
         for step_i in range(decode_len):
             inp = inp.view(1, 1)
             outputs = self.model_to_test(input_ids=inp, past_key_values=past_kv, use_cache=True, output_attentions=True, attn_mode="torch" )
@@ -365,7 +366,13 @@ class LLMNeedleHaystackTester:
             # only past_key_values is used below, and the logits of the whole context do not fit in 80GB at 30k tokens.
             # Authors' line: q_outputs = self.model_to_test(input_ids=input_ids[:,:-1], use_cache=True, return_dict=True)
             q_outputs = self.model_to_test.model(input_ids=input_ids[:,:-1], use_cache=True, return_dict=True)
-            output, retrieval_score  = self.decode(q_outputs, input_ids[:,-1], 50)
+            # [OUR CHANGE, not in the authors' code] the cache is passed as a DynamicCache and q_outputs is dropped.
+            # With the authors' tuple cache every decode step builds a full copy of the cache while the previous copy
+            # and the one in q_outputs are still alive (3x cache), which does not fit in 80GB at 30k tokens.
+            # A DynamicCache is extended in place layer by layer; the values are the same.
+            past_kv = DynamicCache.from_legacy_cache(q_outputs.past_key_values)
+            del q_outputs
+            output, retrieval_score  = self.decode(past_kv, input_ids[:,-1], 50)
             response = self.enc.decode(output,skip_special_tokens=True).strip()
 
         test_end_time = time.time()
