@@ -1,0 +1,27 @@
+name: rh-inspect-disk
+desc: read-only audit of the shared project disk (did we touch anything that is not ours?)
+
+# Strictly read-only: it lists directories and prints pyvenv.cfg + site-packages
+# names.  No writes, no deletes.  `rh-venv` is the directory an earlier cancelled
+# job created *before* the ownership guard existed; this report determines whether
+# that name collided with another user's directory.
+
+cmd: python3 scripts/datasphere_job.py --inspect-dir ${DS_PROJECT_HOME} --inspect-dir ${DS_PROJECT_HOME}/rh-venv --inspect-dir ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack
+
+flags:
+  - attach-project-disk
+
+env:
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+
+cloud-instance-types:
+  - c1.4

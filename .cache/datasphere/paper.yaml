@@ -1,0 +1,25 @@
+name: rh-paper
+desc: paper-scale grid on GPU
+
+cmd: python3 scripts/datasphere_job.py --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile paper --dtype bfloat16 --stages describe,detect,mask,qa,cot,compare,figures --out-prefix ds-results
+
+inputs:
+  - models:
+      var: WEIGHTS
+
+outputs:
+  - ds-results
+
+env:
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-datasphere.txt
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+
+cloud-instance-types:
+  - g2.1
+  - g1.1

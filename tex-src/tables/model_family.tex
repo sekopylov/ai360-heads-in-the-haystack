@@ -1,0 +1,24 @@
+\begin{table*}[t!]
+    \centering
+    % \renewcommand{\arraystretch}{1}
+    % \setlength{\tabcolsep}{5.5pt}
+    \caption{\label{tab:all_models} We consider a wide range of language model families and show that the basic properties of retrieval heads are universal and consistent across all language models we study. }
+    \begin{tabular}{@{}l|l|l@{}}
+    \toprule
+     \bf  Base Model& \bf Variant & \bf Variation Type\\
+         \midrule
+
+     Llama-2-7B& Llama-2-7B-80K & Length Extension via Continue Pretrain\\
+     &Llama-2-13B-64K & Model Scaling and Length Extension\\
+          \midrule
+
+     Mistral-7B-v0.2 & Mistral-7B-Instruct-v0.2 & SFT and RLHF\\
+     & Mixtral-8x7B-v0.1 & Sparse Upcycling to Mixture of Experts\\
+     \midrule
+     Yi-6B      & Yi-6B-200K & Length Extension via Continue Pretrain\\
+                & Yi-34B-200K & Model Scaling and Length Extension\\
+     \midrule
+     Qwen1.5-14B & Qwen1.5-14B-Chat& SFT and RLHF\\
+     \toprule
+    \end{tabular}
+\end{table*}

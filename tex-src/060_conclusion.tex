@@ -1,0 +1,5 @@
+This paper discovers retrieval heads, a special set of attention heads that are responsible for implementing the conditional copy algorithm and redirect information from the input to the output. 
+Retrieval heads are the primarily reason why a successful long-context model can pass the Needle-in-a-Haystack test, and their activation explains why a language model is faithful to the input or hallucinate.
+Compared to non-retrieval heads, retrieval heads have a stronger influence on downstream tasks that require the model to precisely recall the input information, either in extractive question answering or chain-of-thought reasoning. 
+We believe this work will foster future research on reducing hallucination,
+improving reasoning, and compressing the KV cache. 

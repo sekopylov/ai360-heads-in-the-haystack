@@ -1,0 +1,43 @@
+name: rh-t4-cached
+desc: full pipeline on a T4-class GPU using the persistent project-disk venv (t4 scale)
+
+# Same as t4.yaml, but the heavy dependencies come from the cached venv on the
+# project disk instead of being pip-installed on every job:
+#
+#   * env build:   ~9 min / ~3.5 GB download  ->  ~40 s / ~0 MB
+#   * run this after rh-t4-bootstrap has succeeded once.
+#
+# Bootstrapping notes (see docs/datasphere-findings.md):
+#   * `cmd` cannot start with ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv/bin/python: the CLI
+#     validates the first token as a python interpreter and rejects it. So the
+#     entry point stays `python3` and the driver re-execs itself into the venv
+#     (`--use-venv`).
+#   * the platform venv is still built, but from a one-line requirements file.
+
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile t4 --stages describe,detect,mask,qa,cot,compare,figures --out-prefix ds-results
+
+flags:
+  - attach-project-disk
+
+inputs:
+  - models:
+      var: WEIGHTS
+
+outputs:
+  - ds-results
+
+env:
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+
+cloud-instance-types:
+  - gt4i.1             # observed: NVIDIA L4, 22.2 GiB, sm_89 (T4-class slot)
+  - gt4.1              # fallback: 1x T4, 16 GB VRAM

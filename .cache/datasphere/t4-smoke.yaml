@@ -1,0 +1,32 @@
+name: rh-t4-smoke
+desc: validate every stage on the T4-class GPU path (GPU config, env build, weights link, CUDA used, all 7 stages)
+
+cmd: python3 scripts/datasphere_job.py --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile smoke --stages describe,detect,mask,qa,cot,compare,figures --out-prefix ds-results
+
+inputs:
+  - models:
+      var: WEIGHTS
+
+outputs:
+  - ds-results
+
+env:
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-datasphere.txt
+    # The requirements file is a full, exact lock of the dependency closure, so
+    # pip must NOT re-resolve it: pip 25.1.1's resolvelib crashes with
+    # `AssertionError` in get_topological_weights whenever one project is
+    # required twice (here: huggingface-hub, by both transformers and tokenizers).
+    # `no-deps` keeps the graph one-node-per-requirement and sidesteps the bug.
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+
+cloud-instance-types:
+  - gt4i.1             # observed: NVIDIA L4, 22.2 GiB, sm_89 (T4-class slot)
+  - gt4.1              # fallback: 1x T4, 16 GB VRAM

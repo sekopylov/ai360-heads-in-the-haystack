@@ -1,0 +1,46 @@
+name: rh-t4-bootstrap
+desc: build the persistent project-disk venv AND validate all 7 stages on the GPU in one job
+
+# One-off, then reusable. Attaches the project disk, pip-installs the locked
+# requirements into ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv (survives across jobs), then
+# re-execs into that venv and runs every stage at `smoke` scale on the GPU.
+#
+# After this succeeds, t4-cached.yaml starts in ~40 s instead of ~9 min.
+#
+# Why `--use-venv` rather than putting the venv python in `cmd`: the CLI parses
+# the first token of `cmd` as a Python interpreter and rejects
+# ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv/bin/python (verified: "file ... was not found").
+# So the entry point stays `python3` and the driver re-execs itself.
+
+cmd: python3 scripts/datasphere_job.py --project-home ${DS_PROJECT_HOME} --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile smoke --stages describe,detect,mask,qa,cot,compare,figures --out-prefix ds-smoke-results
+
+flags:
+  - attach-project-disk
+
+inputs:
+  - models:
+      var: WEIGHTS
+
+outputs:
+  - ds-smoke-results
+
+env:
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+      # Partial mirror: it carries numpy/matplotlib/tqdm/tokenizers/... but NOT
+      # torch, transformers or the nvidia-* wheels (all 404). PyPI stays primary,
+      # so this only shortens the small-package downloads.
+      extra-index-urls:
+        - https://mirror.yandex.ru/pypi/web/simple/
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+
+cloud-instance-types:
+  - gt4i.1             # observed: NVIDIA L4, 22.2 GiB, sm_89 (T4-class slot)
+  - gt4.1              # fallback: 1x T4, 16 GB VRAM

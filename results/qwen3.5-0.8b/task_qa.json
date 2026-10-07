@@ -1,0 +1,53 @@
+{
+  "task": "extractive_qa",
+  "baseline_f1": 100.0,
+  "n_samples": 8,
+  "k_values": [
+    2,
+    4,
+    8
+  ],
+  "by_k": {
+    "2": {
+      "retrieval_f1": 92.5,
+      "random_f1_mean": 45.83333333333333,
+      "random_f1_std": 45.83333333333333,
+      "drop_retrieval": 7.5,
+      "drop_random": 54.16666666666667,
+      "masked_heads": [
+        "L3H5",
+        "L7H1"
+      ]
+    },
+    "4": {
+      "retrieval_f1": 92.5,
+      "random_f1_mean": 92.08333333333333,
+      "random_f1_std": 0.4166666666666714,
+      "drop_retrieval": 7.5,
+      "drop_random": 7.916666666666671,
+      "masked_heads": [
+        "L3H5",
+        "L7H1",
+        "L7H3",
+        "L11H0"
+      ]
+    },
+    "8": {
+      "retrieval_f1": 88.33333333333333,
+      "random_f1_mean": 77.78617216117216,
+      "random_f1_std": 22.21382783882784,
+      "drop_retrieval": 11.666666666666671,
+      "drop_random": 22.21382783882784,
+      "masked_heads": [
+        "L3H5",
+        "L7H1",
+        "L7H3",
+        "L11H0",
+        "L11H1",
+        "L11H2",
+        "L11H4",
+        "L11H5"
+      ]
+    }
+  }
+}

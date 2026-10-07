@@ -1,0 +1,33 @@
+# Model weights (~3.2 GB total) are downloaded, never committed.
+models/
+
+# Environments and caches
+.venv/
+.cache/*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# ...but the DataSphere job configs are entry points, not cache, so version them.
+# The IAM token sitting next to them is a secret and must NEVER be committed --
+# `datasphere_auth.sh` writes it there with mode 600.
+!.cache/datasphere/
+.cache/datasphere/iam-token
+
+# Run logs (the JSON/figures under results/ are the actual artefacts)
+logs/
+
+# Scratch space. NOTE: /tmp is wiped between tool calls in this sandbox, so
+# scratch files must live here instead.
+.tmp/
+
+# Large binary result blobs; regenerate with the CLI
+results/**/*.npz
+
+# Logs pulled back from DataSphere jobs (evidence, but noisy in a diff)
+ds-*-logs*/
+ds-download/
+ds-smoke-results/
+
+# Windows "downloaded from the internet" metadata, pure noise in a repo
+*:Zone.Identifier

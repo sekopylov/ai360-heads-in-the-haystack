@@ -1,0 +1,19 @@
+\textbf{General Functionalities of Attention Heads}\quad\quad
+For transformer language models, we tend to view the functionality of FNNs layers to be the place for storing knowledge~\citep{geva2020transformer}, and the attention layers to be the place for implementing algorithms~\citep{olsson2022context}. 
+The induction head discussed in ~\citet{olsson2022context} typically searches repeated patterns of the input, which is at a certain level similar to the retrieval heads (as it also searches and repeats information). 
+Different than the induction heads, the retrieval heads are typically responsible for redirecting the information according to the context, but do not for inferring programs. 
+We tend to believe that there exist more algorithm and functionalities implemented by other types of attention heads to be discovered by future research.
+
+\textbf{Relationship to Local and Linear Attention and State-Space Models}\quad\quad
+Although there exist numerous works about local~\citep{xiao2023efficient} / linear~\citep{wang2020linformer} attention, state space models~\citep{gu2023mamba}, and hybrid architectures~\citep{de2024griffin} achieving inspiring efficiency in long-context modeling, so far there is no linear attention / SSM architecture that passes the Needle-in-a-Haystack test to the best of our knowledge, suggesting that the full attention might be a must for long-context information retrieval. 
+One example is that the Mistral v0.1~\citep{jiang2023mistral} uses sliding window attention but cannot pass needle-in-a-haystack, and their authors changes the attention to full in v0.2~\citep{mistralv02}, then it can pass the needle test. 
+Our results showing strong evidence why full attention is a must.  
+For the model to precisely utilize input information at arbitrary location, it is crutial for the retrieval heads to work on the full KV cache.
+
+\textbf{Applications to KV Cache Compression}\quad\quad
+The problem that the KV cache is too large and occupies a large chunk of the GPU memory severely hinders the deployment of long-context models.
+For example, for LLaMA 2 7B, the KV cache of 100K tokens requires more than 50GB memory, while 2K context requires less than 1GB memory. 
+If we serve this model on one 80G A100, then the concurrency of 100K context can be 50 times less than 2K context queries, which is prohibitively expensive. 
+The results from this work indicates that we might be possible to radically prune out the KV cache corresponding to the non-retrieval heads (recall in Fig.~\ref{fig:score_range} shows only 5\% of the heads are retrieval) and significantly reducing the deployment cost of long-context models. 
+We leave this study to future research.
+% typically we would say this is a future research, but it is done concurrently by Xiao et. al. 2024

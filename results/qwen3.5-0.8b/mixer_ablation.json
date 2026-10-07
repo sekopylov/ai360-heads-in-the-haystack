@@ -1,0 +1,35 @@
+{
+  "k_values": [
+    1,
+    2,
+    4
+  ],
+  "fraction_of_full_attention_layers": [
+    0.16666666666666666,
+    0.3333333333333333,
+    0.6666666666666666
+  ],
+  "full_attention": [
+    84.0,
+    87.65432098765432,
+    24.691358024691354
+  ],
+  "linear_attention": [
+    1.2345679012345678,
+    0.0,
+    0.0
+  ],
+  "full_attention_exact_match": [
+    100.0,
+    100.0,
+    0.0
+  ],
+  "linear_attention_exact_match": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "baseline": 84.0,
+  "n_full_layers": 6,
+  "n_linear_layers": 18
+}

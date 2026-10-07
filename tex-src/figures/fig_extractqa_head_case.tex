@@ -1,0 +1,19 @@
+\begin{figure}[!t]
+    \begin{minipage}[t]{0.3\textwidth}
+        \vspace{0pt}
+        \includegraphics[width=\textwidth]{figures/task_qa.pdf}
+        \caption{Masking out retrieval heads severely damages ExtractQA performance. 
+        }
+        \label{fig:task_qa}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.66\textwidth}
+        \vspace{0pt}
+        \includegraphics[width=\textwidth]{figures/wrong_head_case.pdf}
+        \caption{When the model fails to retrieve the full needle, there are two typical errors:
+(1) incomplete retrieval, where the retrieval heads miss part of the information ``eat a sandwich'';
+(2) hallucination, where the retrieval heads attend to the initial tokens.
+        }
+        \label{fig:wrong_head_case}
+    \end{minipage}
+\end{figure}

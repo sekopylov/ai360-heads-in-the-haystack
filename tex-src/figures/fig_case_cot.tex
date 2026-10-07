@@ -1,0 +1,14 @@
+\begin{figure}[t!]
+\small
+  \centering
+  \includegraphics[width=\linewidth]{figures/case_cot.pdf}
+  \caption{ 
+  % Two cases of the generated CoT inferenced without retrieval heads from GSM8K.
+  % Red lines are the  information  the language model failed to use, and its corresponded generation.  Blue lines are irrelevant  hallucinations
+  % When masking out retrieval heads, 
+  When we mask out retrieval heads, the model becomes ``blind'' to important information in the question description
+  % the model fails to utilize important input information and hallucinates instead,
+  resulting in incorrect reasoning chains. 
+  }
+  \label{fig:gsm8k_error_case}
+\end{figure}
