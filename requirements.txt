@@ -1,6 +1,6 @@
 # torch==2.0.1 установка вручную из-за разиличий в версии CUDA
 transformers==4.37.2
-flash-attn==2.5.6
+# flash-attn==2.5.6 так как установка требует куду
 numpy<2.0
 rouge_score
 tiktoken
