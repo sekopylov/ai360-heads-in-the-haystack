@@ -550,6 +550,11 @@ if __name__ == "__main__":
     parser.add_argument('--model_provider', type=str, default="LLaMA", help='which model to use')
     parser.add_argument('--api_key', type=str, default="", help='OpenAI API Key')
     parser.add_argument('--mask_topk', type=int, default=0, help='mask topk heads, input a negative value to mask random heads')
+    
+    # Custom arguments for flexible testing
+    parser.add_argument('--context-intervals', type=int, default=20, help='number of intervals for context length')
+    parser.add_argument('--depths', type=str, default=None, help='comma separated list of depths, e.g. 10,30,50,70,90')
+    
     # parser = add_args(parser)
     args = parser.parse_args()
 
@@ -559,14 +564,20 @@ if __name__ == "__main__":
     else: 
         assert(args.model_name is not None)
 
+    custom_depths = None
+    if args.depths is not None:
+        custom_depths = [int(x.strip()) for x in args.depths.split(',')]
+
     ht = LLMNeedleHaystackTester(model_name=model_name, 
                                  model_name_suffix=args.model_name_suffix,
                                  model_provider=args.model_provider,
                                  save_contexts=True,
                                  save_results=True,
                                  mask_topk=args.mask_topk,
-                                context_lengths_min=args.s_len,
-                                context_lengths_max=args.e_len,
+                                 context_lengths_min=args.s_len,
+                                 context_lengths_max=args.e_len,
+                                 context_lengths_num_intervals=args.context_intervals,
+                                 document_depth_percents=custom_depths
                                  )
 
     ht.start_test(args)

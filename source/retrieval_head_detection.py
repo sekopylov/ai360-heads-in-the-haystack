@@ -520,10 +520,18 @@ if __name__ == "__main__":
     parser.add_argument('--model_name', type=str, default=None, help='name of model')
     parser.add_argument('--model_name_suffix', type=str, default=None, help='name of model')
     parser.add_argument('--model_provider', type=str, default="LLaMA", help='which model to use')
+    
+    # Custom arguments for flexible testing
+    parser.add_argument('--context-intervals', type=int, default=20, help='number of intervals for context length')
+    parser.add_argument('--depths', type=str, default=None, help='comma separated list of depths, e.g. 10,30,50,70,90')
+    
     args = parser.parse_args()
    
     model_name = args.model_path
 
+    custom_depths = None
+    if args.depths is not None:
+        custom_depths = [int(x.strip()) for x in args.depths.split(',')]
 
     ht = LLMNeedleHaystackTester(model_name=model_name, 
                                  model_name_suffix=args.model_name_suffix,
@@ -532,6 +540,8 @@ if __name__ == "__main__":
                                  save_results=True,
                                  context_lengths_min=args.s_len,
                                  context_lengths_max=args.e_len,
+                                 context_lengths_num_intervals=args.context_intervals,
+                                 document_depth_percents=custom_depths
                                  )
 
     ht.start_test(args)
