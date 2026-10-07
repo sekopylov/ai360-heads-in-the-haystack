@@ -34,15 +34,19 @@ output to Qwen; the rest of the model is never replaced.
 
 ## Environment
 
-Python 3.11 or 3.12 and CUDA are recommended. Install the appropriate PyTorch
-build first, then:
+Python 3.11 or 3.12 and CUDA are recommended. Native Windows setup and all
+experiment commands are documented in [WINDOWS_GUIDE.md](WINDOWS_GUIDE.md).
+
+Install the appropriate PyTorch build first, then:
 
 ```bash
 cd updated
-python -m pip install -r requirements.txt --no-build-isolation
+python -m pip install -r requirements.txt
 ```
 
 The checkpoint is downloaded automatically by Transformers on first use.
+SDPA is the cross-platform prefill default. FlashAttention is an optional
+Linux-only optimization and can be installed from `requirements-flash.txt`.
 
 ## Attention modes
 
@@ -52,7 +56,10 @@ Every generation receives an explicit `AttentionRequest`:
 AttentionRequest(capture="none")  # normal generation
 AttentionRequest(capture="top1")  # one source position per layer/head/token
 AttentionRequest(capture="full")  # all decode attention probabilities
-AttentionRequest(blocked_heads=frozenset({(3, 2), (7, 5)}))
+AttentionRequest(  # source-compatible logit intervention
+    blocked_heads=frozenset({(3, 2), (7, 5)}),
+    mask_mode="legacy_uniform",
+)
 ```
 
 Full traces are moved to CPU without changing the model's probability dtype.
@@ -84,10 +91,11 @@ python retrieval_head_detection.py \
 Outputs:
 
 ```text
-results/graph/Qwen3.5-0.8B/   answer results, one per detection case
-contexts/Qwen3.5-0.8B/        generated contexts, one per detection case
-head_score/Qwen3.5-0.8B.json  aggregated head scores
-attention/Qwen3.5-0.8B/*.pt   full traces, only with --capture full
+detection/run.json         detection configuration and completion state
+detection/results/         answer results, one per detection case
+detection/contexts/        generated contexts, one per detection case
+detection/head_scores.json aggregated head scores
+detection/attention/*.pt   full traces, only with --capture full
 ```
 
 The `.pt` trace is a plain dictionary loadable with `torch.load`. It contains
@@ -99,22 +107,27 @@ cases do not overwrite one another.
 ```python
 import torch
 
-trace = torch.load("attention/Qwen3.5-0.8B/detect-1_....pt")
+trace = torch.load("detection/attention/detect-1_....pt")
 first_generated_token = trace["steps"][0]["token_id"]
 layer_3_attention = trace["steps"][0]["layers"][3]
 ```
 
 ## Masking
 
-Run detection first, then:
+Run detection first, then run all three paired conditions:
 
 ```bash
-python needle_in_haystack_with_mask.py --mask-topk 0 --s 1000 --e 8000
-python needle_in_haystack_with_mask.py --mask-topk 8 --s 1000 --e 8000
+python needle_in_haystack_with_mask.py --mask-topk 0 --lengths 1000,2000
+python needle_in_haystack_with_mask.py --mask-topk 8 --lengths 1000,2000
+python needle_in_haystack_with_mask.py --mask-topk -8 --seed 42 --lengths 1000,2000
+python compare_masking_results.py --topk 8
 ```
 
-As in the source code, selected heads have their attention logits set to zero
-before softmax during decoding.
+The default `legacy_uniform` mode exactly preserves the source intervention:
+it sets selected heads' logits to zero before softmax, producing uniform
+attention. `zero_output` is available only as an explicit additional ablation.
+As in the source experiment, a new random control set is drawn for every case;
+the exact heads are stored in each result JSON.
 
 ## Adding another model
 

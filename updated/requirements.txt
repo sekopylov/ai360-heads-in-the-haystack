@@ -1,6 +1,5 @@
 torch>=2.6,<3
 transformers>=5.17,<6
 accelerate>=1.0
-flash-attn>=2.8,<3
 rouge-score>=0.1.2
 sentencepiece>=0.2

@@ -34,6 +34,15 @@ def parse_depths(value: str) -> list[float]:
     return depths
 
 
+def parse_lengths(value: str) -> list[int]:
+    lengths = [int(item.strip()) for item in value.split(",") if item.strip()]
+    if not lengths or any(length < 1 for length in lengths):
+        raise ValueError("lengths must contain positive integers")
+    if len(lengths) != len(set(lengths)):
+        raise ValueError("lengths must not contain duplicates")
+    return lengths
+
+
 def load_detection_cases(root: Path) -> list[ExperimentCase]:
     rows = [
         json.loads(line)
@@ -96,7 +105,7 @@ class ContextBuilder:
     def _read_repeated_tokens(self, directory: Path) -> list[int]:
         if directory in self._tokens:
             return self._tokens[directory]
-        files = list(directory.glob("*.txt"))
+        files = sorted(directory.glob("*.txt"))
         if not files:
             raise FileNotFoundError(f"No .txt files found in {directory}")
         base = "".join(path.read_text(encoding="utf-8") for path in files)

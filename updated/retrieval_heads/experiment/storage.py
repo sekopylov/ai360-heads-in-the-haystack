@@ -29,22 +29,29 @@ def result_stem(
     *,
     case_id: str | None = None,
 ) -> str:
+    depth_slug = f"{depth_percent:g}".replace(".", "p")
     stem = (
         f'{model_version.replace(".", "_")}_len_{context_length}_'
-        f"depth_{int(depth_percent * 100)}"
+        f"depth_{depth_slug}"
     )
     return f"{case_id}_{stem}" if case_id else stem
 
 
-def result_payload(result: RunResult, model_id: str) -> dict[str, Any]:
+def result_payload(
+    result: RunResult,
+    model_id: str,
+    *,
+    experiment: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     prepared = result.prepared
-    return {
+    payload = {
         "case_id": prepared.case.case_id,
         "model": model_id,
         "context_length": int(prepared.context_length),
         "depth_percent": float(prepared.depth_percent),
-        "version": 1,
+        "version": 2,
         "needle": prepared.case.needle,
+        "expected_answer": prepared.case.expected_answer,
         "model_response": result.generation.text,
         "score": result.score,
         "test_duration_seconds": result.duration_seconds,
@@ -52,3 +59,6 @@ def result_payload(result: RunResult, model_id: str) -> dict[str, Any]:
             "%Y-%m-%d %H:%M:%S%z"
         ),
     }
+    if experiment is not None:
+        payload["experiment"] = experiment
+    return payload

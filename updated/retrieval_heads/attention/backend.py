@@ -42,7 +42,7 @@ def observable_eager_attention(
     retrieval_attention_controller: AttentionController | None = None,
     **_: object,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Standard eager GQA plus observation and legacy logit masking."""
+    """Standard eager GQA plus observation and optional head intervention."""
 
     groups = getattr(module, "num_key_value_groups", query.shape[1] // key.shape[1])
     key = _repeat_kv(key, groups)
@@ -55,10 +55,12 @@ def observable_eager_attention(
 
     controller = retrieval_attention_controller
     layer_idx = int(module.layer_idx)
+    blocked: list[int] = []
     if controller is not None:
         blocked = controller.blocked_heads(layer_idx)
-        if blocked:
-            # This is intentionally the intervention used by the source code.
+        if blocked and controller.request.mask_mode == "legacy_uniform":
+            # Source-compatible intervention: zero logits become uniform
+            # probabilities after softmax. This does not disable a head.
             logits = logits.clone()
             logits[:, blocked, :, :] = 0
 
@@ -72,6 +74,15 @@ def observable_eager_attention(
         controller.record(layer_idx, probabilities)
 
     output = torch.matmul(probabilities, value)
+    if (
+        controller is not None
+        and blocked
+        and controller.request.mask_mode == "zero_output"
+    ):
+        # A real head ablation: remove this head's contribution before Qwen's
+        # output projection mixes all heads back into the residual stream.
+        output = output.clone()
+        output[:, blocked, :, :] = 0
     output = output.transpose(1, 2).contiguous()
     return output, probabilities
 

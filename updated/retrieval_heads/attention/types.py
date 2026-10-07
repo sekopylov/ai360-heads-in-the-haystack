@@ -5,6 +5,7 @@ from typing import Any, Literal, Protocol
 
 Head = tuple[int, int]
 CaptureMode = Literal["none", "top1", "full"]
+MaskMode = Literal["zero_output", "legacy_uniform"]
 
 
 @dataclass(frozen=True)
@@ -13,6 +14,7 @@ class AttentionRequest:
 
     capture: CaptureMode = "none"
     blocked_heads: frozenset[Head] = frozenset()
+    mask_mode: MaskMode = "legacy_uniform"
 
 
 @dataclass
@@ -32,4 +34,3 @@ class AttentionStep:
 class AttentionObserver(Protocol):
     def on_step(self, step: AttentionStep) -> None:
         """Consume attention for one newly generated token."""
-

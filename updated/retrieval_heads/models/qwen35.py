@@ -25,7 +25,7 @@ class Qwen35Adapter(ModelAdapter):
         *,
         device_map: str = "auto",
         dtype: str = "auto",
-        prefill_attention: str = "flash_attention_2",
+        prefill_attention: str = "sdpa",
         trust_remote_code: bool = False,
     ) -> None:
         register_attention_backend()
@@ -37,6 +37,10 @@ class Qwen35Adapter(ModelAdapter):
             model_id,
             use_fast=False,
             trust_remote_code=trust_remote_code,
+        )
+        eos_token_ids = self._tokenizer.eos_token_id
+        self._eos_token_ids = (
+            {int(eos_token_ids)} if eos_token_ids is not None else set()
         )
         # This is the unmodified Transformers implementation and checkpoint.
         self.model = Qwen3_5ForCausalLM.from_pretrained(
@@ -128,6 +132,8 @@ class Qwen35Adapter(ModelAdapter):
     ) -> GenerationResult:
         if max_new_tokens < 1:
             raise ValueError("max_new_tokens must be positive")
+        if attention.mask_mode not in {"zero_output", "legacy_uniform"}:
+            raise ValueError(f"Unknown mask mode: {attention.mask_mode!r}")
         validate_blocked_heads(attention.blocked_heads, self.eligible_heads)
         input_ids = prompt.input_ids.to(self.input_device)
         if input_ids.shape[1] < 2:
@@ -166,8 +172,11 @@ class Qwen35Adapter(ModelAdapter):
                     generated.append(token_id)
                     self.attention.end_step(token_id)
 
-                    token_text = self.tokenizer.convert_ids_to_tokens(token_id)
-                    if token_text == "<0x0A>" or token_id == 144:
+                    token_text = self.tokenizer.decode(
+                        [token_id],
+                        skip_special_tokens=False,
+                    )
+                    if token_id in self._eos_token_ids or "\n" in token_text:
                         break
         finally:
             self.attention.finish()

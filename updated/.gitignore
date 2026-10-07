@@ -1,9 +1,13 @@
 /.venv/
+/.agent/
 /models/
 /outputs/
 /results/
 /contexts/
 /head_score/
 /attention/
+/runs/
+/detection/
+/evaluation/
 __pycache__/
 *.pyc

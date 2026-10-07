@@ -14,6 +14,7 @@ from retrieval_heads.experiment.data import (
     linear_grid,
     load_detection_cases,
     parse_depths,
+    parse_lengths,
 )
 from retrieval_heads.experiment.locator import LegacyOverlapLocator
 from retrieval_heads.experiment.runner import ExperimentRunner
@@ -23,7 +24,6 @@ from retrieval_heads.experiment.scoring import (
     rank_heads,
 )
 from retrieval_heads.experiment.storage import (
-    read_json,
     result_payload,
     result_stem,
     write_json,
@@ -57,6 +57,10 @@ def parse_args() -> argparse.Namespace:
         default=50000,
     )
     parser.add_argument("--context-intervals", type=int, default=20)
+    parser.add_argument(
+        "--lengths",
+        help="explicit comma-separated context lengths; overrides --s/--e",
+    )
     parser.add_argument("--depths")
     parser.add_argument("--max-new-tokens", type=int, default=50)
     parser.add_argument("--success-threshold", type=float, default=50.0)
@@ -68,7 +72,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--device-map", default="auto")
     parser.add_argument("--dtype", default="auto")
-    parser.add_argument("--prefill-attention", default="flash_attention_2")
+    parser.add_argument("--prefill-attention", default="sdpa")
     parser.add_argument(
         "--haystack-root",
         type=Path,
@@ -80,7 +84,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    lengths = linear_grid(args.min_context, args.max_context, args.context_intervals)
+    lengths = (
+        parse_lengths(args.lengths)
+        if args.lengths
+        else linear_grid(args.min_context, args.max_context, args.context_intervals)
+    )
     depths = parse_depths(args.depths) if args.depths else depth_grid(10)
 
     model = create_model(
@@ -102,14 +110,31 @@ def main() -> None:
         max_new_tokens=args.max_new_tokens,
     )
 
-    results_dir = args.output_root / "results" / "graph" / model.model_version
-    contexts_dir = args.output_root / "contexts" / model.model_version
-    attention_dir = args.output_root / "attention" / model.model_version
-    score_path = args.output_root / "head_score" / f"{model.model_version}.json"
+    detection_dir = args.output_root / "detection"
+    results_dir = detection_dir / "results"
+    contexts_dir = detection_dir / "contexts"
+    attention_dir = detection_dir / "attention"
+    score_path = detection_dir / "head_scores.json"
+    config_path = detection_dir / "run.json"
     history: dict[str, list[float]] = {}
     cases = load_detection_cases(args.haystack_root)
 
     total = len(cases) * len(lengths) * len(depths)
+    run_config = {
+        "kind": "retrieval_head_detection",
+        "complete": False,
+        "model": model.model_id,
+        "model_version": model.model_version,
+        "lengths": lengths,
+        "depths": depths,
+        "capture": args.capture,
+        "success_threshold": args.success_threshold,
+        "max_new_tokens": args.max_new_tokens,
+        "total_cases": total,
+    }
+    write_json(config_path, run_config)
+    write_json(score_path, history)
+
     completed = 0
     for case in cases:
         for context_length in lengths:
@@ -153,7 +178,15 @@ def main() -> None:
                 )
                 write_json(
                     results_dir / f"{stem}_results.json",
-                    result_payload(result, model.model_id),
+                    result_payload(
+                        result,
+                        model.model_id,
+                        experiment={
+                            "kind": "retrieval_head_detection",
+                            "capture": args.capture,
+                            "success_threshold": args.success_threshold,
+                        },
+                    ),
                 )
                 context_path = contexts_dir / f"{stem}_context.txt"
                 context_path.parent.mkdir(parents=True, exist_ok=True)
@@ -163,6 +196,7 @@ def main() -> None:
 
                 if result.score > args.success_threshold:
                     merge_scores(history, collector.scores)
+                    write_json(score_path, history)
                 print(
                     f"  score={result.score:.1f} "
                     f"response={result.generation.text!r}"
@@ -171,12 +205,14 @@ def main() -> None:
                 if leaders:
                     print(f"  top heads: {leaders}")
 
-    # Preserve the source experiment's late merge with previous runs.
-    if score_path.exists():
-        existing = read_json(score_path)
-        for key, values in existing.items():
-            history.setdefault(key, []).extend(values)
     write_json(score_path, history)
+    run_config["complete"] = True
+    run_config["completed_cases"] = completed
+    run_config["successful_cases"] = max(
+        (len(values) for values in history.values()),
+        default=0,
+    )
+    write_json(config_path, run_config)
 
 
 if __name__ == "__main__":
