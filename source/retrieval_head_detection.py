@@ -88,7 +88,10 @@ class LLMNeedleHaystackTester:
                 save_contexts = True,
                 final_context_length_buffer = 200,
                 seconds_to_sleep_between_completions = None,
-                print_ongoing_status = True):
+                print_ongoing_status = True,
+                dump_dir = None,
+                dump_full_steps = 3,
+                head_score_dir = "head_score"):
         """        
         :param needle: The needle to be found in the haystack. Default is None.
         :param haystack_dir: The directory of text files to use as background context (or a haystack) in which the needle is to be found. Default is Paul Graham Essays.
@@ -131,6 +134,11 @@ class LLMNeedleHaystackTester:
         self.model_provider = model_provider
         self.testing_results = []
         self.head_counter = defaultdict(list)
+        # dump of per-sample data for comparison with the new code; does not change the behaviour
+        self.dump_dir = dump_dir
+        self.dump_full_steps = dump_full_steps
+        self.head_score_dir = head_score_dir
+        self.needle_idx = 0
         if("/" in model_name):
             self.model_version = model_name.split("/")[-1]
         else: self.model_version = model_name
@@ -243,8 +251,73 @@ class LLMNeedleHaystackTester:
             step_token = self.enc.convert_ids_to_tokens(inp.item())
             output.append(inp.item())
             self.retrieval_calculate(outputs.attentions, retrieval_score, inp, step_token)
+            if self.dump_dir is not None: self.dump_step(outputs.attentions, step_i)
             if step_token=='<0x0A>' or inp.item()==144: break
         return output, retrieval_score 
+
+    def dump_step(self, attentions, step_i):
+        ## per layer: attention of the last token, [head, kv_len]
+        top1_idx, top1_val, needle_mass, full = [], [], [], []
+        for layer_attn in attentions:
+            row = layer_attn[0, :, -1].float()
+            v, i = row.topk(1, dim=-1)
+            top1_idx.append(i[:, 0].cpu())
+            top1_val.append(v[:, 0].cpu())
+            if self.needle_start >= 0:
+                needle_mass.append(row[:, self.needle_start:self.needle_end].sum(-1).cpu())
+            else:
+                needle_mass.append(torch.zeros(row.size(0)))
+            if self.dump_full and step_i < self.dump_full_steps:
+                full.append(row.half().cpu())
+        self.dump_buf["top1_idx"].append(torch.stack(top1_idx).numpy().astype(np.int32))
+        self.dump_buf["top1_val"].append(torch.stack(top1_val).numpy().astype(np.float32))
+        self.dump_buf["needle_mass"].append(torch.stack(needle_mass).numpy().astype(np.float32))
+        if full:
+            self.dump_buf[f"attn_step{step_i}"] = torch.stack(full).numpy()
+
+    def want_full_dump(self, context_length, depth_percent):
+        ## full attention rows only for the first needle, at min/middle/max length and depth
+        if self.dump_full_steps <= 0 or self.needle_idx != 0: return False
+        pick = lambda l: {int(l[0]), int(l[len(l) // 2]), int(l[-1])}
+        return int(context_length) in pick(list(self.context_lengths)) and int(depth_percent) in pick(list(self.document_depth_percents))
+
+    def save_dump(self, context_length, depth_percent, output, retrieval_score, response, score):
+        buf = self.dump_buf
+        d = f"{self.dump_dir}/{self.model_version}/detect"
+        os.makedirs(d, exist_ok=True)
+        arrays = {k: v for k, v in buf.items() if k.startswith("attn_step")}
+        for k in ["top1_idx", "top1_val", "needle_mass"]:
+            if buf[k]: arrays[k] = np.stack(buf[k])  # [step, layer, head]
+        np.savez_compressed(
+            f"{d}/needle{self.needle_idx}_len{int(context_length)}_depth{int(depth_percent)}.npz",
+            input_ids=self.prompt_ids.cpu().numpy().astype(np.int32),
+            output_ids=np.array(output, dtype=np.int32),
+            needle_start=self.needle_start, needle_end=self.needle_end,
+            needle_idx=self.needle_idx, context_length=int(context_length), depth_percent=float(depth_percent),
+            rouge=score, response=response,
+            retrieval_score=np.array([[h[0] for h in l] for l in retrieval_score], dtype=np.float64),
+            **arrays)
+
+    def save_dump_meta(self, args):
+        import subprocess, transformers
+        meta = {"args": vars(args), "model": self.model_name, "model_version": self.model_version,
+                "layer_num": self.layer_num, "head_num": self.head_num,
+                "attn_class": type(self.model_to_test.model.layers[0].self_attn).__name__,
+                "context_lengths": [int(i) for i in self.context_lengths],
+                "depth_percents": [float(i) for i in self.document_depth_percents],
+                "torch": torch.__version__, "transformers": transformers.__version__,
+                "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+                "time_utc": datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S%z')}
+        try:
+            import flash_attn
+            meta["flash_attn"] = flash_attn.__version__
+        except Exception: meta["flash_attn"] = None
+        try: meta["git_commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+        except Exception: meta["git_commit"] = None
+        d = f"{self.dump_dir}/{self.model_version}/detect"
+        os.makedirs(d, exist_ok=True)
+        with open(f"{d}/run_meta.json", "w") as f:
+            json.dump(meta, f, indent=1)
 
     def find_needle_idx(self, needle):
         needle_ids = self.enc(needle, add_special_tokens=False)["input_ids"]
@@ -285,6 +358,8 @@ class LLMNeedleHaystackTester:
         input_ids = input_ids.to(self.model_to_test.device)
         # if not self.multi_gpus:
         self.needle_start, self.needle_end = self.find_needle_idx(self.real_needle)
+        self.dump_buf = defaultdict(list)
+        self.dump_full = self.dump_dir is not None and self.want_full_dump(context_length, depth_percent)
         with torch.no_grad():
             q_outputs = self.model_to_test(input_ids=input_ids[:,:-1], use_cache=True, return_dict=True)
             output, retrieval_score  = self.decode(q_outputs, input_ids[:,-1], 50)
@@ -294,6 +369,8 @@ class LLMNeedleHaystackTester:
         test_elapsed_time = test_end_time - test_start_time
         
         score = scorer.score(self.real_needle, response)['rouge1'].recall*100
+        if self.dump_dir is not None:
+            self.save_dump(context_length, depth_percent, output, retrieval_score, response, score)
         ## if recall > 50, we determine this retrieval succeed and update the retrieval score
         if score > 50:
             self.retrieval_head_accumulate(retrieval_score)
@@ -494,7 +571,9 @@ class LLMNeedleHaystackTester:
         print ("\n\n")
 
     def start_test(self, args):
+        if self.dump_dir is not None: self.save_dump_meta(args)
         for ni in range(len(self.needle_list)):
+            self.needle_idx = ni
             self.needle = self.needle_list[ni]
             self.haystack_dir = self.haystack_dir_list[ni]
             self.real_needle  = self.real_ansers_list[ni]
@@ -502,12 +581,13 @@ class LLMNeedleHaystackTester:
             if self.print_ongoing_status:
                 self.print_start_test_summary()
             self.run_test(args)
-        if os.path.exists(f"head_score/{self.model_version}.json"):
-            with open(f"./head_score/{self.model_version}.json", "r") as file:
+        os.makedirs(self.head_score_dir, exist_ok=True)
+        if os.path.exists(f"{self.head_score_dir}/{self.model_version}.json"):
+            with open(f"./{self.head_score_dir}/{self.model_version}.json", "r") as file:
                 head_counter = json.loads(file.readline())
             for k,v in head_counter.items():
                 self.head_counter[k] += v
-        with open(f"head_score/{self.model_version}.json", 'w') as f:
+        with open(f"{self.head_score_dir}/{self.model_version}.json", 'w') as f:
             json.dump(self.head_counter, f)
 
 
@@ -524,6 +604,11 @@ if __name__ == "__main__":
     # Custom arguments for flexible testing
     parser.add_argument('--context-intervals', type=int, default=20, help='number of intervals for context length')
     parser.add_argument('--depths', type=str, default=None, help='comma separated list of depths, e.g. 10,30,50,70,90')
+
+    # Dump of per-sample data (off by default)
+    parser.add_argument('--dump_dir', type=str, default=None, help='where to dump per-sample data, e.g. results/dump')
+    parser.add_argument('--dump_full_steps', type=int, default=3, help='dump full attention rows for the first N decode steps on a few samples, 0 to disable')
+    parser.add_argument('--head_score_dir', type=str, default="head_score", help='where to read/append head scores')
     
     args = parser.parse_args()
    
@@ -541,7 +626,10 @@ if __name__ == "__main__":
                                  context_lengths_min=args.s_len,
                                  context_lengths_max=args.e_len,
                                  context_lengths_num_intervals=args.context_intervals,
-                                 document_depth_percents=custom_depths
+                                 document_depth_percents=custom_depths,
+                                 dump_dir=args.dump_dir,
+                                 dump_full_steps=args.dump_full_steps,
+                                 head_score_dir=args.head_score_dir
                                  )
 
     ht.start_test(args)
