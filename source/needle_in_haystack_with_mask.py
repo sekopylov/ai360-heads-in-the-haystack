@@ -93,7 +93,9 @@ class LLMNeedleHaystackTester:
                  save_contexts = True,
                  final_context_length_buffer = 200,
                  seconds_to_sleep_between_completions = None,
-                 print_ongoing_status = True):
+                 print_ongoing_status = True,
+                 head_score_dir = "head_score",
+                 seed = None):
         """        
         :param needle: The needle to be found in the haystack. Default is None.
         :param haystack_dir: The directory of text files to use as background context (or a haystack) in which the needle is to be found. Default is Paul Graham Essays.
@@ -136,6 +138,9 @@ class LLMNeedleHaystackTester:
         self.testing_results = []
         self.head_counter = defaultdict(list)
         self.mask_topk = mask_topk
+        # [OUR CHANGE, not in the authors' code] seed for the random heads, off by default
+        self.seed = seed
+        if seed is not None: random.seed(seed)
         if "CUDA_VISIBLE_DEVICES" in os.environ:
             self.multi_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"])>1
         else:
@@ -215,7 +220,8 @@ class LLMNeedleHaystackTester:
         if self.mask_topk!=0:
             if model_name=='Mistral-7B-Instruct-v0.2':
                 model_name = "Mistral-7B-v0.2-hf"
-            with open(f"head_score/{model_name}.json", "r") as file:
+            # [OUR CHANGE, not in the authors' code] head_score_dir instead of the fixed "head_score"
+            with open(f"{head_score_dir}/{model_name}.json", "r") as file:
                 stable_block_list =  json.loads(file.readline())
             stable_block_list = [(l[0], np.mean(l[1])) for l in stable_block_list.items()]
             stable_block_list = sorted(stable_block_list, key=lambda x: x[1], reverse=True) 
@@ -321,6 +327,7 @@ class LLMNeedleHaystackTester:
         else:
             block_list = self.construct_random_head(-self.mask_topk)
             save_name = f"{self.model_version}_block_random{-self.mask_topk}"
+            if self.seed is not None: save_name += f"_seed{self.seed}"
         context = self.generate_context(context_length, depth_percent)
         question = f"Based on the content of the book, Question: {self.retrieval_question}\nAnswer:"
         if self.model_version in ["Mistral-7B-Instruct-v0.2", "Qwen1.5-14B-Chat"]:
@@ -555,6 +562,9 @@ if __name__ == "__main__":
     parser.add_argument('--context-intervals', type=int, default=20, help='number of intervals for context length')
     parser.add_argument('--depths', type=str, default=None, help='comma separated list of depths, e.g. 10,30,50,70,90')
     
+    parser.add_argument('--head_score_dir', type=str, default="head_score", help='where to read head scores from')
+    parser.add_argument('--seed', type=int, default=None, help='seed for the random heads')
+
     # parser = add_args(parser)
     args = parser.parse_args()
 
@@ -577,7 +587,9 @@ if __name__ == "__main__":
                                  context_lengths_min=args.s_len,
                                  context_lengths_max=args.e_len,
                                  context_lengths_num_intervals=args.context_intervals,
-                                 document_depth_percents=custom_depths
+                                 document_depth_percents=custom_depths,
+                                 head_score_dir=args.head_score_dir,
+                                 seed=args.seed
                                  )
 
     ht.start_test(args)

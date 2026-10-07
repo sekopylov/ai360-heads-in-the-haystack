@@ -484,6 +484,12 @@ class Qwen2FlashAttention2(Qwen2Attention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
+        #### [OUR FIX, not in the authors' code] mask head in flash attention, same as in modeling_llama.py:
+        #### a zero query gives zero logits, i.e. uniform attention of the head
+        if 'block_list' in kwargs:
+            for h in kwargs['block_list']:
+                if self.layer_idx==h[0]:
+                    query_states[:,h[1], :, :] = 0
         # Reashape to the expected shape for Flash Attention
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -909,6 +915,10 @@ class Qwen2DecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
+        # [OUR FIX, not in the authors' code] **kwargs (block_list) is passed to the attention as in modeling_llama.py;
+        # without it block_list never reached the attention and masking did nothing for Qwen
+        if 'block_list' in kwargs and attn_mode == "flash" and not isinstance(self.self_attn, Qwen2FlashAttention2):
+            raise ValueError("head masking with attn_mode='flash' is implemented only in Qwen2FlashAttention2")
         if (attn_mode == "flash"):
             hidden_states, self_attn_weights, present_key_value = self.self_attn(
                 hidden_states=hidden_states,
@@ -917,6 +927,7 @@ class Qwen2DecoderLayer(nn.Module):
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
+                **kwargs,
             )
         else:
             hidden_states, inspect, self_attn_weights, present_key_value = self.self_attn.forward_torch(
@@ -926,6 +937,7 @@ class Qwen2DecoderLayer(nn.Module):
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
+                **kwargs,
             )
 
         hidden_states = residual + hidden_states
