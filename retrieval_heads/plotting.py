@@ -232,7 +232,11 @@ def plot_masking_curve(curves: Mapping[str, Any],
         ax.set_title(name)
         ax.set_ylim(-3, 103)
         ax.legend(loc="lower left")
-    return finish(fig, "Masking retrieval heads breaks retrieval; masking random heads does not")
+    # Descriptive, not a claim: on the dense model the random arm also collapses
+    # once K approaches the whole head budget, so a stronger title would
+    # contradict the panel next to it.
+    return finish(fig, "Needle-in-a-Haystack after masking top-K retrieval heads "
+                        "vs K random heads")
 
 
 def plot_mixer_ablation(ablations: Mapping[str, Any]) -> plt.Figure:

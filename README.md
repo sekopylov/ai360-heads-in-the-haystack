@@ -203,58 +203,116 @@ Filler text is generated from a seeded word list (offline, deterministic);
 
 ## Results
 
-Full tables, including the ablations, are generated from the run artefacts by
+The numbers below come from one GPU run
+([job `bt1hqv1b91ht36s2egdp`](https://datasphere.yandex.cloud/communities/bt1dv4jmd0u81i806t74/projects/bt1u5v72b71eesdhp9k5/job/bt1hqv1b91ht36s2egdp),
+NVIDIA L4, ~39 min) over **75 instances per model** — 3 needles x 5 depths x 5
+lengths.  Full tables: [`docs/results-gpu.md`](docs/results-gpu.md); regenerate any
+time with
 
 ```bash
-.venv/bin/python scripts/summarize_results.py results      # or ds-results
+.venv/bin/python scripts/summarize_results.py ds-results
 ```
 
-The report of the verified CPU runs lives in
-[`docs/results-laptop.md`](docs/results-laptop.md); the GPU runs write
-`ds-results/` and are summarised the same way.
+**A caveat on the length axis of that run.**  It used the pre-fix filler sizing, so
+requested lengths 1K-16K came out as **1.6K-26K** (realized values are recorded per
+instance in `instances_*.jsonl`).  The grid is still five geometrically spaced
+contexts, so the conclusions hold, but the labels in the tables below are the
+*realized* ones.  The committed code lands within a couple of percent of what it is
+asked for.
 
-### What the numbers say
+### Detection
 
-**The dense control reproduces the paper's sparsity claim; the hybrid model does
-not.** Qwen3-0.6B has **5.1%** of its 448 heads above the 0.1 threshold — inside
-the paper's quoted 3–6% — and 1.1% above 0.5, consistent with "less than 5%".
-Qwen3.5-0.8B has **62.5%** of its 48 scoreable heads above 0.1 and 22.9% above
-0.5. Two readings, both worth stating:
+| model | recited | mean recall | top head | score | >0.1 | >0.5 |
+|---|---|---|---|---|---|---|
+| Qwen3-0.6B (dense) | 73/75 | 0.96 | `L16H14` | 0.86 | 22/448 (**4.9%**) | 5/448 (1.1%) |
+| Qwen3.5-0.8B (hybrid) | 53/75 | 0.70 | `L11H1` | 0.74 | 30/48 (**62.5%**) | 8/48 (16.7%) |
 
-* over the heads that *can* retrieve (the 6 full-attention layers), retrieval in
+**The dense control reproduces the paper's sparsity claim; the hybrid does not.**
+4.9% of Qwen3-0.6B's heads clear the 0.1 threshold, inside the paper's quoted 3-6%,
+and 1.1% clear 0.5, consistent with "less than 5%".  Qwen3.5-0.8B has 62.5% of its 48
+scoreable heads above 0.1.  Two readings, both worth stating:
+
+* over the heads that *can* retrieve (its 6 full-attention layers), retrieval in
   this architecture is not sparse at all;
-* over *all* the model's token-mixer heads (48 attention + 288 Gated DeltaNet
-  heads = 336), the 11 strongly-retrieving heads are 3.3% — back inside the
-  paper's range, but only by counting objects the retrieval score is not defined
-  for.
+* over *all* its token-mixer heads (48 attention + 288 Gated DeltaNet = 336), the 8
+  strongly-retrieving heads are 2.4% — back inside the paper's range, but only by
+  counting objects the retrieval score is not defined for.
 
-The honest statement is that the paper's "a few percent" is a property of a dense
-stack where most layers are not doing retrieval, and it does not transfer to a
-hybrid stack where 18 of 24 layers cannot do retrieval at all and the remaining 6
-must carry it.
+The honest statement: the paper's "a few percent" is a property of a dense stack in
+which most layers do no retrieval, and it does not transfer to a hybrid stack where
+18 of 24 layers cannot retrieve at all and the remaining 6 must carry it.
 
-**The paper's definition is ambiguous, and the ambiguity decides the answer.**
-The retrieval score pairs a head's attention row with "the token being
-generated", but that can mean the row that *produces* the token (`next_step`) or
-the row at the token's *own* position (`same_step`). On **both** models the
-top-10 heads under the two readings overlap **0/10**:
+The hybrid's 53/75 is also a real result, not noise: 15 of the 22 failures are at
+the 26K contexts, i.e. a 0.8B hybrid model loses the needle at the long end of its
+own grid.
+
+### The paper's definition is ambiguous, and the ambiguity decides the answer
+
+The retrieval score pairs a head's attention row with "the token being generated",
+which can mean the row that *produces* the token (`next_step`) or the row at the
+token's *own* position (`same_step`).  On **both** models the top-10 heads under the
+two readings overlap **0/10**:
 
 | model | `next_step` top heads | `same_step` top heads |
 |---|---|---|
-| Qwen3.5-0.8B | L15H7, L11H1, L23H5, L23H0, L23H1 | L7H7, L11H3, L3H7, L7H6, L7H2 |
-| Qwen3-0.6B | L16H14, L20H14, L6H11, L21H8, L18H5 | L11H2, L6H6, L1H15, L2H10, L2H11 |
+| Qwen3.5-0.8B | L11H1, L15H7, L19H5, L23H0, L23H5 | L7H7, L11H3, L3H7, L7H6, L7H2 |
+| Qwen3-0.6B | L16H14, L21H8, L20H14, L18H5, L6H11 | L6H6, L2H10, L11H2, L1H15, L6H7 |
 
-The pattern is systematic rather than noise: `next_step` selects **late** layers
-(where the copy is emitted into the residual stream), `same_step` selects
-**early** layers (the classic induction-head position, where the retrieved token
-is staged for later use). Both are computed in the same decoding pass, so this
-costs nothing to report — and no reproduction should quote one without the other.
+The pattern is systematic, not noise: `next_step` selects **late** layers (where the
+copy is emitted into the residual stream), `same_step` selects **early** layers (the
+induction-head position, where the retrieved token is staged for later use).  Both
+come out of the same decoding pass, so this costs nothing to report — and no
+reproduction should quote one without the other.
 
-**The causal claim holds.** Masking the top-K retrieval heads collapses
-Needle-in-a-Haystack exact match from 100% to 0% at K=4 (8.3% of heads) while
-masking K random heads leaves it at 100% — see `masking_heads.pdf`.
+### Masking: the causal claim holds
 
----
+Needle-in-a-Haystack, exact match, retrieval heads vs random heads:
+
+| model | baseline | best retrieval-masked case | random |
+|---|---|---|---|
+| Qwen3-0.6B | 95.5 f1 / 100% exact | 66.5 / **0%** at K=9 (2% of heads) | 95.5 / 100% |
+| Qwen3.5-0.8B | 86.7 f1 / 100% exact | 45.1 / **0%** at K=4 (8% of heads) | 69.5 / 67% |
+
+Removing ~2-8% of heads *by retrieval score* destroys the exact answer, while
+removing the same number at random leaves it intact.  At large K everything
+collapses (both models fall to ~0), which is expected and is why the curve is
+reported rather than a single point.
+
+### Downstream: CoT depends on retrieval heads, extractive QA mostly does
+
+Chain-of-thought, 8 items, after recalibration (baseline off the floor):
+
+| model | variant | baseline | retrieval masked | random masked |
+|---|---|---|---|---|
+| Qwen3-0.6B | answer-only | 75.0 | 50.0 | 12.5 |
+| Qwen3-0.6B | **CoT** | **100.0** | 75.0 | 81.2 |
+| Qwen3.5-0.8B | answer-only | 75.0 | 25.0 | 68.8 |
+| Qwen3.5-0.8B | **CoT** | **100.0** | 50.0 | 93.8 |
+
+With CoT the model needs the question text across steps, and masking retrieval heads
+costs 25-50 points while random masking costs 6-19.  That is the paper's Sec. 5.3
+result.  The answer-only half does **not** replicate: the paper reports no effect
+there, and we see 25-50 point drops too.  With 8 hand-written arithmetic items this
+is a weak measurement either way, but it is reported as measured.
+
+Extractive QA (8 synthetic document/answer pairs).  Qwen3-0.6B baseline 67.5 F1:
+masking 18/36/76 retrieval heads gives 24.4/16.2/16.2, versus 55.1/20.3/4.2 for
+random.  Retrieval masking hurts more at small K, which is the paper's direction,
+but the random arms are erratic enough that the 8-sample measurement cannot separate
+the two cleanly.
+
+### Cross-model correlation: read the mode
+
+`compare` reports Pearson correlation between retrieval-score matrices.  Across
+these two families it gives **0.93** in `sorted` mode — but that mode compares the
+*sorted score vectors*, i.e. whether the two models have similarly shaped score
+distributions, not whether they retrieve with the *same heads*.  Two models that each
+have a few high-scoring heads and many low ones will correlate highly by
+construction.  The paper's "different families correlate below 0.1" is a statement
+about per-head correspondence, which needs a shared layer x head grid (i.e. models
+of the same architecture).  Do not read the 0.93 as "these models use the same
+heads"; `--mode grid` is the flag for the question the paper asked, and it is only
+meaningful within a family.
 
 ## Limitations
 

@@ -1,0 +1,23 @@
+{
+  "task": "cot_reasoning",
+  "n_samples": 8,
+  "k": 4,
+  "results": {
+    "answer_only": {
+      "baseline": 75.0,
+      "retrieval_masked": 25.0,
+      "random_masked_mean": 68.75,
+      "random_masked_std": 31.25,
+      "drop_retrieval": 50.0,
+      "drop_random": 6.25
+    },
+    "cot": {
+      "baseline": 100.0,
+      "retrieval_masked": 50.0,
+      "random_masked_mean": 93.75,
+      "random_masked_std": 6.25,
+      "drop_retrieval": 50.0,
+      "drop_random": 6.25
+    }
+  }
+}

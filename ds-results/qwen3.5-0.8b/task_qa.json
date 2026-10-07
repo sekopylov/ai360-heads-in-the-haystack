@@ -1,0 +1,53 @@
+{
+  "task": "extractive_qa",
+  "baseline_f1": 100.0,
+  "n_samples": 8,
+  "k_values": [
+    2,
+    4,
+    8
+  ],
+  "by_k": {
+    "2": {
+      "retrieval_f1": 3.851540616246499,
+      "random_f1_mean": 61.388888888888886,
+      "random_f1_std": 43.40983275995098,
+      "drop_retrieval": 96.1484593837535,
+      "drop_random": 38.611111111111114,
+      "masked_heads": [
+        "L7H1",
+        "L7H2"
+      ]
+    },
+    "4": {
+      "retrieval_f1": 87.5,
+      "random_f1_mean": 97.22222222222221,
+      "random_f1_std": 3.9283710065919353,
+      "drop_retrieval": 12.5,
+      "drop_random": 2.7777777777777857,
+      "masked_heads": [
+        "L7H1",
+        "L7H2",
+        "L7H3",
+        "L11H0"
+      ]
+    },
+    "8": {
+      "retrieval_f1": 44.560866013071895,
+      "random_f1_mean": 30.0,
+      "random_f1_std": 42.42640687119285,
+      "drop_retrieval": 55.439133986928105,
+      "drop_random": 70.0,
+      "masked_heads": [
+        "L7H1",
+        "L7H2",
+        "L7H3",
+        "L11H0",
+        "L11H1",
+        "L11H2",
+        "L11H4",
+        "L11H5"
+      ]
+    }
+  }
+}
