@@ -272,6 +272,11 @@ masking K random heads leaves it at 100% — see `masking_heads.pdf`.
 * **CoT / QA datasets.** The paper uses GPT-4-generated news QA, MMLU, MuSiQue
   and GSM8K. Those are loaded from JSONL when supplied (`--data`); the built-in
   samples are small stand-ins that exercise the code path, not benchmarks.
+  Calibration is not optional here: literal GSM8K items on a 0.8B model put the
+  **baseline** at the floor (measured: 12.5% answer-only, 0% with CoT), and a
+  baseline at the floor cannot show whether masking heads hurts. The built-in
+  reasoning items are therefore small multi-step arithmetic a sub-1B model can
+  actually solve -- chosen for headroom, not to be a benchmark.
 * **Timings.** Qwen3.5's Gated DeltaNet layers fall back to pure-PyTorch kernels
   without `flash-linear-attention` / `causal-conv1d`, which dominates runtime on
   CPU. That affects speed only, not correctness.
