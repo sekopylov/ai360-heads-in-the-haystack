@@ -431,3 +431,33 @@ error message itself suggests it, and fragmentation after a model load is real.
 Note the failure mode to watch for in future runs: this was **not** a bug in the
 retrieval code, and `detect` had already processed the short contexts correctly.
 The run simply hit the largest context in the grid.
+
+## 19. The context-length axis was 1.6x off label
+
+Watching the fixed run work, the log lines gave the game away:
+
+```
+chunked prefill: 26295 tokens in chunks of 4096
+```
+
+`--lengths ... 16384` had produced a **26295**-token prompt.  `HaystackBuilder.text`
+appended `n_tokens // 10` sentences per batch on the assumption of ~11 tokens per
+filler sentence; the templates actually average **15.95**.  Measured overshoot was
+a flat 1.58-1.60x at every length:
+
+| requested | realized (before) | realized (after) |
+|---|---|---|
+| 1024 | 1614 | 1033 |
+| 4096 | 6538 | 4098 |
+| 16384 | 26156 | 16412 |
+| 49152 | ~78k | 49182 |
+
+The grid is still a geometric spread of five lengths, so the *conclusions* are
+unaffected -- but the labels were wrong, and "16K" was quietly outside the range
+the run was sized for.  `text()` now recalibrates the batch size from the tokens
+actually produced, which holds the error to a couple of percent.
+
+Worth keeping in mind as a pattern: three of the four measurement problems found in
+this project (needle answer shape, CoT baseline at the floor, and this) were
+invisible in the code and only showed up as implausible *numbers* in a real run.
+Print the realized values, not the requested ones.

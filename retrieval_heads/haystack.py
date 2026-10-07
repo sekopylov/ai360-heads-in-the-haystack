@@ -78,22 +78,30 @@ class HaystackBuilder:
             d=rng.choice(self.words), e=rng.choice(self.words),
         )
 
+    #: Calibration seed for :meth:`text`; the real value is measured on the fly.
+    #: The template sentences average ~16 tokens, and guessing low is what made an
+    #: earlier version overshoot 1.6x (a "16K" context was really 26K).
+    TOKENS_PER_SENTENCE = 16.0
+
     def text(self, n_tokens: int, tokenizer: Any) -> str:
         """Grow filler text until it tokenises to at least ``n_tokens`` tokens.
 
-        Sentences are appended in sized batches and the batch is tokenised only
-        once, so this stays fast at 50K tokens.  Tokenising the accumulated text
+        Sentences are appended in sized batches and the accumulated text is
+        tokenised once per batch, so this stays fast at 50K tokens: tokenising
         after every single sentence would be quadratic and dominate a
-        paper-scale run.
+        paper-scale run.  The batch size is recalibrated from the tokens actually
+        produced, which keeps the overshoot to a few percent instead of the 1.6x
+        a fixed guess produced.
         """
         parts: list[str] = []
-        while True:
-            # ~11 tokens per template sentence; over-generate slightly.
-            batch = max(8, n_tokens // 10)
+        count = 0
+        per_sentence = self.TOKENS_PER_SENTENCE
+        while count < n_tokens:
+            batch = max(4, int((n_tokens - count) / per_sentence) + 1)
             parts.extend(self.sentence() for _ in range(batch))
-            joined = " ".join(parts)
-            if len(tokenizer(joined, add_special_tokens=False).input_ids) >= n_tokens:
-                return joined
+            count = len(tokenizer(" ".join(parts), add_special_tokens=False).input_ids)
+            per_sentence = max(1.0, count / len(parts))
+        return " ".join(parts)
 
 
 def _tokenize_with_offsets(tokenizer: Any, text: str) -> tuple[list[int], list[tuple[int, int]]]:
