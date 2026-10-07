@@ -30,19 +30,19 @@ CLI=.venv-datasphere/bin/datasphere                 # CLI уже установ�
 PROJECT=bt1u5v72b71eesdhp9k5
 
 $CLI project get --id "$PROJECT"                    # 1. доступ есть?
-mkdir -p .cache/datasphere
+mkdir -p .cache/datasphere            # IAM-token cache only; configs live in configs/datasphere/
 
 # 2. smoke: описать + прогнать детекцию на маленькой модели (см. §3)
-$CLI project job execute -p "$PROJECT" -c .cache/datasphere/smoke.yaml
+$CLI project job execute -p "$PROJECT" -c configs/datasphere/smoke.yaml
 
 # 3. рабочий прогон: CPU-laptop (§4) или GPU-paper (§4, §6)
-$CLI project job execute -p "$PROJECT" -c .cache/datasphere/laptop.yaml
+$CLI project job execute -p "$PROJECT" -c configs/datasphere/laptop.yaml
 
 # 4. результаты окажутся в ./ds-results/ (см. §5)
 ```
 
 Конфиги `smoke.yaml` / `laptop.yaml` / `paper.yaml` уже разложены в
-`.cache/datasphere/` (каталог в `.gitignore`) и проверены парсером DataSphere CLI;
+`configs/datasphere/` (в git, не в `.cache/`) и проверены парсером DataSphere CLI;
 их содержимое — в §3–§4, воспроизведи заново, если каталог пропал.
 
 ---
@@ -178,7 +178,7 @@ DataSphere API отвечает на него `401`. Нужен именно IAM
 ### 3.2 smoke.yaml
 
 ```yaml
-# .cache/datasphere/smoke.yaml
+# configs/datasphere/smoke.yaml
 name: rh-smoke
 desc: retrieval-heads smoke run (describe + detect, qwen3-0.6b)
 
@@ -208,8 +208,7 @@ cloud-instance-types:
 Запуск:
 
 ```bash
-mkdir -p .cache/datasphere
-$CLI project job execute -p "$PROJECT" -c .cache/datasphere/smoke.yaml
+$CLI project job execute -p "$PROJECT" -c configs/datasphere/smoke.yaml
 ```
 
 CLI стримит логи до конца задания. Признак успеха: в логах `job completed
@@ -231,7 +230,7 @@ DataSphere кеширует входные данные в проекте, по�
 ### 4.1 CPU, масштаб `laptop` (аналог `reproduce_laptop.sh`)
 
 ```yaml
-# .cache/datasphere/laptop.yaml
+# configs/datasphere/laptop.yaml
 name: rh-laptop
 desc: full pipeline, laptop scale, CPU
 
@@ -266,7 +265,7 @@ cloud-instance-types:
 что прогон долгий:
 
 ```yaml
-# .cache/datasphere/paper.yaml
+# configs/datasphere/paper.yaml
 name: rh-paper
 desc: paper-scale grid on GPU
 
@@ -295,7 +294,7 @@ cloud-instance-types:
 ```
 
 ```bash
-$CLI project job execute -p "$PROJECT" -c .cache/datasphere/paper.yaml --async
+$CLI project job execute -p "$PROJECT" -c configs/datasphere/paper.yaml --async
 # выведет job id; дальше:
 $CLI project job get    --id <job_id>            # статус
 $CLI project job attach --id <job_id>            # досмотреть логи
@@ -447,8 +446,9 @@ $CLI project job cancel --id <job_id> --graceful # остановить
 * История заданий видна на вкладке **DataSphere Jobs** проекта; лишние
   probe-задания можно удалить: `$CLI project job delete --id <job_id>`.
 * В этом репозитории остаются только `ds-results/` (артефакты) и
-  `.cache/datasphere/*.yaml` (конфиги, каталог в `.gitignore`). Всё остальное —
-  в проекте DataSphere.
+  `configs/datasphere/*.yaml` (конфиги, в git). Всё остальное — в проекте
+  DataSphere.  В `.cache/` лежит только кеш IAM-токена — он одноразовый и
+  игнорируется.
 
 ---
 
@@ -457,7 +457,7 @@ $CLI project job cancel --id <job_id> --graceful # остановить
 1. `$CLI project get --id bt1u5v72b71eesdhp9k5` — доступ есть.
 2. `source scripts/datasphere_auth.sh` — получить `YC_IAM_TOKEN` (не вызывай
    `yc iam create-token` в цикле: в WSL это вкладка консоли на каждый вызов).
-3. Создать `.cache/datasphere/smoke.yaml` из §3.2 и запустить его.
+3. Создать `configs/datasphere/smoke.yaml` из §3.2 и запустить его.
 4. Убедиться: статус `SUCCESS`, в логах видны строки драйвера `[entry] === detect: ...`,
    локально появился `ds-results/qwen3-0.6b/scores_next_step.json`.
 5. Выбрать масштаб: `laptop` (§4.1) или `paper` (§4.2); для GPU сначала проверить

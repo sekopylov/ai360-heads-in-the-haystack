@@ -237,7 +237,7 @@ Three rules are now enforced in code:
 
 An earlier cancelled job created `${DS_PROJECT_HOME}/rh-venv` **before** the guard
 existed, which raised the obvious question: did that name collide with somebody
-else's directory?  `.cache/datasphere/inspect-disk.yaml` (strictly read-only:
+else's directory?  `configs/datasphere/inspect-disk.yaml` (strictly read-only:
 `--inspect-dir`, no weights, no outputs) settles it:
 
 ```
@@ -315,10 +315,10 @@ CLI=.venv-datasphere/bin/datasphere
 PROJECT=bt1u5v72b71eesdhp9k5
 
 # once: build the persistent venv and validate every stage on the GPU
-$CLI project job execute -p "$PROJECT" -c .cache/datasphere/t4-bootstrap.yaml
+$CLI project job execute -p "$PROJECT" -c configs/datasphere/t4-bootstrap.yaml
 
 # then, cheaply (~40 s startup):
-$CLI project job execute -p "$PROJECT" -c .cache/datasphere/t4-cached.yaml --async
+$CLI project job execute -p "$PROJECT" -c configs/datasphere/t4-cached.yaml --async
 ```
 
 `t4.yaml` is the cacheless variant (full platform env build every time).  It

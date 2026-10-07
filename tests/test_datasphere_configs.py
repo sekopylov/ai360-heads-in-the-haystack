@@ -13,7 +13,7 @@ import yaml
 
 from tests.conftest import REPO_ROOT
 
-CONFIG_DIR = REPO_ROOT / ".cache" / "datasphere"
+CONFIG_DIR = REPO_ROOT / "configs" / "datasphere"
 CONFIGS = sorted(CONFIG_DIR.glob("*.yaml"))
 
 

@@ -1,18 +1,17 @@
 # Model weights (~3.2 GB total) are downloaded, never committed.
 models/
 
-# Environments and caches
+# Environments and caches.
+# `.cache/` is disposable by definition and stays fully ignored.  The one thing
+# that lives there on purpose is the DataSphere IAM token
+# (`.cache/datasphere/iam-token`, mode 600, written by scripts/datasphere_auth.sh)
+# -- a secret, so it must never be committed.  Job configs are *not* cache: they
+# are versioned under configs/datasphere/.
 .venv/
-.cache/*
+.cache/
 __pycache__/
 *.py[cod]
 .pytest_cache/
-
-# ...but the DataSphere job configs are entry points, not cache, so version them.
-# The IAM token sitting next to them is a secret and must NEVER be committed --
-# `datasphere_auth.sh` writes it there with mode 600.
-!.cache/datasphere/
-.cache/datasphere/iam-token
 
 # Run logs (the JSON/figures under results/ are the actual artefacts)
 logs/

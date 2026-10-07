@@ -95,13 +95,13 @@ CLI=.venv-datasphere/bin/datasphere
 PROJECT=bt1u5v72b71eesdhp9k5
 
 # once: build a persistent venv on the project disk and validate every stage
-$CLI project job execute -p "$PROJECT" -c .cache/datasphere/t4-bootstrap.yaml
+$CLI project job execute -p "$PROJECT" -c configs/datasphere/t4-bootstrap.yaml
 
 # then, with ~40 s startup instead of ~9 min:
-$CLI project job execute -p "$PROJECT" -c .cache/datasphere/t4-cached.yaml --async
+$CLI project job execute -p "$PROJECT" -c configs/datasphere/t4-cached.yaml --async
 ```
 
-`.cache/datasphere/` also holds `t4.yaml` (cacheless fallback), `laptop.yaml`,
+`configs/datasphere/` also holds `t4.yaml` (cacheless fallback), `laptop.yaml`,
 `paper.yaml` and `smoke.yaml`.  Everything non-obvious about this path — the pip
 crash that shapes the requirements file, the `cmd` grammar, why the cached venv
 cannot be the entry point, what the "T4" slot actually hands out — is written up
