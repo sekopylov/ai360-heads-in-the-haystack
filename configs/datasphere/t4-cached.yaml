@@ -13,8 +13,16 @@ desc: full pipeline on a T4-class GPU using the persistent project-disk venv (t4
 #     entry point stays `python3` and the driver re-execs itself into the venv
 #     (`--use-venv`).
 #   * the platform venv is still built, but from a one-line requirements file.
+#
+# GPU memory notes (a 16K-token fp32 run OOM'd here, see findings section 18):
+#   * `--dtype bfloat16` matches the paper and lets SDPA pick a flash kernel,
+#     instead of the float32 math backend that materialises (heads, seq, seq).
+#   * `--prefill-chunk 4096` bounds prefill memory regardless of which kernel
+#     SDPA chooses. Verified equivalent to a one-shot prefill by
+#     tests/test_models_arch.py::test_chunked_prefill_matches_single_shot.
+#   * the allocator hint reduces fragmentation after the model load.
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile t4 --stages describe,detect,mask,qa,cot,compare,figures --out-prefix ds-results
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile t4 --dtype bfloat16 --stages describe,detect,mask,qa,cot,compare,figures --out-prefix ds-results
 
 flags:
   - attach-project-disk
@@ -27,6 +35,8 @@ outputs:
   - ds-results
 
 env:
+  vars:
+    PYTORCH_ALLOC_CONF: expandable_segments:True
   python:
     type: manual
     version: "3.10"

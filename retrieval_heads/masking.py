@@ -51,15 +51,28 @@ def greedy_generate(
     max_new_tokens: int = 32,
     eos_ids: Iterable[int] = (),
     attn_impl: str = "sdpa",
+    prefill_chunk: int | None = None,
 ) -> list[int]:
-    """Plain greedy decoding (no attention capture) -- used for the ablations."""
+    """Plain greedy decoding (no attention capture) -- used for the ablations.
+
+    ``prefill_chunk`` is forwarded to the prefill for the same reason as in
+    :func:`retrieval_heads.scoring.decode_with_attention`: float32 SDPA can fall
+    back to the math backend and materialise the full attention matrix.
+    """
     input_ids = input_ids.to(model_device(model))
     restore = set_attn_implementation(model, attn_impl)
     eos = set(int(e) for e in eos_ids)
     out_ids: list[int] = []
     try:
-        out = model(input_ids=input_ids, use_cache=True)
-        cache = out.past_key_values
+        if prefill_chunk is not None and input_ids.shape[1] > prefill_chunk:
+            cache = None
+            for start in range(0, input_ids.shape[1], prefill_chunk):
+                out = model(input_ids=input_ids[:, start:start + prefill_chunk],
+                            past_key_values=cache, use_cache=True)
+                cache = out.past_key_values
+        else:
+            out = model(input_ids=input_ids, use_cache=True)
+            cache = out.past_key_values
         nxt = out.logits[:, -1, :].argmax(-1, keepdim=True)
         for _ in range(max_new_tokens):
             token = int(nxt[0, 0])
@@ -111,6 +124,7 @@ def evaluate_samples(
     masked_layers: Sequence[int] = (),
     max_new_tokens: int = 32,
     attn_impl: str = "sdpa",
+    prefill_chunk: int | None = None,
 ) -> NiahMetrics:
     """Needle-in-a-Haystack score of ``samples``, optionally with heads silenced."""
     eos: set[int] = set()
@@ -129,7 +143,8 @@ def evaluate_samples(
     try:
         for sample in samples:
             ids = greedy_generate(model, sample.input_ids, max_new_tokens=max_new_tokens,
-                                  eos_ids=eos, attn_impl=attn_impl)
+                                  eos_ids=eos, attn_impl=attn_impl,
+                                  prefill_chunk=prefill_chunk)
             text = tokenizer.decode(ids, skip_special_tokens=True)
             f1s.append(token_f1(ids, sample.needle_ids))
             ems.append(1.0 if normalized_contains(text, sample.needle_text) else 0.0)
@@ -225,6 +240,7 @@ def masking_curve(
     max_new_tokens: int = 32,
     seed: int = 0,
     progress: bool = True,
+    prefill_chunk: int | None = 4096,
 ) -> MaskingCurve:
     """Mask top-K retrieval heads vs K random heads and score NIAH each time."""
     retrieval_ranked = scores.heads_above()
@@ -232,7 +248,8 @@ def masking_curve(
         log.warning("no head exceeds the %.2f threshold; curve will be flat",
                     scores.threshold)
 
-    baseline = evaluate_samples(model, tokenizer, info, samples, max_new_tokens=max_new_tokens)
+    baseline = evaluate_samples(model, tokenizer, info, samples, max_new_tokens=max_new_tokens,
+                                 prefill_chunk=prefill_chunk)
     log.info("baseline NIAH f1=%.1f exact=%.1f", baseline.f1, baseline.exact_match)
 
     rng = np.random.default_rng(seed)
@@ -248,8 +265,8 @@ def masking_curve(
 
     for k in k_values:
         top = retrieval_ranked[:k]
-        metrics = evaluate_samples(model, tokenizer, info, samples,
-                                   masked_heads=top, max_new_tokens=max_new_tokens)
+        metrics = evaluate_samples(model, tokenizer, info, samples, masked_heads=top,
+                                   max_new_tokens=max_new_tokens, prefill_chunk=prefill_chunk)
         curve.retrieval.append(metrics.f1)
         curve.retrieval_exact.append(metrics.exact_match)
         log.info("k=%-4d retrieval-masked (n=%d, %.1f%% of heads) f1=%.1f exact=%.1f",
@@ -261,8 +278,8 @@ def masking_curve(
         for trial in range(n_random_trials):
             pick = rng.permutation(len(pool))[:k]
             random_heads = [pool[i] for i in pick]
-            m = evaluate_samples(model, tokenizer, info, samples,
-                                 masked_heads=random_heads, max_new_tokens=max_new_tokens)
+            m = evaluate_samples(model, tokenizer, info, samples, masked_heads=random_heads,
+                                 max_new_tokens=max_new_tokens, prefill_chunk=prefill_chunk)
             trials.append(m.f1)
             exact_trials.append(m.exact_match)
         curve.random_trials.append(trials)
@@ -323,6 +340,7 @@ def token_mixer_ablation(
     *,
     k_values: Sequence[int] = (1, 2, 3),
     max_new_tokens: int = 32,
+    prefill_chunk: int | None = 4096,
 ) -> MixerAblation:
     """Silence K full-attention layers vs K linear-attention layers.
 
@@ -330,7 +348,8 @@ def token_mixer_ablation(
     ``full_attention`` only -- still a valid "how concentrated is retrieval in a
     few layers" measurement.
     """
-    baseline = evaluate_samples(model, tokenizer, info, samples, max_new_tokens=max_new_tokens)
+    baseline = evaluate_samples(model, tokenizer, info, samples, max_new_tokens=max_new_tokens,
+                                 prefill_chunk=prefill_chunk)
     full_layers = list(info.scoreable_layers)
     linear_layers = list(info.linear_layers)
 
@@ -341,7 +360,7 @@ def token_mixer_ablation(
     for k in k_values:
         picked_full = full_layers[:k] if len(full_layers) >= k else full_layers
         m = evaluate_samples(model, tokenizer, info, samples, masked_layers=picked_full,
-                             max_new_tokens=max_new_tokens)
+                             max_new_tokens=max_new_tokens, prefill_chunk=prefill_chunk)
         full_scores.append(m.f1)
         full_exact.append(m.exact_match)
         log.info("k=%d full-attention layers %s masked -> f1=%.1f exact=%.1f",
@@ -350,7 +369,7 @@ def token_mixer_ablation(
         if len(linear_layers) >= k:
             picked_linear = linear_layers[:k]
             m = evaluate_samples(model, tokenizer, info, samples, masked_layers=picked_linear,
-                                 max_new_tokens=max_new_tokens)
+                                 max_new_tokens=max_new_tokens, prefill_chunk=prefill_chunk)
             linear_scores.append(m.f1)
             linear_exact.append(m.exact_match)
             log.info("k=%d linear layers %s masked -> f1=%.1f exact=%.1f",

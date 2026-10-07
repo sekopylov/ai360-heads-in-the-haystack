@@ -115,6 +115,7 @@ def cmd_detect(args: argparse.Namespace) -> int:
         enable_thinking=None if args.thinking else False,
         capture_method=args.capture_method,
         prefill_impl=args.prefill_impl,
+        prefill_chunk=args.prefill_chunk,
         seed=args.seed,
         limit=args.limit,
     )
@@ -159,13 +160,15 @@ def cmd_mask(args: argparse.Namespace) -> int:
         model, tokenizer, info, scores, samples,
         k_values=k_values, n_random_trials=args.random_trials,
         max_new_tokens=args.max_new_tokens, seed=args.seed,
+        prefill_chunk=args.prefill_chunk or None,
     )
     curve.save(out_dir / "masking_curve.json")
 
     if info.linear_layers:
         ablation = token_mixer_ablation(model, tokenizer, info, samples,
                                         k_values=tuple(k for k in k_values if k <= 4) or (1, 2),
-                                        max_new_tokens=args.max_new_tokens)
+                                        max_new_tokens=args.max_new_tokens,
+                                        prefill_chunk=args.prefill_chunk or None)
         save_json(ablation.as_dict(), out_dir / "mixer_ablation.json")
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -307,6 +310,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--capture-method", default="output_attentions",
                    choices=["output_attentions", "patch"])
     p.add_argument("--prefill-impl", default="sdpa")
+    p.add_argument("--prefill-chunk", type=int, default=4096,
+                   help="feed the prefill in chunks of this size (0 = one shot); bounds "
+                        "memory when float32 SDPA falls back to the matmul kernel")
     p.add_argument("--corpus", default=None, help="text file of filler sentences")
     p.add_argument("--limit", type=int, default=None, help="cap the number of instances")
     p.set_defaults(func=cmd_detect)
@@ -320,6 +326,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--lengths", type=int, nargs="*", default=None)
     p.add_argument("--random-trials", type=int, default=2)
     p.add_argument("--max-new-tokens", type=int, default=32)
+    p.add_argument("--prefill-chunk", type=int, default=4096)
     p.set_defaults(func=cmd_mask)
 
     p = sub.add_parser("qa", help="extractive-QA ablation")

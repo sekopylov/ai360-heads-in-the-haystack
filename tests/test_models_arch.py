@@ -208,6 +208,42 @@ def test_zeroing_the_attention_row_equals_zeroing_the_oproj_slice(qwen35):
 
 
 # --------------------------------------------------------------------------- end to end
+def test_chunked_prefill_matches_single_shot(qwen35):
+    """Chunked prefill must be numerically equivalent, not merely plausible.
+
+    SDPA on float32 can fall back to the math backend and materialise the whole
+    ``(heads, seq, seq)`` matrix -- a 16K fp32 prefill asked for 20.6 GiB on an L4
+    and OOM'd.  Feeding the prompt in chunks through the KV cache fixes the memory,
+    but only if positions and the causal mask stay correct, so this test compares
+    both the resulting logits and the greedy continuation.
+    """
+    from retrieval_heads.scoring import decode_with_attention
+
+    model, tokenizer, info = qwen35
+    text = ("The quick brown fox jumps over the lazy dog while the mirror "
+            "reflects a candle near the window. ") * 12
+    ids = tokenizer(text, return_tensors="pt").input_ids
+    assert ids.shape[1] > 100, ids.shape
+
+    full_trace, full_gen = decode_with_attention(
+        model, info, ids, max_new_tokens=4, tokenizer=tokenizer, prefill_chunk=None)
+    chunk_trace, chunk_gen = decode_with_attention(
+        model, info, ids, max_new_tokens=4, tokenizer=tokenizer, prefill_chunk=16)
+
+    assert full_gen == chunk_gen, f"greedy continuation diverged: {full_gen} vs {chunk_gen}"
+    assert torch.allclose(full_trace.prefill_logits, chunk_trace.prefill_logits, atol=1e-3), \
+        (full_trace.prefill_logits - chunk_trace.prefill_logits).abs().max().item()
+
+
+def test_chunked_prefill_rejects_a_nonsense_chunk(qwen35):
+    from retrieval_heads.scoring import decode_with_attention
+
+    model, tokenizer, info = qwen35
+    ids = tokenizer("Short.", return_tensors="pt").input_ids
+    with pytest.raises(ValueError, match="prefill_chunk"):
+        decode_with_attention(model, info, ids, max_new_tokens=1, prefill_chunk=0)
+
+
 def test_end_to_end_retrieval_detection_on_qwen35(qwen35):
     """The paper's whole pipeline on one instance: recite the needle, score heads."""
     model, tokenizer, info = qwen35

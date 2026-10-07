@@ -76,6 +76,10 @@ class DetectionConfig:
     prefill_impl: str = "sdpa"
     capture_impl: str = "eager"
     capture_method: str = "output_attentions"
+    #: Feed the prompt to the prefill in chunks of this size (None = one shot).
+    #: Bounds prefill memory on cards where float32 SDPA falls back to the math
+    #: backend and materialises (heads, seq, seq).
+    prefill_chunk: int | None = 4096
     seed: int = 0
     #: cap on the total number of instances (None = the full grid)
     limit: int | None = None
@@ -235,6 +239,7 @@ def run_detection(
             prefill_impl=config.prefill_impl,
             capture_impl=config.capture_impl,
             capture_method=config.capture_method,
+            prefill_chunk=config.prefill_chunk,
         )
         result.sample["needle_index"] = item["needle_index"]
         results.append(result)

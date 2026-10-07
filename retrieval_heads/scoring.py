@@ -105,6 +105,7 @@ def decode_with_attention(
     capture_impl: str = "eager",
     capture_method: str = "output_attentions",
     stop_on_eos: bool = True,
+    prefill_chunk: int | None = None,
 ) -> tuple[DecodeTrace, list[int]]:
     """Greedy-decode ``input_ids`` while recording attention at every step.
 
@@ -112,17 +113,42 @@ def decode_with_attention(
     needed there; only the single-token decode steps are captured.  That keeps
     memory flat in the context length -- each captured row is
     ``(heads, kv_len)``, not ``(heads, seq, seq)``.
+
+    ``prefill_chunk`` bounds the *prefill* the other way.  SDPA only reaches a
+    memory-efficient kernel when the dtype and shapes allow it; with float32 it
+    can fall back to the math backend, which materialises the full
+    ``(heads, seq, seq)`` matrix.  Measured on an L4: a 16K-token fp32 prefill
+    asked for a single 20.6 GiB allocation and OOM'd on a 22 GiB card.  Feeding
+    the prompt in chunks through the KV cache keeps peak memory at
+    ``O(chunk^2)`` instead, at the cost of a few extra forward passes.
     """
+    if prefill_chunk is not None and prefill_chunk <= 0:
+        raise ValueError("prefill_chunk must be positive or None")
     input_ids = input_ids.to(model_device(model))
     recorder = AttentionRecorder(model, info, method=capture_method)
     trace = DecodeTrace(prompt_len=int(input_ids.shape[1]))
 
     restore = set_attn_implementation(model, prefill_impl)
     try:
-        out = model(input_ids=input_ids, use_cache=True)
+        if prefill_chunk is not None and input_ids.shape[1] > prefill_chunk:
+            # Incremental prefill: each chunk sees the KV state of the previous
+            # ones, and transformers derives cache_position from the cache length,
+            # so positions and the causal mask stay correct.
+            cache = None
+            for start in range(0, input_ids.shape[1], prefill_chunk):
+                out = model(
+                    input_ids=input_ids[:, start:start + prefill_chunk],
+                    past_key_values=cache,
+                    use_cache=True,
+                )
+                cache = out.past_key_values
+            log.info("chunked prefill: %d tokens in chunks of %d",
+                     input_ids.shape[1], prefill_chunk)
+        else:
+            out = model(input_ids=input_ids, use_cache=True)
+            cache = out.past_key_values
         logits = out.logits[:, -1, :]
         trace.prefill_logits = logits.detach()
-        cache = out.past_key_values
         restore_capture = set_attn_implementation(model, capture_impl)
         try:
             generated: list[int] = []
@@ -307,12 +333,14 @@ def score_instance(
     capture_impl: str = "eager",
     capture_method: str = "output_attentions",
     compute_second_pairing: bool = True,
+    prefill_chunk: int | None = None,
 ) -> InstanceResult:
     """Run one NIAH instance and return its per-head retrieval scores."""
     trace, generated = decode_with_attention(
         model, info, sample.input_ids,
         max_new_tokens=max_new_tokens, tokenizer=tokenizer,
         prefill_impl=prefill_impl, capture_impl=capture_impl, capture_method=capture_method,
+        prefill_chunk=prefill_chunk,
     )
 
     pairings = [pairing]

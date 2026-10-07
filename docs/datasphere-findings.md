@@ -392,3 +392,42 @@ sub-1B model can solve; the real benchmarks still load via `--data`.
 
 Both this and the earlier needle problem have the same shape: a test whose score
 cannot move is not a test.  Check the *baseline* before trusting an ablation.
+
+## 18. A 16K float32 prefill OOMs on a 22 GiB L4
+
+The first full `t4` run (`bt1e0iq7jakl30kd3qjn`) died in `detect` after 7 minutes:
+
+```
+File ".../transformers/integrations/sdpa_attention.py", line 158, in sdpa_attention_forward
+    attn_output = torch.nn.functional.scaled_dot_product_attention(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 20.61 GiB.
+GPU 0 has a total capacity of 22.17 GiB of which 13.84 GiB is free.
+```
+
+The model is 3.2 GB in float32, so the weights are not the problem.  `sdpa` was
+being used -- but on **float32** SDPA does not reach a flash kernel and can fall
+back to the math backend, which materialises the full `(heads, seq, seq)` score
+matrix.  At 16K tokens that is 8.6 GB for the scores alone, and with the softmax
+copy and the dtype cast the allocator ends up asking for ~20 GB in one go.  The
+needle tests at 1K and 2K were never going to surface this.
+
+Two independent fixes, both now in place:
+
+* **`--dtype bfloat16`.**  What the paper uses on GPU anyway, half the memory, and
+  it lets SDPA pick a flash kernel on sm_89 instead of the math backend.
+* **`--prefill-chunk 4096`.**  Feed the prompt through the KV cache in chunks, so
+  peak prefill memory is `O(chunk^2)` no matter which kernel is chosen.  This is
+  the fix that does not depend on dtype or hardware, so it is the one worth having
+  in the code rather than only in a config.
+
+Chunked prefill changes the execution path, so equivalence is asserted, not
+assumed: `test_chunked_prefill_matches_single_shot` runs the same prompt one-shot
+and at `chunk=16`, and requires an identical greedy continuation and matching
+prefill logits.
+
+`PYTORCH_ALLOC_CONF=expandable_segments:True` is set on the GPU jobs as well; the
+error message itself suggests it, and fragmentation after a model load is real.
+
+Note the failure mode to watch for in future runs: this was **not** a bug in the
+retrieval code, and `detect` had already processed the short contexts correctly.
+The run simply hit the largest context in the grid.
