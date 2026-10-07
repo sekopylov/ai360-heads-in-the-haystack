@@ -161,39 +161,25 @@ def builtin_qa_samples() -> list[QASample]:
 
 
 def builtin_reasoning_samples() -> list[ReasoningSample]:
+    """Small arithmetic and logic items that a sub-1B model can actually solve.
+
+    Calibration matters here.  The paper evaluates GSM8K / MMLU / MuSiQue on a 7B
+    model; dropping literal GSM8K items onto Qwen3.5-0.8B puts the *baseline* at
+    the floor (measured: 12.5% answer-only, 0% with CoT at 128 new tokens), and a
+    floor baseline cannot show whether masking heads hurts.  These items keep the
+    same structure -- multi-step, needing the question text carried along -- while
+    staying within reach of a 0.8B model, so the ablation has signal.  The real
+    benchmarks load through ``load_reasoning_jsonl`` when available.
+    """
     return [
-        ReasoningSample(
-            question="A workshop builds 14 lanterns per day. How many lanterns does it build in 3 weeks?",
-            answer="294",
-        ),
-        ReasoningSample(
-            question="Mira has 48 shells and gives away a quarter of them. How many shells does she have left?",
-            answer="36",
-        ),
-        ReasoningSample(
-            question="A train travels 60 km in 45 minutes. How far does it travel in 2 hours at the same speed?",
-            answer="160",
-        ),
-        ReasoningSample(
-            question="A crate holds 24 bottles. A lorry carries 35 crates and makes 4 trips. How many bottles does it deliver?",
-            answer="3360",
-        ),
-        ReasoningSample(
-            question="Elena buys 7 notebooks at 3 crowns each and pays with a 50-crown note. How much change does she receive?",
-            answer="29",
-        ),
-        ReasoningSample(
-            question="A tank holds 180 litres and is filled at 12 litres per minute. How many minutes does it take to fill three quarters of the tank?",
-            answer="11.25",
-        ),
-        ReasoningSample(
-            question="A school has 9 classes with 28 pupils each. If 45 pupils are absent, how many are present?",
-            answer="207",
-        ),
-        ReasoningSample(
-            question="A printer produces 18 pages per minute. How many pages does it produce in 2 hours and 30 minutes?",
-            answer="2700",
-        ),
+        ReasoningSample(question="What is 13 plus 26?", answer="39"),
+        ReasoningSample(question="What is 7 times 8?", answer="56"),
+        ReasoningSample(question="A box holds 6 apples. How many apples are in 4 boxes?", answer="24"),
+        ReasoningSample(question="Ana had 15 stickers and gave away 6. How many are left?", answer="9"),
+        ReasoningSample(question="A train travels 5 km per minute. How far does it go in 12 minutes?", answer="60"),
+        ReasoningSample(question="What is 100 minus 37?", answer="63"),
+        ReasoningSample(question="There are 9 rows of 7 chairs. How many chairs in total?", answer="63"),
+        ReasoningSample(question="A pen costs 4 crowns. How much do 9 pens cost?", answer="36"),
     ]
 
 
