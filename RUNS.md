@@ -37,6 +37,10 @@
 ### 2.1. Детекция: 3 иглы × 2 длины × 3 глубины = 18 примеров
 
 ```python
+!mkdir -p logs
+```
+
+```python
 !../.venv/bin/python -u retrieval_head_detection.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -126,9 +130,9 @@ for f in base:
 ### 2.7. Память и время
 
 ```python
-!grep -i -E "out of memory|error|traceback" logs/test_*.log
-!grep "Duration" logs/test_detect.log
-!grep "Duration" logs/test_mask_*.log
+!grep -i -E "out of memory|error|traceback" logs/test_*.log || true
+!grep -E "Duration|Context|insertion at" logs/test_detect.log || true
+!grep "Duration" logs/test_mask_*.log || true
 ```
 
 - Если на 30000 не хватает памяти — в полном прогоне уменьшить `--e` (например, до 26000) и использовать то же значение везде.
@@ -148,6 +152,7 @@ for f in base:
 
 ```python
 import glob, os, subprocess
+os.makedirs("logs", exist_ok=True)
 assert not os.path.exists("head_score_ours/Qwen1.5-14B-Chat.json"), "наши скоры уже есть: повторный запуск допишет в них второй раз"
 assert not os.path.exists("results/dump/Qwen1.5-14B-Chat/detect"), "выгрузка детекции уже есть"
 assert not glob.glob("results/graph/Qwen1.5-14B-Chat*"), "остались результаты прошлых прогонов"
@@ -382,6 +387,10 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 Первая команда должна ничего не напечатать. Архив скачать или переложить в постоянное хранилище: в git эти папки не попадают.
 
 ## 6. Известные особенности
+
+- Перед первым запуском нужна папка `logs/`: без неё `tee` завершается с ошибкой, и ячейка падает уже после прогона.
+- Игла вставляется не на заданной глубине. При `--model_provider` по умолчанию конец предложения ищется по id точек из словаря Llama; в тесте на 1000 токенов игла на глубинах 0 и 50 оказалась в позиции 0 (`insertion at 0` в логе). Фактическая позиция пишется в выгрузку (`needle_start`).
+- Контекст прогоняется без расчёта логитов (наша правка): иначе на 30000 токенов не хватает 80 ГБ. На результат не влияет.
 
 - Случайные головы скрипт авторов выбирает заново на каждом примере, из диапазона 32 × 32 при модели 40 × 40, и они могут совпасть с top-головами.
 - Повторный запуск с тем же `--mask_topk` перезаписывает результаты и выгрузку в той же папке. Чтобы сделать второй прогон случайных голов, добавить `--random_seed 1`: seed попадёт в имя папки.

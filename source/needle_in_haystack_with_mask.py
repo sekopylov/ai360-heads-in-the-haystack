@@ -353,7 +353,10 @@ class LLMNeedleHaystackTester:
 
         self.needle_start, self.needle_end = self.find_needle_idx(self.real_needle)
         with torch.no_grad():
-            q_outputs = self.model_to_test(input_ids=input_ids[:,:-1], use_cache=True, return_dict=True)
+            # [OUR CHANGE, not in the authors' code] the context is run through the base model, without lm_head:
+            # only past_key_values is used below, and the logits of the whole context do not fit in 80GB at 30k tokens.
+            # Authors' line: q_outputs = self.model_to_test(input_ids=input_ids[:,:-1], use_cache=True, return_dict=True)
+            q_outputs = self.model_to_test.model(input_ids=input_ids[:,:-1], use_cache=True, return_dict=True)
             output, retrieval_score  = self.decode(q_outputs, input_ids[:,-1], 50, block_list=block_list)
             response = self.enc.decode(output,skip_special_tokens=True).strip()
 
