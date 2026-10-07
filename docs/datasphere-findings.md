@@ -132,7 +132,17 @@ Ada generation).  That matters for planning:
 * bfloat16 is natively supported on sm_89 (it is *not* on a real T4/sm_75).
 * 22 GiB of VRAM is comfortable for a 0.8B model at long context.
 * The GPU configuration was accepted by the community, and `gpu_stats.tsv` is
-  produced — the "GPU configurations unverified" caveat in the doc can be relaxed.
+  produced.  The "GPU configurations and quotas unverified" caveat in the task
+  document can now be closed: `bt107kjm3es8vung7130` ran **all seven stages** to
+  `SUCCESS` on this configuration (see §17).
+
+### Measured GPU speed
+
+From that job, for a single 1024-token needle instance: **2.8 s** (Qwen3.5-0.8B)
+and **2.5 s** (Qwen3-0.6B), against roughly 25 s per instance on the laptop CPU.
+The full `t4` grid (75 instances per model, plus every ablation) is therefore a
+matter of tens of minutes, not hours.  An earlier "several hours" estimate in this
+project was an unjustified extrapolation from CPU timings and should be ignored.
 
 ## 8. Inputs must be placed on the model's device
 
@@ -338,3 +348,47 @@ Both are now covered by `tests/test_cli_argv.py`, which replays the driver's own
 `SCALES` table through the real CLI parser and asserts the source structure
 (exactly one `main`, and that it calls `stage_argv` / `reexec_into_venv` /
 `prepare_models`).  Run `pytest -m "not integration"` before every job.
+
+## 17. What is now verified end to end
+
+Job **`bt107kjm3es8vung7130`** (`rh-t4-smoke`, all seven stages, both models,
+`smoke` scale) finished **`SUCCESS`** on the L4 with the cached venv, and every
+artifact came back:
+
+```
+ds-smoke-results/
+  correlation.json  overlap.json
+  figures/{ring_graph,score_distribution,heat_map,layer_profile,
+           corr_map,masking_heads,task_qa,task_cot,mixer_ablation}.{pdf,png}
+  qwen3.5-0.8b/{model_info,scores_next_step,summary_next_step,masking_curve,
+                mixer_ablation,task_qa,task_cot}.json + instances_next_step.jsonl
+  qwen3-0.6b/  (same set, no mixer_ablation -- that model is not hybrid)
+```
+
+That closes the loop on the three things that were guesswork before:
+
+| | before | now |
+|---|---|---|
+| GPU configuration allowed in the community | unverified | `gt4i.1` accepted, job ran |
+| environment with torch + CUDA builds | unverified | builds; `cuda True`, torch 2.10.0+cu128 |
+| cached venv actually reused | untested | `venv already matches ...; skipping install`, stages run from it |
+
+### The smoke results also cross-check the CPU run
+
+Same top head on GPU (1 instance) and CPU (18 instances) for both models:
+`L15H7` for Qwen3.5-0.8B and `L16H14` for Qwen3-0.6B.  The dense model again lands
+inside the paper's quoted 3-6% band (6.0% of heads above 0.1); the hybrid again
+does not.
+
+### A measurement trap found on the GPU
+
+The same job exposed a second instance of the mistake described in §16's spirit:
+the CoT baseline was **at the floor** -- 12.5% answer-only, 0% with chain-of-thought
+-- because literal GSM8K items are beyond a 0.8B model and `max_new_tokens=128`
+truncated the reasoning before the `####` answer.  A baseline at the floor cannot
+show whether masking retrieval heads hurts, so that subsection was measuring
+nothing.  `builtin_reasoning_samples()` now holds small multi-step arithmetic a
+sub-1B model can solve; the real benchmarks still load via `--data`.
+
+Both this and the earlier needle problem have the same shape: a test whose score
+cannot move is not a test.  Check the *baseline* before trusting an ablation.
