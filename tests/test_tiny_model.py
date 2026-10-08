@@ -184,3 +184,16 @@ def test_eager_capture_and_sdpa_prefill_agree_on_positions(tiny_hybrid):
         return [step.positions()[2].tolist() for step in trace.steps]
 
     assert positions("eager") == positions("sdpa")
+
+
+def test_argmax_domain_is_recorded_and_positions_stay_in_the_prompt(tiny_hybrid):
+    model, info = tiny_hybrid
+    ids = _ids(length=24)
+    for domain in ("prompt", "full"):
+        trace, _ = decode_with_attention(model, info, ids, max_new_tokens=3,
+                                         argmax_domain=domain, stop_on_eos=False)
+        assert trace.argmax_domain == domain
+        if domain == "prompt":
+            for step in trace.steps:
+                for positions in step.positions().values():
+                    assert int(positions.max()) < ids.shape[1]

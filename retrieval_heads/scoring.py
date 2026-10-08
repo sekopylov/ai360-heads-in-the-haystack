@@ -67,6 +67,25 @@ PAIRINGS = ("next_step", "same_step")
 
 
 # --------------------------------------------------------------------------- trace
+def argmax_positions(attn: dict[int, torch.Tensor], *, prompt_len: int,
+                     domain: str = "prompt") -> dict[int, torch.Tensor]:
+    """Per-head most-attended key position for each layer.
+
+    ``domain="prompt"`` restricts the argmax to the *input* positions, which is the
+    paper's criterion (2): "the input token that receives the most attention
+    probability mass" (``a in R^{|x|}``).  ``domain="full"`` lets already-generated
+    positions win too, which makes the score depend on how much was generated.
+    """
+    if domain not in ("prompt", "full"):
+        raise ValueError(f"argmax_domain must be 'prompt' or 'full', got {domain!r}")
+    out: dict[int, torch.Tensor] = {}
+    for layer, tensor in attn.items():
+        row = tensor[0, :, 0, :].detach()
+        keys = row[:, :prompt_len] if domain == "prompt" else row
+        out[layer] = keys.argmax(dim=-1)
+    return out
+
+
 @dataclass
 class StepTrace:
     """One decoding step: what it produced, and where each head attended.
@@ -110,6 +129,9 @@ class DecodeTrace:
     #: ``len(generated) < max_new_tokens`` guess mislabelled an EOS on the final
     #: step as truncation.
     stopped_on_eos: bool = False
+    #: Which positions the argmax could choose from ("prompt" = the paper's input
+    #: tokens; "full" = input + already-generated).
+    argmax_domain: str = "prompt"
 
     @property
     def kv_len(self) -> int:
@@ -138,6 +160,7 @@ def decode_with_attention(
     stop_on_eos: bool = True,
     prefill_chunk: int | None = None,
     store_rows: bool = False,
+    argmax_domain: str = "prompt",
 ) -> tuple[DecodeTrace, list[int]]:
     """Greedy-decode ``input_ids`` while recording attention at every step.
 
@@ -177,14 +200,17 @@ def decode_with_attention(
             f"the attention rows are indexed as [0, :, 0, :]"
         )
     input_ids = input_ids.to(model_device(model))
+    prompt_len = int(input_ids.shape[1])
     recorder = AttentionRecorder(model, info, method=capture_method)
-    trace = DecodeTrace(prompt_len=int(input_ids.shape[1]))
+    trace = DecodeTrace(prompt_len=prompt_len, argmax_domain=argmax_domain)
 
     def capture(attn_tensors: dict[int, torch.Tensor]):
         """(rows, argmax): rows only when asked for, the argmax always."""
-        rows = {layer: tensor[0, :, 0, :].detach() for layer, tensor in attn_tensors.items()}
-        indices = {layer: row.argmax(dim=-1) for layer, row in rows.items()}
-        return (rows if store_rows else {}), indices
+        indices = argmax_positions(attn_tensors, prompt_len=prompt_len,
+                                   domain=argmax_domain)
+        rows = ({layer: tensor[0, :, 0, :].detach()
+                 for layer, tensor in attn_tensors.items()} if store_rows else {})
+        return rows, indices
 
     restore = set_attn_implementation(model, prefill_impl)
     try:
@@ -513,6 +539,7 @@ def score_instance(
     capture_impl: str = "eager",
     capture_method: str = "patch",
     prefill_chunk: int | None = None,
+    argmax_domain: str = "prompt",
 ) -> InstanceResult:
     """Run one NIAH instance and return its per-head retrieval scores."""
     trace, generated = decode_with_attention(
@@ -520,6 +547,7 @@ def score_instance(
         max_new_tokens=max_new_tokens, tokenizer=tokenizer,
         prefill_impl=prefill_impl, capture_impl=capture_impl, capture_method=capture_method,
         prefill_chunk=prefill_chunk,
+        argmax_domain=argmax_domain,
     )
 
     pairings = [pairing]
@@ -571,7 +599,8 @@ def score_instance(
         n_steps=len(generated),
         aligned_scores=aligned_out,
         copied_tokens=copied_tokens,
-        meta={"pairing": pairing, "eos_reached": trace.stopped_on_eos,
+        meta={"pairing": pairing, "argmax_domain": argmax_domain,
+              "eos_reached": trace.stopped_on_eos,
               "truncated": not trace.stopped_on_eos,
               # The old prefix-anchored diagnostic, kept so the change is auditable.
               "needle_prefix_recall": needle_prefix_recall(text, sample.needle_text)},

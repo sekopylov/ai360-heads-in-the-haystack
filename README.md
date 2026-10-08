@@ -396,6 +396,17 @@ meaningful within a family.
   heads and to show the masking effect, but the paper's per-head numbers come from
   ~600 instances and are smoother than what you get here. Raise `--profile paper`
   on a GPU for that grid.
+* **The argmax domain is the input, and that is a choice.** Criterion (2) is read as
+  the paper writes it -- "the *input* token that receives the most attention" -- so
+  the argmax runs over the prompt positions only (`--argmax-domain prompt`, the
+  default). With `full` the already-generated positions compete too, which makes a
+  head's credit depend on how much the model happened to generate; the two domains
+  give different head sets, and every artifact records which one was used.
+* **The random control is drawn from the non-retrieval pool.** A uniform draw over
+  all heads would occasionally include a retrieval head (and would make the control
+  stronger); `control_pool` excludes everything above the threshold and the
+  per-trial overlap with the retrieval arm is recorded, so the choice is visible
+  rather than implied.
 * **The pairing choice changes which heads are "retrieval heads".** `next_step` is
   the default because the row that *produces* `w` is the literal "attention scores
   at the step where `w` is generated"; `same_step` (the row at `w`'s own position,

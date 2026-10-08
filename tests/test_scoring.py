@@ -8,10 +8,12 @@ the token's own position -- the two must not be silently conflated).
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from retrieval_heads.models import ModelInfo
 from retrieval_heads.scoring import (
+    argmax_positions,
     DecodeTrace,
     StepTrace,
     credits_aligned,
@@ -233,3 +235,42 @@ def test_needle_recall_is_case_insensitive():
     assert needle_recall("the BEST thing is to EAT a sandwich", needle) == 1.0
     assert needle_recall("the best thing", needle) == 3 / 8
     assert needle_recall("nothing relevant here", needle) == 0.0
+
+
+def test_argmax_domain_can_exclude_generated_positions():
+    """The paper's criterion is about the *input* token that gets most attention.
+
+    With the full row, a head whose maximum sits on its own generated token never
+    earns credit even when its input maximum is on the needle.
+    """
+    from retrieval_heads.scoring import argmax_positions
+
+    attn = {0: torch.zeros(1, 1, 1, 5)}
+    attn[0][0, 0, 0, 2] = 0.9      # input position 2: inside the needle
+    attn[0][0, 0, 0, 4] = 0.95     # generated position 4: dominates the full row
+    assert argmax_positions(attn, prompt_len=4, domain="prompt")[0].tolist() == [2]
+    assert argmax_positions(attn, prompt_len=4, domain="full")[0].tolist() == [4]
+    with pytest.raises(ValueError, match="argmax_domain"):
+        argmax_positions(attn, prompt_len=4, domain="nonsense")
+
+
+def test_prompt_domain_credits_where_full_domain_does_not():
+    """Same attention row, two domains: only the prompt one credits the head."""
+    from retrieval_heads.scoring import StepTrace
+
+    sample = FakeSample([11, 7, 8, 12, 13], (1, 3))     # needle ids [7, 8]
+    info = make_info(num_layers=1, heads=1)
+    row = torch.zeros(1, 5)
+    row[0, 2] = 0.9          # input position 2 holds needle token 8
+    row[0, 4] = 0.95         # generated position dominates the full row
+
+    def credits(domain):
+        step = StepTrace(step=0, fed_token=1, predicted_token=8, attn={0: row},
+                         argmax=argmax_positions({0: row.unsqueeze(0).unsqueeze(0)},
+                                                 prompt_len=4, domain=domain))
+        trace = DecodeTrace(prompt_len=4, steps=[step], argmax_domain=domain)
+        loose, _, _ = credits_from_trace(trace, sample, info, pairing="next_step")
+        return loose[HeadRef(0, 0)]
+
+    assert credits("prompt") == {8}
+    assert credits("full") == set()

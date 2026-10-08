@@ -57,7 +57,8 @@ def find_copy_step(trace, sample, head: HeadRef, pairing: str):
         row = step.attn.get(head.layer)
         if row is None or head.head >= row.shape[0]:
             continue
-        j = int(row[head.head].argmax())
+        # Restrict to the input positions, matching the scorer's argmax domain.
+        j = int(row[head.head][:sample.length].argmax())
         if start <= j < end and int(prompt[j]) == token:
             return step, token, j
     return None, None, None

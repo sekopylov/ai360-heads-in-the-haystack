@@ -49,6 +49,17 @@ def _git_state() -> tuple[str | None, bool]:
 
 
 @lru_cache(maxsize=1)
+def _deterministic() -> bool:
+    """Whether deterministic kernels are enabled (argmax ties can flip otherwise)."""
+    try:
+        import torch
+
+        return bool(torch.are_deterministic_algorithms_enabled()
+                    or getattr(torch.backends.cudnn, "deterministic", False))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _versions() -> dict[str, str]:
     out = {"python": sys.version.split()[0]}
     for name in ("torch", "transformers", "numpy", "matplotlib"):
@@ -73,6 +84,8 @@ def provenance(*, dtype: str | None = None, extra: dict[str, Any] | None = None)
         "transformers": versions["transformers"],
         "numpy": versions["numpy"],
         "matplotlib": versions["matplotlib"],
+        # argmax ties can flip between runs if deterministic kernels are off.
+        "deterministic": _deterministic(),
     }
     if dtype:
         data["dtype"] = str(dtype)

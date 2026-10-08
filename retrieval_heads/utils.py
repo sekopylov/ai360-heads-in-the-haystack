@@ -65,7 +65,9 @@ def squad_f1(predicted: Sequence[Any], gold: Sequence[Any]) -> float:
     """SQuAD-style F1 between two sequences of hashable units (token ids or words).
 
     One implementation for `masking.token_f1` (ids) and `downstream.word_f1`
-    (words), which had drifted into two near-identical copies.
+    (words), which had drifted into two near-identical copies.  Multiset-based, so
+    the order of the units does not matter (a shuffled needle still scores 1.0) --
+    standard for SQuAD-style F1, and `credits_aligned` is the order-aware variant.
     """
     from collections import Counter
 

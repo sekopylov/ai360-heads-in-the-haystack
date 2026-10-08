@@ -305,6 +305,7 @@ def cmd_detect(args: argparse.Namespace) -> int:
         chat_template=not args.no_chat_template,
         enable_thinking=None if args.thinking else False,
         capture_method=args.capture_method,
+        argmax_domain=args.argmax_domain,
         capture_impl=args.capture_impl,
         prefill_impl=args.prefill_impl,
         prefill_chunk=normalize_prefill_chunk(args.prefill_chunk),
@@ -615,6 +616,10 @@ def build_parser() -> argparse.ArgumentParser:
                    choices=["output_attentions", "patch"],
                    help="patch (default) keys captured maps by layer_idx and cannot "
                         "be confused by attention-map ordering")
+    p.add_argument("--argmax-domain", default="prompt", choices=["prompt", "full"],
+                   help="positions the attention argmax may choose from; 'prompt' is "
+                        "the paper's input-token criterion, 'full' also allows the "
+                        "already-generated tokens")
     p.add_argument("--capture-impl", default="eager",
                    help="attention kernel used while capturing (eager required)")
     p.add_argument("--prefill-impl", default="sdpa")

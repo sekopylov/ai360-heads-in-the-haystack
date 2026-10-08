@@ -119,6 +119,10 @@ class DetectionConfig:
     #: backend and materialises (heads, seq, seq).
     prefill_chunk: int | None = 4096
     seed: int = 0
+    #: Which positions the attention argmax may choose from.  "prompt" is the paper's
+    #: "input token that receives the most attention"; "full" also allows the tokens
+    #: generated so far, which makes the score depend on how much was generated.
+    argmax_domain: str = "prompt"
     #: Cap on the total number of instances (None = the full grid).  NOTE: the plan
     #: is truncated in grid order, so a limit keeps the first needles and the shortest
     #: lengths -- a biased subsample, not a random one.
@@ -138,9 +142,9 @@ class DetectionConfig:
         and re-log the `--limit` warning each time.  The cache means the config must
         be treated as immutable after the first plan()/as_dict() call.
 
-        Depths are the endpoints-inclusive ``iter_depths``, so 0.0 and 1.0 (needle
-        first/last) are in the grid; the paper samples 10 interior depths, so the
-        extreme endpoints carry more weight here than there.
+        Depths are the endpoints-inclusive ``iter_depths`` ("from the start to the
+        end", as the paper puts it), so 0.0 and 1.0 are in the grid.  With only a few
+        depths the endpoints carry a large share of the weight.
         """
         cached = getattr(self, "_plan_cache", None)
         if cached is not None:
@@ -415,6 +419,7 @@ def run_detection(
                 capture_impl=config.capture_impl,
                 capture_method=config.capture_method,
                 prefill_chunk=config.prefill_chunk,
+                argmax_domain=config.argmax_domain,
             )
             result.sample["needle_index"] = item["needle_index"]
             results.append(result)
@@ -437,6 +442,7 @@ def run_detection(
     scores.meta = {
         "config": config.as_dict(),
         "corpus": "custom" if corpus else "synthetic",
+        "argmax_domain": config.argmax_domain,
         # The score is averaged over *all* instances, including ones where the model
         # never recited the needle; `conditional` below is the recited-only view, and
         # the two needle counts expose how much the unique-token denominator inflates

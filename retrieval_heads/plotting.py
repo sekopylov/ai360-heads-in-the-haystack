@@ -161,9 +161,9 @@ def plot_score_distribution(scores_by_model: Mapping[str, RetrievalScores],
         ax.set_ylabel("value")
         ax.set_ylim(-0.03, 1.03)
         ax.legend(loc="lower left")
-    # Descriptive: activation frequency is a thresholded version of the same score,
-    # so the two curves are not independent measurements.
-    return finish(fig, "Score vs activation frequency (same score, thresholded at 0)")
+    # Descriptive: activation frequency is E[1(per-instance score > 0)], i.e. the
+    # same score reduced to an indicator, so the two curves are not independent.
+    return finish(fig, "Score vs activation frequency (the same score as an indicator)")
 
 
 # --------------------------------------------------------------------------- Fig. 5 heat map
@@ -282,7 +282,12 @@ def plot_masking_curve(curves: Mapping[str, Any],
             top_yerr = data.get("retrieval_exact_std")
             rand_yerr = None  # no per-trial exact-match std is stored
         else:
-            top, rand = data["retrieval"], data["random_mean"]
+            top, rand = data.get("retrieval"), data.get("random_mean")
+        if not top or not rand or len(top) != len(k) or len(rand) != len(k):
+            raise ValueError(
+                f"{name}: the artifact's series have inconsistent lengths "
+                f"(k={len(k)}, retrieval={len(top or [])}, random={len(rand or [])})"
+            )
             baseline = data.get("baseline", 0.0)
             top_yerr = data.get("retrieval_std")
             rand_yerr = data.get("random_std")

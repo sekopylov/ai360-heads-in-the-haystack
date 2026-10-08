@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 197 tests: 180 fast (`pytest -m "not integration"`, ~10 s), 17 integration against
+* 200 tests: 183 fast (`pytest -m "not integration"`, ~10 s), 17 integration against
   the real checkpoints. All green.
 * A full GPU run finished successfully (job `bt1hqv1b91ht36s2egdp`, ~39 min,
   NVIDIA L4): 75 instances per model, masking curves, QA, CoT, correlation, nine
@@ -25,6 +25,13 @@ tied to a job id) → this file (where things stand and what is left).
   and cancelled on purpose, and it waits on a review of the current working tree.
 * DataSphere path works: cached venv on the project disk, ~40 s job startup
   instead of ~9 min. Job `bt107kjm3es8vung7130` proves all seven stages run on GPU.
+* **The attention argmax now runs over the prompt by default** (`--argmax-domain`,
+  recorded in every artifact).  Criterion (2) is "the *input* token that receives the
+  most attention", so letting already-generated positions win made a head's credit
+  depend on how much the model had generated.  Measured sensitivity on a 3-instance
+  smoke run of Qwen3-0.6B: the top-10 is identical (10/10) but the number of heads
+  above 0.1 differs (18 prompt vs 17 full), i.e. the domain moves the threshold
+  membership even where the ranking is stable.
 * The `same_step` sidecar no longer compares same_step with itself: its
   `pairing_comparison` was reading `self.secondary` unconditionally, so it claimed
   `overlap == top_k` / `jaccard == 1.0` while the real figure is 0/10.
@@ -345,7 +352,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 197 passed (180 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 200 passed (183 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b
