@@ -90,6 +90,7 @@ class LLMNeedleHaystackTester:
                 final_context_length_buffer = 200,
                 seconds_to_sleep_between_completions = None,
                 print_ongoing_status = True,
+                correct_insertion = False,
                 dump_dir = None,
                 dump_full_steps = 3,
                 head_score_dir = "head_score"):
@@ -136,6 +137,7 @@ class LLMNeedleHaystackTester:
         self.testing_results = []
         self.head_counter = defaultdict(list)
         # dump of per-sample data for comparison with the new code; does not change the behaviour
+        self.correct_insertion = correct_insertion
         self.dump_dir = dump_dir
         self.dump_full_steps = dump_full_steps
         self.head_score_dir = head_score_dir
@@ -504,7 +506,11 @@ class LLMNeedleHaystackTester:
             tokens_new_context = tokens_context[:insertion_point]
 
             # We want to make sure that we place our needle at a sentence break so we first see what token a '.' is
-            if(self.model_provider in ["LLaMA", "LongLLaMA"]): period_tokens = [29889, 869]
+            # [OUR CHANGE, not in the authors' code] --correct_insertion: the period is taken from the tokenizer of the model.
+            # Without it the Llama ids below are used for every model loaded with the default provider,
+            # and for Qwen the needle moves back to an arbitrary place or to the start of the context.
+            if self.correct_insertion: period_tokens = self.enc.encode('.', add_special_tokens=False)
+            elif(self.model_provider in ["LLaMA", "LongLLaMA"]): period_tokens = [29889, 869]
             elif(self.model_provider == "Mistral"): period_tokens = [842, 28723]
             elif(self.model_provider == "GLM"): period_tokens = [918, 30930]
             else: period_tokens = self.encode_text_to_tokens('.')
@@ -620,6 +626,7 @@ if __name__ == "__main__":
     parser.add_argument('--dump_full_steps', type=int, default=3, help='dump full attention rows for the first N decode steps on a few samples, 0 to disable')
     parser.add_argument('--head_score_dir', type=str, default="head_score", help='where to read/append head scores')
     
+    parser.add_argument('--correct_insertion', action='store_true', help='insert the needle at a sentence end found with the tokenizer of the model')
     args = parser.parse_args()
    
     model_name = args.model_path
@@ -637,6 +644,7 @@ if __name__ == "__main__":
                                  context_lengths_max=args.e_len,
                                  context_lengths_num_intervals=args.context_intervals,
                                  document_depth_percents=custom_depths,
+                                 correct_insertion=args.correct_insertion,
                                  dump_dir=args.dump_dir,
                                  dump_full_steps=args.dump_full_steps,
                                  head_score_dir=args.head_score_dir

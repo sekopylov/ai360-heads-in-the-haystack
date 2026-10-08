@@ -97,6 +97,7 @@ class LLMNeedleHaystackTester:
                  print_ongoing_status = True,
                  head_score_dir = "head_score",
                  seed = None,
+                 correct_insertion = False,
                  dump_dir = None):
         """        
         :param needle: The needle to be found in the haystack. Default is None.
@@ -145,6 +146,7 @@ class LLMNeedleHaystackTester:
         if seed is not None: random.seed(seed)
         # [OUR CHANGE, not in the authors' code] dump of per-sample data, off by default
         self.dump_dir = dump_dir
+        self.correct_insertion = correct_insertion
         if "CUDA_VISIBLE_DEVICES" in os.environ:
             self.multi_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"])>1
         else:
@@ -332,6 +334,8 @@ class LLMNeedleHaystackTester:
             block_list = self.construct_random_head(-self.mask_topk)
             save_name = f"{self.model_version}_block_random{-self.mask_topk}"
             if self.seed is not None: save_name += f"_seed{self.seed}"
+        # [OUR CHANGE] separate result folders for runs with the corrected needle insertion
+        if self.correct_insertion: save_name += "_insfix"
         context = self.generate_context(context_length, depth_percent)
         question = f"Based on the content of the book, Question: {self.retrieval_question}\nAnswer:"
         if self.model_version in ["Mistral-7B-Instruct-v0.2", "Qwen1.5-14B-Chat"]:
@@ -488,7 +492,11 @@ class LLMNeedleHaystackTester:
             tokens_new_context = tokens_context[:insertion_point]
 
             # We want to make sure that we place our needle at a sentence break so we first see what token a '.' is
-            if(self.model_provider in ["LLaMA", "LongLLaMA"]): period_tokens = [29889, 869]
+            # [OUR CHANGE, not in the authors' code] --correct_insertion: the period is taken from the tokenizer of the model.
+            # Without it the Llama ids below are used for every model loaded with the default provider,
+            # and for Qwen the needle moves back to an arbitrary place or to the start of the context.
+            if self.correct_insertion: period_tokens = self.enc.encode('.', add_special_tokens=False)
+            elif(self.model_provider in ["LLaMA", "LongLLaMA"]): period_tokens = [29889, 869]
             elif(self.model_provider == "Mistral"): period_tokens = [842, 28723]
             elif(self.model_provider == "GLM"): period_tokens = [918, 30930]
             else: period_tokens = self.encode_text_to_tokens('.')
@@ -592,6 +600,7 @@ if __name__ == "__main__":
     parser.add_argument('--dump_dir', type=str, default=None, help='where to dump per-sample data, e.g. results/dump')
 
     # parser = add_args(parser)
+    parser.add_argument('--correct_insertion', action='store_true', help='insert the needle at a sentence end found with the tokenizer of the model')
     args = parser.parse_args()
 
     if(args.model_path is not None):
@@ -616,6 +625,7 @@ if __name__ == "__main__":
                                  document_depth_percents=custom_depths,
                                  head_score_dir=args.head_score_dir,
                                  seed=args.random_seed,
+                                 correct_insertion=args.correct_insertion,
                                  dump_dir=args.dump_dir
                                  )
 

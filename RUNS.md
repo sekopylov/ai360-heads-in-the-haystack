@@ -394,7 +394,60 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 
 Первая команда должна ничего не напечатать. Архив скачать или переложить в постоянное хранилище: в git эти папки не попадают.
 
-## 6. Известные особенности
+## 6. Второй прогон: правильная вставка иглы
+
+Основной прогон (разделы 3–4) повторяет запуск авторов, где игла на Qwen вставляется не на заданной глубине. Этот прогон — те же данные с флагом `--correct_insertion`: граница предложения ищется по словарю самой модели. Всё пишется в отдельные папки, основной прогон не затрагивается.
+
+Запускать после раздела 3.3: папка `results/graph/Qwen1.5-14B-Chat` должна быть уже переименована в `_detect`.
+
+### 6.1. Детекция
+
+```python
+!../.venv/bin/python -u retrieval_head_detection.py \
+    --model_path Qwen/Qwen1.5-14B-Chat \
+    --s 1000 \
+    --e 30000 \
+    --context-intervals 20 \
+    --correct_insertion \
+    --dump_dir results/dump_insfix \
+    --head_score_dir head_score_ours_insfix \
+    2>&1 | tee logs/detect_insfix.log
+```
+
+```python
+!mv results/graph/Qwen1.5-14B-Chat results/graph/Qwen1.5-14B-Chat_detect_insfix
+```
+
+### 6.2. Сравнение двух вставок
+
+```python
+!../.venv/bin/python check_dump.py results/dump_insfix/Qwen1.5-14B-Chat/detect \
+    --ref head_score_ours/Qwen1.5-14B-Chat.json \
+    2>&1 | tee logs/check_dump_insfix.log
+```
+
+Строка `ours vs ref` здесь — сходство скоров при правильной вставке со скорами основного прогона.
+
+### 6.3. Маскирование
+
+Любая ячейка из раздела 4 с тремя заменами: добавить `--correct_insertion`, взять головы из `head_score_ours_insfix`, писать выгрузку в `results/dump_mask_insfix`. Папки результатов получают окончание `_insfix`. Пример для top-30:
+
+```python
+!../.venv/bin/python -u needle_in_haystack_with_mask.py \
+    --model_path Qwen/Qwen1.5-14B-Chat \
+    --s 1000 \
+    --e 30000 \
+    --context-intervals 20 \
+    --correct_insertion \
+    --head_score_dir head_score_ours_insfix \
+    --dump_dir results/dump_mask_insfix \
+    --mask_topk 30 \
+    2>&1 | tee logs/mask_top30_insfix.log
+```
+
+В архив из раздела 5 добавить `head_score_ours_insfix results/dump_insfix results/dump_mask_insfix`.
+
+## 7. Известные особенности
 
 - Перед первым запуском нужна папка `logs/`: без неё `tee` завершается с ошибкой, и ячейка падает уже после прогона.
 - Игла вставляется не на заданной глубине. При `--model_provider` по умолчанию конец предложения ищется по id точек из словаря Llama; в тесте на 1000 токенов игла на глубинах 0 и 50 оказалась в позиции 0 (`insertion at 0` в логе). Фактическая позиция пишется в выгрузку (`needle_start`).
