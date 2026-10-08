@@ -193,7 +193,7 @@ survey агрегация по успешным случаям совпадае�
 Немонотонность по длине не доказывает улучшение на30k: выборка маленькая,
 различаются позиции и ответы.
 
-![Качество, выходные токены и длительность](report-assets/survey-detection-summary.png)
+<img src="report-assets/survey-detection-summary.png" alt="Качество, выходные токены и длительность" width="700">
 
 ### Лидирующие головы
 
@@ -209,19 +209,19 @@ survey агрегация по успешным случаям совпадае�
 Голова22-23 лидирует во всех трёх: средние2,070533 / 0,982456 / 0,375923
 соответственно. Числа разных метрик не сравниваются напрямую по величине.
 
-![Legacy: средние и per-case оценки](report-assets/survey-legacy-top.png)
+<img src="report-assets/survey-legacy-top.png" alt="Legacy: средние и per-case оценки" width="550">
 
-Обычная top-1 метрика здесь — legacy: максимальное внимание должно попасть
-в needle-span с совпадающим token ID. Ниже её карта по всем слоям и головам;
-шкала допускает score>1 из-за повторных попаданий.
+<img src="report-assets/survey-multiset-top.png" alt="Multiset: средние и per-case оценки" width="550">
 
-![Обычная top-1 метрика: слои и головы](report-assets/survey-legacy-heatmap.png)
+Ниже heatmap основной top-1 метрики **multiset**: внимание должно попасть
+в needle-span с совпадающим token ID, а повторные зачёты ограничены частотами
+токенов. Карта показывает средние оценки всех слоёв и голов на шкале0–1.
 
-![Multiset: средние и per-case оценки](report-assets/survey-multiset-top.png)
+<img src="report-assets/survey-multiset-heatmap.png" alt="Multiset: heatmap по слоям и головам" width="550">
 
-![Attention-mass: средние и per-case оценки](report-assets/survey-mass-top.png)
+<img src="report-assets/survey-mass-top.png" alt="Attention-mass: средние и per-case оценки" width="550">
 
-![Attention-mass по слоям и головам](report-assets/survey-mass-heatmap.png)
+<img src="report-assets/survey-mass-heatmap.png" alt="Attention-mass по слоям и головам" width="550">
 
 ### Связь между метриками
 
@@ -238,9 +238,9 @@ survey агрегация по успешным случаям совпадае�
 Совпадающие нули влияют на корреляции. Высокий глобальный коэффициент не означает
 одинаковый top-k или устойчивость каждой головы между корпусами.
 
-![Матрицы корреляций](report-assets/survey-correlations.png)
+<img src="report-assets/survey-correlations.png" alt="Матрицы корреляций" width="700">
 
-![Каждая точка — одна голова](report-assets/survey-scatter.png)
+<img src="report-assets/survey-scatter.png" alt="Каждая точка — одна голова" width="800">
 
 На следующем графике выделены конкретные головы: объединение top-5 каждой
 метрики, остальные головы показаны серым фоном. Всего в анализе1152 головы.
@@ -249,7 +249,7 @@ survey агрегация по успешным случаям совпадае�
 Это позволяет увидеть, как одна и та же голова оценивается разными метриками.
 Выделение top-5 не меняет коэффициенты корреляции по всем головам выше.
 
-![Попарные оценки с подписями конкретных голов](report-assets/survey-correlations-heads.png)
+<img src="report-assets/survey-correlations-heads.png" alt="Попарные оценки с подписями конкретных голов" width="800">
 
 ## 5. Ограничения и дальнейшая проверка
 
