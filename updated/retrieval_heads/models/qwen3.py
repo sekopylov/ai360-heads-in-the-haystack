@@ -1,4 +1,4 @@
-"""Dense Qwen3 with observed attention and Thinking-2507 answer extraction."""
+"""Dense Qwen3 with observed attention and shared thinking answer extraction."""
 from transformers import Qwen3ForCausalLM
 
 from .base import GenerationResult, Prompt

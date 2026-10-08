@@ -40,6 +40,7 @@ env:
     local-paths:
       - datasphere/job.py
       - retrieval_head_detection.py
+      - aggregate_head_scores.py
       - needle_in_haystack_with_mask.py
       - retrieval_heads
 

@@ -23,8 +23,6 @@ from retrieval_heads.experiment.scoring import (
     create_retrieval_collector,
     select_retrieval_metrics,
     retrieval_capture_requirements,
-    merge_scores,
-    rank_heads,
 )
 from retrieval_heads.experiment.storage import (
     result_payload,
@@ -91,6 +89,7 @@ def parse_args() -> argparse.Namespace:
         default=HERE / "data" / "haystack_for_detect",
     )
     parser.add_argument("--output-root", type=Path, default=HERE)
+    parser.add_argument("--case-id", help="run only this detection case, e.g. detect-1")
     return parser.parse_args()
 
 
@@ -132,31 +131,29 @@ def main() -> None:
     results_dir = detection_dir / "results"
     contexts_dir = detection_dir / "contexts"
     attention_dir = detection_dir / "attention"
-    score_path = detection_dir / "head_scores.json"
     config_path = detection_dir / "run.json"
-    histories = {name: {} for name in metric_names}
-    metric_files = {name: f"head_scores_{name}.json" for name in metric_names}
-
-    def save_scores():
-        if single_metric is not None:
-            write_json(score_path, histories[single_metric])
-        for name in metric_names:
-            write_json(detection_dir / metric_files[name], histories[name])
+    from uuid import uuid4
+    run_id = str(uuid4())
 
     cases = load_detection_cases(args.haystack_root)
+    if args.case_id is not None:
+        cases = [case for case in cases if case.case_id == args.case_id]
+        if not cases:
+            raise ValueError(f"Unknown detection case: {args.case_id}")
 
     total = len(cases) * len(lengths) * len(depths)
     run_config = {
         "kind": "retrieval_head_detection",
+        "run_id": run_id,
         "complete": False,
         "model": model.model_id,
         "model_version": model.model_version,
+        "adapter": args.adapter,
         "lengths": lengths,
         "depths": depths,
         "capture": effective_capture,
         "retrieval_metric": single_metric,
         "retrieval_metrics": metric_names,
-        "head_score_files": metric_files,
         "needle_mass_capture": needs_mass,
         "attention_scope": model.attention_scope,
         "context_seed": args.context_seed,
@@ -165,7 +162,6 @@ def main() -> None:
         "total_cases": total,
     }
     write_json(config_path, run_config)
-    save_scores()
 
     completed = 0
     successful = 0
@@ -214,6 +210,7 @@ def main() -> None:
                         model.model_id,
                         experiment={
                             "kind": "retrieval_head_detection",
+                            "run_id": run_id,
                             "capture": effective_capture,
                             "retrieval_metric": single_metric,
                             "retrieval_metrics": metric_names,
@@ -233,19 +230,10 @@ def main() -> None:
 
                 if result.score > args.success_threshold:
                     successful += 1
-                    for name, collector in collectors.items():
-                        merge_scores(histories[name], collector.scores)
-                    save_scores()
                 print(
                     f"  score={result.score:.1f} "
                     f"response={result.generation.text!r}"
                 )
-                for name in metric_names:
-                    leaders = rank_heads(histories[name])[:10]
-                    if leaders:
-                        print(f"  top heads [{name}]: {leaders}")
-
-    save_scores()
     run_config["complete"] = True
     run_config["completed_cases"] = completed
     run_config["successful_cases"] = successful

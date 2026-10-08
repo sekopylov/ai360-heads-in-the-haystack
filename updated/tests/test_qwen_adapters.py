@@ -1,5 +1,6 @@
 """Exercise real Qwen3 cached forwards with tiny random weights, no downloads."""
 import unittest
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -7,7 +8,7 @@ import torch
 from transformers import Qwen3Config, Qwen3ForCausalLM
 
 from retrieval_heads.attention import AttentionRequest, FullTraceCollector
-from retrieval_heads.models import Qwen3Adapter, Qwen35Adapter, available_models
+from retrieval_heads.models import Qwen3Adapter, Qwen3EightBAdapter, Qwen3EightBYarnAdapter, Qwen35Adapter, available_models
 from retrieval_heads.models.base import Prompt
 from retrieval_heads.experiment.scoring import create_retrieval_collector
 from retrieval_heads.experiment.types import NeedleSpan
@@ -26,7 +27,42 @@ class ToyTokenizer:
 
 
 class QwenAdapterTests(unittest.TestCase):
-    def make_adapter(self, attention_scope=None):
+    def test_yarn_real_checkpoint_load_and_rope(self):
+        self.assertIn('qwen3_8b_yarn', available_models())
+        config = Qwen3Config(vocab_size=64, hidden_size=32, intermediate_size=64,
+                            num_hidden_layers=2, num_attention_heads=4,
+                            num_key_value_heads=2, head_dim=8,
+                            max_position_embeddings=40960, eos_token_id=63,
+                            rope_parameters={'rope_type': 'default', 'rope_theta': 1000000.0})
+        with tempfile.TemporaryDirectory() as folder:
+            Qwen3ForCausalLM(config).save_pretrained(folder)
+            with patch('retrieval_heads.models.qwen_common.AutoTokenizer.from_pretrained',
+                       return_value=ToyTokenizer()):
+                native = Qwen3EightBAdapter(model_id=folder, device_map='cpu', dtype='float32')
+                yarn = Qwen3EightBYarnAdapter(model_id=folder, device_map='cpu', dtype='float32')
+            self.assertEqual(native.model.config.max_position_embeddings, 40960)
+            self.assertEqual(native.model.config.rope_parameters['rope_type'], 'default')
+            self.assertEqual(yarn.model.config.max_position_embeddings, 131072)
+            self.assertEqual(yarn.model.config.rope_parameters['rope_type'], 'yarn')
+            self.assertEqual(yarn.model.config.rope_parameters['factor'], 4.0)
+            self.assertEqual(yarn.eligible_heads, native.eligible_heads)
+            for key, value in native.model.state_dict().items():
+                torch.testing.assert_close(value, yarn.model.state_dict()[key])
+            self.assertFalse(torch.equal(native.model.model.rotary_emb.inv_freq,
+                                         yarn.model.model.rotary_emb.inv_freq))
+            with torch.no_grad():
+                result = yarn.model(input_ids=torch.tensor([[2, 3]]),
+                                    position_ids=torch.tensor([[48000, 48001]]))
+            self.assertTrue(torch.isfinite(result.logits).all())
+            # Native guard is replaced by the YaRN budget, using the same loop.
+            long_prompt = Prompt(torch.zeros((1, 131070), dtype=torch.long), [])
+            with patch.object(Qwen3Adapter, 'generate', return_value=None) as generate:
+                yarn.generate(long_prompt, max_new_tokens=2, attention=AttentionRequest())
+                with self.assertRaisesRegex(ValueError, 'YaRN context budget exceeded'):
+                    yarn.generate(long_prompt, max_new_tokens=3, attention=AttentionRequest())
+                self.assertEqual(generate.call_count, 1)
+
+    def make_adapter(self, attention_scope=None, adapter_class=Qwen3Adapter):
         torch.manual_seed(42)
         config = Qwen3Config(vocab_size=64, hidden_size=32, intermediate_size=64,
                             num_hidden_layers=2, num_attention_heads=4,
@@ -37,10 +73,37 @@ class QwenAdapterTests(unittest.TestCase):
         with patch("retrieval_heads.models.qwen_common.resolve_model_source", return_value=("fixture", True)), \
              patch("retrieval_heads.models.qwen_common.AutoTokenizer.from_pretrained", return_value=ToyTokenizer()) as tokenizer_load, \
              patch.object(Qwen3ForCausalLM, "from_pretrained", return_value=model) as model_load:
-            adapter = Qwen3Adapter(device_map="cpu", dtype="float32", attention_scope=attention_scope)
+            adapter = adapter_class(device_map="cpu", dtype="float32", attention_scope=attention_scope)
         self.assertTrue(tokenizer_load.call_args.kwargs["local_files_only"])
         self.assertTrue(model_load.call_args.kwargs["local_files_only"])
         return adapter
+
+    def test_qwen3_8b_load_and_real_decode(self):
+        self.assertIn("qwen3_8b", available_models())
+        adapter = self.make_adapter(adapter_class=Qwen3EightBAdapter)
+        self.assertEqual(adapter.model_id, "Qwen/Qwen3-8B")
+        self.assertEqual(adapter.attention_scope, "answer_only")
+        self.assertEqual(len(adapter.eligible_heads), 8)  # tiny fixture, config-driven
+        result = adapter.generate(Prompt(torch.tensor([[2, 3, 5]]), [2, 3, 5]),
+                                  max_new_tokens=2, attention=AttentionRequest())
+        self.assertTrue(result.token_ids)
+        self.assertEqual(adapter.model.config._attn_implementation, "sdpa")
+
+    def test_qwen3_8b_native_budget_and_shared_thinking(self):
+        adapter = Qwen3EightBAdapter.__new__(Qwen3EightBAdapter)
+        adapter._tokenizer = ToyTokenizer()
+        adapter._eos_token_ids = {63}
+        self.assertIsNone(adapter._stop_reason(62))  # newline must not stop thinking
+        self.assertEqual(adapter._stop_reason(63), 'eos')
+        answer = adapter._generation_result(Prompt(None, [60]), [7, 61, 9, 63], 'eos')
+        self.assertEqual(answer.text, 'word9')
+        prompt = Prompt(torch.zeros((1, 30720), dtype=torch.long), [])
+        with patch.object(Qwen3Adapter, 'generate', return_value=answer) as generate:
+            self.assertIs(adapter.generate(prompt, max_new_tokens=2048,
+                                           attention=AttentionRequest()), answer)
+            with self.assertRaisesRegex(ValueError, 'native context budget exceeded'):
+                adapter.generate(prompt, max_new_tokens=2049, attention=AttentionRequest())
+            self.assertEqual(generate.call_count, 1)
 
     def test_registry_and_real_decode_capture_mask_restore(self):
         self.assertIn("qwen3", available_models())

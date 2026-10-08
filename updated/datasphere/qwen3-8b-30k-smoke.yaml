@@ -1,0 +1,40 @@
+name: qwen3-8b-30k-three-metrics-smoke
+desc: One 30k Qwen3-8B generation without YaRN on V100, with all retrieval metrics
+flags:
+  - attach-project-disk
+cmd: >
+  python3 retrieval_head_detection.py
+  --adapter qwen3_8b
+  --model ${DS_PROJECT_HOME}/c0/models/Qwen/Qwen3-8B
+  --output-root datasphere-results/qwen3-8b-30k-smoke
+  --haystack-root ${DETECTION_DATA}
+  --case-id detect-1
+  --dtype float16
+  --device-map cuda:0
+  --prefill-attention sdpa_memory_efficient
+  --attention-scope all_decode_tokens
+  --lengths 30000
+  --depths 45
+  --max-new-tokens 2048
+  --retrieval-metrics legacy,needle_token_multiset_v1,needle_attention_mass_v1
+  --context-seed 42
+inputs:
+  - data/haystack_for_detect: DETECTION_DATA
+outputs:
+  - datasphere-results/qwen3-8b-30k-smoke
+env:
+  vars:
+    - HF_HUB_OFFLINE: "1"
+    - TRANSFORMERS_OFFLINE: "1"
+  python:
+    type: manual
+    version: "3.12"
+    requirements-file: datasphere/requirements-gpu.txt
+    pip:
+      extra-index-urls:
+        - https://download.pytorch.org/whl/cu118
+    local-paths:
+      - retrieval_head_detection.py
+      - retrieval_heads
+cloud-instance-types:
+  - g1.1

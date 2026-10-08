@@ -14,12 +14,14 @@ from retrieval_heads.experiment.types import ExperimentCase, NeedleSpan, Prepare
 
 
 class MultiMetricDetectionTests(unittest.TestCase):
-    def exercise(self, multiple, score=100):
+    def exercise(self, multiple, score=100, case_id=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             argv = ['detect', '--lengths', '1000', '--depths', '45', '--output-root', directory]
             if multiple:
                 argv += ['--retrieval-metrics', multiple]
+            if case_id is not None:
+                argv += ['--case-id', case_id]
             model = SimpleNamespace(model_id='fixture', model_version='fixture',
                 tokenizer=object(), period_tokens=[4], eligible_heads=((0, 0),),
                 attention_scope='all_decode_tokens')
@@ -41,7 +43,8 @@ class MultiMetricDetectionTests(unittest.TestCase):
             with patch.object(sys, 'argv', argv), patch.object(detection, 'create_model', return_value=model), \
                  patch.object(detection, 'ContextBuilder'), patch.object(detection, 'LegacyOverlapLocator'), \
                  patch.object(detection, 'ExperimentRunner', return_value=runner), \
-                 patch.object(detection, 'load_detection_cases', return_value=[case]):
+                 patch.object(detection, 'load_detection_cases', return_value=[case] if case_id is None else [
+                     case, ExperimentCase('detect-2', 'needle', 'question', 'answer', root)]):
                 detection.main()
             self.assertEqual(len(calls), 1)
             manifest = json.loads((root/'detection/run.json').read_text())
@@ -49,16 +52,18 @@ class MultiMetricDetectionTests(unittest.TestCase):
             payload = json.loads(next((root/'detection/results').glob('*.json')).read_text())
             self.assertFalse((root/'detection/attention').exists())
             alias_path = root/'detection/head_scores.json'
-            if manifest['retrieval_metric'] is None:
-                self.assertFalse(alias_path.exists())
-            else:
-                primary = json.loads(alias_path.read_text())
-            for name, filename in manifest['head_score_files'].items():
-                history = json.loads((root/'detection'/filename).read_text())
-                if name == manifest['retrieval_metric']:
-                    self.assertEqual(history, primary)
-                self.assertEqual(bool(history), score > 50)
+            self.assertFalse(alias_path.exists())
+            self.assertNotIn('head_score_files', manifest)
+            self.assertFalse(list((root/'detection').glob('head_scores_*.json')))
             return manifest, payload, calls[0]
+
+    def test_single_case_filter(self):
+        manifest, _, _ = self.exercise(None, case_id='detect-1')
+        self.assertEqual(manifest['total_cases'], 1)
+
+    def test_unknown_case_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'Unknown detection case'):
+            self.exercise(None, case_id='detect-missing')
 
     def test_three_metrics_one_generation_without_primary(self):
         manifest, payload, request = self.exercise('needle_attention_mass_v1,needle_token_multiset_v1,legacy')

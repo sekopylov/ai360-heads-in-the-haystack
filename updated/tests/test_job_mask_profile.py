@@ -16,6 +16,24 @@ SPEC.loader.exec_module(job)
 
 
 class JobMaskProfileTests(unittest.TestCase):
+    def test_bottom_strategy_and_progress(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scores = root / 'scores.json'
+            scores.write_text('{}')
+            argv = ['job.py', '--profile', 'mask', '--output-root', str(root / 'out'),
+                    '--mask-data', str(root), '--head-scores', str(scores),
+                    '--device-map', 'cpu', '--lengths', '8000,30000', '--depths', '15,45,75',
+                    '--context-count', '2', '--topks', '4,8', '--random-repeats', '2',
+                    '--mask-selections', 'top,bottom,random']
+            with patch.object(sys, 'argv', argv), patch.object(job, 'run_command') as run:
+                job.main()
+            self.assertEqual(len(run.call_args_list), 18)
+            self.assertEqual(run.call_args_list[0].kwargs['progress'].total, 108)
+            bottom = [c for c in run.call_args_list if 'bottom' in c.args]
+            self.assertEqual(len(bottom), 4)
+            self.assertTrue(all('--head-selection' in c.args for c in bottom))
+
     def test_mask_reuses_full_masking_loop_without_detection(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -38,8 +56,9 @@ class JobMaskProfileTests(unittest.TestCase):
                     self.assertEqual(job.main(), 0)
                 calls[profile] = run.call_args_list
             self.assertEqual(calls["full"][0].args[0], "retrieval_head_detection.py")
+            self.assertEqual(calls["full"][1].args[0], "aggregate_head_scores.py")
             self.assertEqual([call.args for call in calls["mask"]],
-                             [call.args for call in calls["full"][1:]])
+                             [call.args for call in calls["full"][2:]])
             self.assertEqual(len(calls["mask"]), 18)
             self.assertEqual(calls["mask"][0].kwargs["progress"].total, 108)
             self.assertEqual(calls["full"][0].kwargs["progress"].total, 126)

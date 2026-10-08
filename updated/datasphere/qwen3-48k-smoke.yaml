@@ -1,0 +1,40 @@
+name: qwen3-thinking-48k-single-smoke
+desc: One 48k detection generation on V100 32GB, up to 2048 output tokens
+flags:
+  - attach-project-disk
+cmd: >
+  python3 retrieval_head_detection.py
+  --adapter qwen3
+  --model ${DS_PROJECT_HOME}/c0/models/Qwen/Qwen3-4B-Thinking-2507
+  --output-root datasphere-results/qwen3-48k-smoke
+  --haystack-root ${DETECTION_DATA}
+  --case-id detect-1
+  --dtype float16
+  --device-map cuda:0
+  --prefill-attention sdpa_memory_efficient
+  --attention-scope all_decode_tokens
+  --lengths 48000
+  --depths 45
+  --max-new-tokens 2048
+  --retrieval-metric needle_token_multiset_v1
+  --context-seed 42
+inputs:
+  - data/haystack_for_detect: DETECTION_DATA
+outputs:
+  - datasphere-results/qwen3-48k-smoke
+env:
+  vars:
+    - HF_HUB_OFFLINE: "1"
+    - TRANSFORMERS_OFFLINE: "1"
+  python:
+    type: manual
+    version: "3.12"
+    requirements-file: datasphere/requirements-gpu.txt
+    pip:
+      extra-index-urls:
+        - https://download.pytorch.org/whl/cu118
+    local-paths:
+      - retrieval_head_detection.py
+      - retrieval_heads
+cloud-instance-types:
+  - g1.1

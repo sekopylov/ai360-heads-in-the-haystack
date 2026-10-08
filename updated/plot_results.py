@@ -134,16 +134,23 @@ def main():
     detection = read(args.run / "detection/run.json")
     if not detection["complete"]:
         raise ValueError("Detection is incomplete")
-    score_file = "head_scores.json"
-    if not args.metric and len(detection.get("retrieval_metrics", [])) > 1:
+    aggregation_path = args.run / "detection" / "aggregation" / "run.json"
+    aggregation = read(aggregation_path) if aggregation_path.exists() else detection
+    if (aggregation_path.exists() and detection.get('run_id')
+            and aggregation.get('source_run_id') != detection['run_id']):
+        raise ValueError("Aggregation belongs to another detection run; rerun aggregation")
+    if aggregation_path.exists() and not aggregation['complete']:
+        raise ValueError("Aggregation uses incomplete detection")
+    files = aggregation.get("head_score_files", {})
+    if not args.metric and len(files) != 1:
         raise ValueError("Multiple retrieval metrics: explicitly choose --metric NAME")
-    if args.metric:
-        files = detection.get("head_score_files", {})
-        if args.metric not in files:
-            raise ValueError(f"Metric not available in run: {args.metric}")
-        score_file = files[args.metric]
-        detection = dict(detection, retrieval_metric=args.metric)
-    heads = read(args.run / "detection" / score_file)
+    metric = args.metric or next(iter(files))
+    if metric not in files:
+        raise ValueError(f"Metric not available in run: {metric}")
+    score_file = files[metric]
+    detection = dict(detection, retrieval_metric=metric)
+    score_dir = aggregation_path.parent if aggregation_path.exists() else args.run / "detection"
+    heads = read(score_dir / score_file)
     if not heads or any(not values for values in heads.values()):
         raise ValueError("No complete head-score history")
     scores = {head: mean(values) for head, values in heads.items()}
@@ -201,7 +208,8 @@ def main():
                 condition = config["condition"]
                 k = len(row["experiment"]["blocked_heads"])
                 family = "baseline" if condition == "baseline" else (
-                    "random" if condition.startswith("random") else "top")
+                    "random" if condition.startswith("random") else
+                    "bottom" if condition.startswith("bottom") else "top")
                 score = scorer.score(row["expected_answer"], row["model_response"])["rouge1"].recall * 100
                 if abs(score - row["score"]) > 1e-6:
                     raise ValueError(f"Stored score differs from recalculated score: {files[0]}")
@@ -215,7 +223,10 @@ def main():
     summary = []
     fig, ax = plt.subplots(figsize=(8, 5))
     for family, color, label in [("top", "#dc2626", "Top retrieval heads"),
+                                 ("bottom", "#16a34a", "Lowest-score heads"),
                                  ("random", "#2563eb", "Random heads")]:
+        if not any(f == family for f, k in groups):
+            continue
         ks = [0] + sorted(k for f, k in groups if f == family)
         ys = []
         for k in ks:
@@ -241,7 +252,10 @@ def main():
 
     fig, ax = plt.subplots(figsize=(8, 5))
     for family, color, label in [("top", "#dc2626", "Top retrieval heads"),
+                                 ("bottom", "#16a34a", "Lowest-score heads"),
                                  ("random", "#2563eb", "Random heads")]:
+        if not any(f == family for f, k in groups):
+            continue
         points = [row for row in summary if row["condition"] == family]
         ks = [row["k"] for row in points]
         ax.fill_between(ks,

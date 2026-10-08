@@ -19,7 +19,7 @@ cmd: >
   --depths 10,50,90
   --max-new-tokens 2048
   --retrieval-metric needle_token_multiset_v1
-  --head-scores datasphere-results/qwen3-full/detection/head_scores_needle_token_multiset_v1.json
+  --head-scores datasphere-results/qwen3-full/detection/aggregation/head_scores_needle_token_multiset_v1.json
   --topks 1,2,4,8
   --context-count 3
   --random-repeats 3
@@ -45,6 +45,7 @@ env:
     local-paths:
       - datasphere/job.py
       - retrieval_head_detection.py
+      - aggregate_head_scores.py
       - needle_in_haystack_with_mask.py
       - retrieval_heads
 cloud-instance-types:

@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mask-data", type=Path)
     parser.add_argument("--model", default="Qwen/Qwen3.5-0.8B")
     parser.add_argument("--adapter", default="qwen35",
-                        help="model architecture adapter: qwen35 or qwen3")
+                        help="model adapter: qwen35, qwen3, qwen3_8b or qwen3_8b_yarn")
     parser.add_argument("--model-search-dir", action="append",
                         help="explicit root containing MODEL_ID; repeat for ordered search; no default search directory")
     parser.add_argument("--dtype", default="float16")
@@ -61,6 +61,8 @@ def parse_args() -> argparse.Namespace:
                         help="haystack seed; defaults to --seed")
     parser.add_argument("--context-count", type=int, default=3)
     parser.add_argument("--random-repeats", type=int, default=3)
+    parser.add_argument("--mask-selections", default="top,random",
+                        help="comma-separated masking strategies: top,bottom,random; baseline always runs")
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--topk", type=int)
     selection.add_argument("--topks", help="comma-separated head counts, e.g. 1,2,4,8,16")
@@ -103,6 +105,10 @@ def run_command(script: str, *arguments: str, progress: Progress) -> None:
 def main() -> int:
     args = parse_args()
     profile = PROFILES[args.profile]
+    mask_selections = [v.strip() for v in args.mask_selections.split(",")]
+    if (not mask_selections or any(v not in {"top", "bottom", "random"} for v in mask_selections)
+            or len(mask_selections) != len(set(mask_selections))):
+        raise SystemExit("--mask-selections must contain distinct strategies: top,bottom,random")
     lengths = args.lengths or str(profile["lengths"])
     depths = args.depths or str(profile["depths"])
     topks = (
@@ -181,7 +187,8 @@ def main() -> int:
     total = detection_cases * grid_size
     if args.profile in ("full", "mask"):
         total += args.context_count * grid_size * (
-            1 + len(topks) * (1 + args.random_repeats)
+            1 + len(topks) * (sum(v != "random" for v in mask_selections)
+                              + (args.random_repeats if "random" in mask_selections else 0))
         )
     if total < 1:
         raise SystemExit("Experiment must contain at least one case")
@@ -208,6 +215,17 @@ def main() -> int:
         print(f"\n[job] smoke artifacts: {output_root}")
         return 0
 
+    if args.profile == "full":
+        run("aggregate_head_scores.py", "--run", str(output_root))
+
+    if args.head_scores is not None:
+        head_scores = args.head_scores.resolve()
+    else:
+        detection_dir = output_root / "detection" / "aggregation"
+        files = json.loads((detection_dir / "run.json").read_text())["head_score_files"]
+        if len(files) != 1:
+            raise SystemExit("--head-scores must explicitly select a ranking file")
+        head_scores = detection_dir / next(iter(files.values()))
     masking_common = (
         *common,
         *grid,
@@ -215,8 +233,7 @@ def main() -> int:
         str(args.mask_data.resolve()),
         "--mask-mode",
         "legacy_uniform",
-        "--head-scores", str(args.head_scores.resolve() if args.head_scores is not None
-                             else output_root / "detection" / "head_scores.json"),
+        "--head-scores", str(head_scores),
     )
     for index in range(args.context_count):
         seed = context_seed + index
@@ -225,9 +242,12 @@ def main() -> int:
         run("needle_in_haystack_with_mask.py", *context_arguments,
             "--output-root", str(context_root), "--mask-topk", "0")
         for topk in topks:
-            run("needle_in_haystack_with_mask.py", *context_arguments,
-                "--output-root", str(context_root), "--mask-topk", str(topk))
-            for repeat in range(args.random_repeats):
+            for selection in mask_selections:
+                if selection != "random":
+                    run("needle_in_haystack_with_mask.py", *context_arguments,
+                        "--output-root", str(context_root), "--mask-topk", str(topk),
+                        "--head-selection", selection)
+            for repeat in range(args.random_repeats if "random" in mask_selections else 0):
                 repeat_root = context_root / "random" / f"repeat-{repeat}"
                 run("needle_in_haystack_with_mask.py", *context_arguments,
                     "--output-root", str(repeat_root), "--mask-topk", str(-topk),

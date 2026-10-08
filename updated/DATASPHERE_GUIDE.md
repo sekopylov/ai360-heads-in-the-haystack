@@ -101,6 +101,27 @@ needle-span, для каждой головы складываем attention п�
 добавляется top1 для legacy/multiset. Полные traces сохраняются **только** при
 явном `--capture full` в detection CLI; для метрики этот режим не нужен.
 
+Для обычной Qwen3-8B доступен `--adapter qwen3_8b`: укажите также
+`--model Qwen/Qwen3-8B` либо путь к её локальному checkpoint. Адаптер использует
+общую реализацию dense Qwen3 (full attention, cached decode, EOS, отделение thinking),
+без включения YaRN. Проверяет до prefill, что весь токенизированный chat prompt
++ `--max-new-tokens` не превышает 32768. Для 30k haystack и max2048
+остаётся запас на вопрос/шаблон, но проверяется фактический размер.
+На V100 используйте float16 и sdpa_memory_efficient. Thinking и финальный
+ответ делят общий лимит генерации; ROUGE по финальному ответу,
+retrieval scope задаётся `--attention-scope` как у Thinking-4B.
+Значение `--model` по умолчанию в CLI не изменено: задавайте модель явно.
+
+Вариант `--adapter qwen3_8b_yarn` читает тот же checkpoint Qwen3-8B, но при
+создании модели передаёт static YaRN (`factor=4`, исходный лимит32768,
+max_position_embeddings=131072). Нативный `qwen3_8b` не включает YaRN.
+В Transformers5 настройки передаются через `rope_parameters`; config.json
+на диске и веса не изменяются, отдельного скачивания не нужно. Все остальные
+правила, включая decoding, masking, scope и метрики, общие. Detection/masking
+run.json сохраняют имя `adapter`, чтобы варианты различались в результатах.
+131072 — лимит конфигурации, не гарантия вместимости GPU. Для коротких
+контекстов предпочтителен нативный вариант; YaRN может изменить качество.
+
 В `cmd` job YAML или detection CLI можно указать:
 
 ```text
@@ -115,12 +136,38 @@ needle-span, для каждой головы складываем attention п�
 одна `needle_token_multiset_v1`, либо выбранная через `--retrieval-metric`.
 Файл для masking выбирается независимо через `--head-scores PATH`.
 
-Файлы detection:
+Сбор и агрегация теперь разделены. Detection не создаёт общий рейтинг,
+а сохраняет per-case оценки всех завершённых генераций независимо от ROUGE.
+После скачивания результатов запустите на CPU:
 
-- `head_scores.json` — совместимый alias только в одиночном режиме;
-- `head_scores_<имя_метрики>.json` — отдельная история каждой выбранной метрики;
-- `run.json`: список `retrieval_metrics`, одиночная `retrieval_metric` (null в multi), отображение
-  `head_score_files`, фактический capture и признак `needle_mass_capture`;
+```bash
+python aggregate_head_scores.py --run datasphere-results/qwen3-8b-survey
+```
+
+По умолчанию выбираются случаи с ROUGE строго >50. Для всех случаев:
+
+```bash
+python aggregate_head_scores.py --run datasphere-results/qwen3-8b-survey \
+  --all-cases --output-dir datasphere-results/qwen3-8b-survey/detection/aggregation-all
+```
+
+Доступны `--success-threshold`, `--case-ids detect-1,detect-2`, `--lengths`,
+`--depths`. `--allow-incomplete` разрешает промежуточную агрегацию, manifest
+при этом остаётся complete=false. Пустой отбор вызывает ошибку, не пишет рейтинг.
+Именованные head_scores JSON создаются только агрегатором, по умолчанию в
+`detection/aggregation/`. Его run.json содержит выбранные случаи/хэши и фильтры;
+исходный detection/run.json не изменяется. Новый detection run_id защищает от
+подмешивания оставшихся результатов прошлых запусков в той же папке.
+В full job агрегатор вызывается автоматически между detection и masking;
+smoke и отдельный detection только собирают данные. В mask ranking задаётся
+готовым `--head-scores`. Графики автоматически используют default aggregation.
+
+Файлы detection и агрегации:
+
+- `aggregation/head_scores_<имя_метрики>.json` — история выбранных агрегатором случаев;
+- detection `run.json`: список `retrieval_metrics`, одиночная `retrieval_metric` (null в multi),
+  фактический capture и признак `needle_mass_capture`; mapping `head_score_files`
+  теперь находится в `aggregation/run.json`;
 - каждый result JSON: `experiment.retrieval_scores` со значениями всех метрик,
   в том числе для случаев, не прошедших ROUGE-порог. Для новой метрики также
   `retrieval_qualifying_steps` — число подходящих шагов.
@@ -128,7 +175,7 @@ needle-span, для каждой головы складываем attention п�
 Второй скрипт читает явно выбранный рейтинг:
 
 ```text
---head-scores datasphere-results/qwen3-full/detection/head_scores_needle_attention_mass_v1.json
+--head-scores datasphere-results/qwen3-full/detection/aggregation/head_scores_needle_attention_mass_v1.json
 ```
 
 Этот флаг доступен и напрямую в `needle_in_haystack_with_mask.py`, и в
@@ -143,6 +190,16 @@ Masking run.json сохраняет `head_scores_file` для воспроизв
 Графики multi-metric прогона также требуют явного `--metric NAME`.
 
 Для второго этапа без повторного detection используйте `job.py --profile mask`.
+Для удаления голов с наименьшим средним score используйте во втором скрипте
+`--head-selection bottom --mask-topk 4`. Рейтинг читается целиком, без обрезки
+до100 голов; выбирается его хвост. Условия сохраняются отдельно в `bottom4`,
+с выбранными головами в manifest. При равных score выбор детерминированный
+по порядку рейтинга, а не дополнительный случайный повтор. Низкий retrieval
+score не доказывает низкую причинную важность; именно это проверяет masking.
+В job.py full/mask доступны `--mask-selections top,bottom,random` либо поднабор
+(например, `top,bottom`). Default `top,random` оставлен, baseline всегда один
+на контекст/сетку; `--random-repeats` применяется только к random.
+Графики masking выделяют bottom отдельной серией.
 Обязательны `--mask-data` и `--head-scores` (уже существующий JSON); `--detection-data`
 не нужен. Режим выполняет тот же цикл, что и второй этап `full`: baseline,
 top-head masks и random-head masks по всем `--topks`, `--context-count`
@@ -151,11 +208,12 @@ seed, модель и параметры генерации передаются
 `--retrieval-metric(s)` в режиме mask не применяются и отклоняются:
 метрика уже определяется выбранным JSON рейтинга.
 Для DataSphere YAML задайте `--profile mask`, уберите параметры detection,
-объявите готовый JSON в `inputs` (например, `путь/к/head_scores.json: HEAD_SCORES`)
+объявите готовый JSON в `inputs` (например, `путь/к/head_scores_needle_token_multiset_v1.json: HEAD_SCORES`)
 и передайте `--head-scores ${HEAD_SCORES}`. Укажите отдельный `--output-root`
 для новых evaluation-результатов. Существующие full/smoke YAML не изменены.
 
-Общие истории по-прежнему включают только случаи с финальным ROUGE выше порога.
+Общие истории включают случаи, выбранные отдельным агрегатором; default ROUGE>50,
+а `--all-cases` включает и неудачные ответы.
 Параметр `--attention-scope` определяет, учитывать ли thinking; ROUGE не меняется.
 Графики выбранной метрики:
 

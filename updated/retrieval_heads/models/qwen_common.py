@@ -65,6 +65,7 @@ class QwenAdapter(ModelAdapter):
             dtype=dtype,
             attn_implementation=resolve_prefill_backend(prefill_attention),
             trust_remote_code=trust_remote_code,
+            **self._model_config_overrides(),
         ).eval()
         devices = sorted({str(parameter.device) for parameter in self.model.parameters()})
         print(f"[model] parameter devices={devices}; device_map="
@@ -82,6 +83,10 @@ class QwenAdapter(ModelAdapter):
         )
         # Public state switch used for every generation run.
         self.attention = AttentionController(self.full_attention_layers)
+
+    def _model_config_overrides(self) -> dict:
+        """Configuration-only changes applied before constructing model layers."""
+        return {}
 
     def _discover_attention_layers(self) -> tuple[int, ...]:
         raise NotImplementedError

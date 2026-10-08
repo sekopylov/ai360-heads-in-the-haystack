@@ -66,6 +66,8 @@ def parse_args() -> argparse.Namespace:
         help="positive: top retrieval heads; negative: random non-retrieval heads",
     )
     parser.add_argument("--seed", type=int)
+    parser.add_argument("--head-selection", choices=("top", "bottom"), default="top",
+                        help="ranked selection for positive --mask-topk; negative still selects random")
     parser.add_argument("--context-seed", type=int,
                         help="shuffle haystack texts reproducibly; defaults to --seed")
     parser.add_argument(
@@ -94,32 +96,35 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def ranking_path(args: argparse.Namespace) -> Path:
+    if args.head_scores is not None:
+        return args.head_scores
+    manifest = args.output_root / "detection" / "aggregation" / "run.json"
+    run = read_json(manifest)
+    source_path = args.output_root / 'detection' / 'run.json'
+    source = read_json(source_path) if source_path.exists() else {}
+    if source.get('run_id') and run.get('source_run_id') != source['run_id']:
+        raise ValueError('Aggregation belongs to another detection run; rerun aggregation')
+    files = run.get("head_score_files", {})
+    if len(files) != 1:
+        raise ValueError("Explicitly select a ranking JSON with --head-scores; no unique named metric file")
+    if not run.get("complete"):
+        raise RuntimeError(f"Detection is incomplete: {manifest}. Wait for it to finish.")
+    return manifest.parent / next(iter(files.values()))
+
+
 def load_ranked_heads(args: argparse.Namespace, model) -> list[Head]:
-    if args.head_scores is None:
-        manifest = args.output_root / "detection" / "run.json"
-        run = read_json(manifest) if manifest.exists() else {}
-        if len(run.get("retrieval_metrics", [])) > 1:
-            raise ValueError("Multiple retrieval metrics: explicitly select a ranking JSON with --head-scores")
-    score_path = args.head_scores or (
-        args.output_root / "detection" / "head_scores.json"
-    )
+    score_path = ranking_path(args)
     if not score_path.exists():
         raise FileNotFoundError(
             f"Head scores not found: {score_path}. Run detection first."
         )
-    if args.head_scores is None:
-        run_path = args.output_root / "detection" / "run.json"
-        run = read_json(run_path) if run_path.exists() else {}
-        if not run.get("complete"):
-            raise RuntimeError(
-                f"Detection is incomplete: {run_path}. Wait for it to finish."
-            )
     eligible = set(model.eligible_heads)
     return [
         head
         for head, _ in rank_heads(read_json(score_path))
         if head in eligible
-    ][:100]
+    ]
 
 
 def choose_blocked_heads(
@@ -139,6 +144,8 @@ def choose_blocked_heads(
     if args.mask_topk > 0:
         if len(ranked) < count:
             raise ValueError(f"Only {len(ranked)} eligible heads are ranked")
+        if getattr(args, "head_selection", "top") == "bottom":
+            return frozenset(ranked[-count:])
         return frozenset(ranked[:count])
 
     exclusion_requested = (
@@ -161,6 +168,8 @@ def choose_blocked_heads(
 
 def main() -> None:
     args = parse_args()
+    if args.mask_topk < 0 and args.head_selection == "bottom":
+        raise ValueError("bottom selection requires positive --mask-topk; negative means random")
     context_seed = args.context_seed if args.context_seed is not None else args.seed
     if args.seed is not None:
         random.seed(args.seed)
@@ -196,7 +205,7 @@ def main() -> None:
     case = default_mask_case(args.haystack_dir)
 
     if args.mask_topk > 0:
-        condition = f"top{args.mask_topk}"
+        condition = f"{args.head_selection}{args.mask_topk}"
     elif args.mask_topk < 0:
         condition = f"random{-args.mask_topk}"
     else:
@@ -217,10 +226,12 @@ def main() -> None:
         "condition": condition,
         "model": model.model_id,
         "model_version": model.model_version,
+        "adapter": args.adapter,
         "lengths": lengths,
         "depths": depths,
         "mask_mode": args.mask_mode,
-        "head_scores_file": str((args.head_scores or args.output_root / "detection" / "head_scores.json").resolve())
+        "head_selection": "random" if args.mask_topk < 0 else args.head_selection if args.mask_topk else "baseline",
+        "head_scores_file": str(ranking_path(args).resolve())
                             if args.mask_topk else None,
         "blocked_heads": (
             [list(head) for head in sorted(stable_blocked)]
