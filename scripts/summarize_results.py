@@ -130,12 +130,20 @@ def detection_section(root: Path, keys: list[str]) -> list[str]:
             )
             if at(summary, "sparsity_recited"):
                 rec = at(summary, "sparsity_recited")
-                rec_lo = at(at(rec, "thresholds", {}) or {}, "0.1", {}) or {}
+                rec_buckets = at(rec, "thresholds", {}) or {}
+                rec_lo = at(rec_buckets, "0.1", {}) or {}
+                rec_hi = at(rec_buckets, "0.5", {}) or {}
+                rec_n = at(rec, "n_heads", 0)
+                rec_top = at(at(summary, "top_heads_recited", []) or [{}], 0, {}) or {}
                 out.append(
                     f"| _{at(summary, 'model', key)} (recited only)_ | {pairing} | "
-                    f"{at(rec, 'n_heads', 0)} | | | "
-                    f"{at(at(summary, 'top_heads_recited', []) or [{}], 0, {}).get('head', '?')} | | "
-                    f"{fmt(at(rec_lo, 'n'))} | |"
+                    f"{at(summary, 'n_instances_recited', 'n/a')} | (same) "
+                    f"| {fmt(at(summary, 'mean_needle_recall'), 3)} "
+                    f"| `{rec_top.get('head', '?')}` | {fmt(rec_top.get('score'))} "
+                    f"| {fmt(at(rec_lo, 'n'))}/{rec_n or 'n/a'} "
+                    f"({100 * at(rec_lo, 'frac', 0.0):.1f}%) "
+                    f"| {fmt(at(rec_hi, 'n'))}/{rec_n or 'n/a'} "
+                    f"({100 * at(rec_hi, 'frac', 0.0):.1f}%) |"
                 )
     return out
 

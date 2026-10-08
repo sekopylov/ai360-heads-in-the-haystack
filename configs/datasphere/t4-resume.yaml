@@ -1,0 +1,56 @@
+name: rh-t4-resume
+desc: remaining stages (qa,cot,compare,figures) on a T4-class GPU, reusing a finished run's detect/mask artifacts
+
+# Why this config exists
+# ----------------------
+# A full `t4-cached` run costs ~30 min of GPU, and almost all of it is
+# detect+mask.  If a later stage fails (or is added), the scores and masking
+# curves are still valid -- this config re-runs only the tail instead of paying
+# for the heavy stages again.
+#
+# How the previous artifacts reach the job
+# ----------------------------------------
+# `local-paths` uploads local directories into the job's working directory
+# (relative to the CLI's cwd, see run-in-datasphere.md section 1).  The staged
+# tree `ds-resume/` therefore arrives at /job/ds-resume, and `--out-prefix
+# ds-resume` makes every stage read and write exactly that tree:
+#   qa/cot   -> --out  ds-resume/<model>      (needs scores_*.npz + sidecars)
+#   compare  -> --runs ds-resume/<models> --out ds-resume
+#   figures  -> --runs ds-resume/<models> --out ds-resume/figures
+# Nothing is written to the shared project disk; `outputs` brings the merged
+# tree back.  The tracked `ds-results/` is never touched.
+#
+# Before launching, stage the artifacts from the finished run:
+#   cp -r <downloaded>/ds-results/. ds-resume/
+# (`ds-resume/` is gitignored.)
+
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile t4 --dtype bfloat16 --stages qa,cot,compare,figures --out-prefix ds-resume
+
+flags:
+  - attach-project-disk
+
+inputs:
+  - models:
+      var: WEIGHTS
+
+outputs:
+  - ds-resume
+
+env:
+  vars:
+    PYTORCH_ALLOC_CONF: expandable_segments:True
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+      - ds-resume
+
+cloud-instance-types:
+  - gt4i.1             # observed: NVIDIA L4, 22.2 GiB, sm_89 (T4-class slot)
+  - gt4.1              # fallback: 1x T4, 16 GB VRAM

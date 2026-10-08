@@ -327,9 +327,19 @@ PROJECT=bt1u5v72b71eesdhp9k5
 # once: build the persistent venv and validate every stage on the GPU
 $CLI project job execute -p "$PROJECT" -c configs/datasphere/t4-bootstrap.yaml
 
-# then, cheaply (~40 s startup):
-$CLI project job execute -p "$PROJECT" -c configs/datasphere/t4-cached.yaml --async
+# then, cheaply (~40 s startup).  Blocking mode is the only one that streams
+# progress, so run it in the background with the output in a log file; the job
+# itself runs on the service and survives a client disconnect.
+mkdir -p logs
+nohup $CLI project job execute -p "$PROJECT" -c configs/datasphere/t4-cached.yaml \
+    > "logs/ds_$(date +%m%d_%H%M).log" 2>&1 &
+tail -f logs/ds_*.log
 ```
+
+`job attach` does not stream the job's stdout (it waits, printing only its own
+keep-alive lines), and the job page shows it after completion -- so neither is a
+progress view.  Once the run ends, logs and artifacts come back with
+`$CLI project job download-files --id <job_id> --with-logs --output-dir <dir>`.
 
 `t4.yaml` is the cacheless variant (full platform env build every time).  It
 remains the reference path if the project disk is unavailable.

@@ -7,47 +7,153 @@
     4,
     8
   ],
+  "n_scoreable_heads": 48,
+  "model": "Qwen3.5-0.8B",
+  "max_new_tokens": 24,
+  "prefill_chunk": 4096,
+  "enable_thinking": false,
+  "chat_template": true,
+  "system_prompt": null,
   "by_k": {
     "2": {
-      "retrieval_f1": 3.851540616246499,
-      "random_f1_mean": 61.388888888888886,
-      "random_f1_std": 43.40983275995098,
-      "drop_retrieval": 96.1484593837535,
-      "drop_random": 38.611111111111114,
+      "k_effective": 2,
+      "retrieval_f1": 75.0,
+      "random_f1_mean": 88.05555555555554,
+      "random_f1_std": 6.285393610547094,
+      "random_retrieval_overlap": [
+        0,
+        0,
+        0
+      ],
+      "drop_retrieval": 25.0,
+      "drop_random": 11.944444444444457,
       "masked_heads": [
-        "L7H1",
-        "L7H2"
+        "L11H1",
+        "L15H7"
+      ],
+      "random_picks": [
+        [
+          "L3H2",
+          "L7H7"
+        ],
+        [
+          "L3H2",
+          "L7H7"
+        ],
+        [
+          "L11H3",
+          "L3H2"
+        ]
       ]
     },
     "4": {
-      "retrieval_f1": 87.5,
-      "random_f1_mean": 97.22222222222221,
-      "random_f1_std": 3.9283710065919353,
-      "drop_retrieval": 12.5,
-      "drop_random": 2.7777777777777857,
+      "k_effective": 4,
+      "retrieval_f1": 62.5,
+      "random_f1_mean": 66.66666666666667,
+      "random_f1_std": 47.14045207910317,
+      "random_retrieval_overlap": [
+        0,
+        0,
+        0
+      ],
+      "drop_retrieval": 37.5,
+      "drop_random": 33.33333333333333,
       "masked_heads": [
-        "L7H1",
-        "L7H2",
-        "L7H3",
-        "L11H0"
+        "L11H1",
+        "L15H7",
+        "L19H5",
+        "L23H1"
+      ],
+      "random_picks": [
+        [
+          "L3H7",
+          "L11H3",
+          "L7H0",
+          "L3H4"
+        ],
+        [
+          "L7H6",
+          "L7H0",
+          "L3H7",
+          "L3H0"
+        ],
+        [
+          "L3H6",
+          "L7H7",
+          "L7H0",
+          "L3H0"
+        ]
       ]
     },
     "8": {
-      "retrieval_f1": 44.560866013071895,
-      "random_f1_mean": 30.0,
-      "random_f1_std": 42.42640687119285,
-      "drop_retrieval": 55.439133986928105,
-      "drop_random": 70.0,
+      "k_effective": 8,
+      "retrieval_f1": 46.875,
+      "random_f1_mean": 56.875,
+      "random_f1_std": 40.64262438212703,
+      "random_retrieval_overlap": [
+        0,
+        0,
+        0
+      ],
+      "drop_retrieval": 53.125,
+      "drop_random": 43.125,
       "masked_heads": [
-        "L7H1",
-        "L7H2",
-        "L7H3",
-        "L11H0",
         "L11H1",
-        "L11H2",
-        "L11H4",
-        "L11H5"
+        "L15H7",
+        "L19H5",
+        "L23H1",
+        "L23H5",
+        "L23H0",
+        "L19H0",
+        "L23H3"
+      ],
+      "random_picks": [
+        [
+          "L7H0",
+          "L3H3",
+          "L7H6",
+          "L3H6",
+          "L3H7",
+          "L7H4",
+          "L3H4",
+          "L3H1"
+        ],
+        [
+          "L3H2",
+          "L7H5",
+          "L7H7",
+          "L3H1",
+          "L23H6",
+          "L3H7",
+          "L7H6",
+          "L3H0"
+        ],
+        [
+          "L11H3",
+          "L3H0",
+          "L3H6",
+          "L3H4",
+          "L7H6",
+          "L7H0",
+          "L3H7",
+          "L7H5"
+        ]
       ]
     }
+  },
+  "n_non_retrieval_heads": 15,
+  "random_control_contaminated": false,
+  "schema_version": 5,
+  "provenance": {
+    "schema_version": 5,
+    "git_rev": null,
+    "git_dirty": false,
+    "python": "3.10.12",
+    "torch": "2.10.0+cu128",
+    "transformers": "5.18.0",
+    "numpy": "2.2.6",
+    "matplotlib": "3.10.9",
+    "deterministic": false,
+    "dtype": "bfloat16"
   }
 }

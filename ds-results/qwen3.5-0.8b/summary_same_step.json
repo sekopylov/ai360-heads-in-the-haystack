@@ -8,7 +8,7 @@
   "n_instances_low_ceiling": 0,
   "mean_needle_prefix_recall": 0.6993333333333329,
   "mean_needle_recall": 0.9253333333333332,
-  "mean_sink_rate": 0.035402146825387996,
+  "mean_sink_rate": 0.03423506730646157,
   "wall_time_s": 157.6,
   "config": {
     "lengths": [
@@ -61,16 +61,16 @@
     "n_heads": 48,
     "thresholds": {
       "0.0": {
-        "n": 47,
-        "frac": 0.9791666666666666
+        "n": 39,
+        "frac": 0.8125
       },
       "0.1": {
-        "n": 33,
-        "frac": 0.6875
+        "n": 20,
+        "frac": 0.4166666666666667
       },
       "0.5": {
-        "n": 9,
-        "frac": 0.1875
+        "n": 5,
+        "frac": 0.10416666666666667
       }
     }
   },
@@ -78,179 +78,165 @@
     "n_heads": 48,
     "thresholds": {
       "0.0": {
-        "n": 47,
-        "frac": 0.9791666666666666
+        "n": 39,
+        "frac": 0.8125
       },
       "0.1": {
-        "n": 33,
-        "frac": 0.6875
+        "n": 20,
+        "frac": 0.4166666666666667
       },
       "0.5": {
-        "n": 9,
-        "frac": 0.1875
+        "n": 5,
+        "frac": 0.10416666666666667
       }
     }
   },
   "top_heads_recited": [
     {
-      "head": "L11H1",
-      "score": 0.7424860000610352
+      "head": "L7H7",
+      "score": 0.9143295288085938
     },
     {
-      "head": "L15H7",
-      "score": 0.7171802520751953
+      "head": "L11H3",
+      "score": 0.6497864127159119
     },
     {
-      "head": "L19H5",
-      "score": 0.6099776029586792
+      "head": "L3H7",
+      "score": 0.6299359798431396
     },
     {
-      "head": "L23H1",
-      "score": 0.6093082427978516
+      "head": "L23H6",
+      "score": 0.554740309715271
     },
     {
-      "head": "L23H5",
-      "score": 0.5962924957275391
+      "head": "L23H2",
+      "score": 0.5111168622970581
     },
     {
-      "head": "L23H0",
-      "score": 0.5723147392272949
+      "head": "L7H6",
+      "score": 0.4726686477661133
     },
     {
-      "head": "L19H0",
-      "score": 0.5148389935493469
+      "head": "L11H6",
+      "score": 0.41171351075172424
     },
     {
-      "head": "L23H3",
-      "score": 0.5127745270729065
+      "head": "L3H4",
+      "score": 0.4093140661716461
     },
     {
-      "head": "L19H6",
-      "score": 0.5080488324165344
+      "head": "L7H0",
+      "score": 0.39518147706985474
     },
     {
-      "head": "L19H2",
-      "score": 0.4908439517021179
+      "head": "L7H2",
+      "score": 0.2848584055900574
     }
   ],
   "top_heads": [
     {
-      "head": "L11H1",
-      "score": 0.7424860000610352,
+      "head": "L7H7",
+      "score": 0.9143295288085938,
       "activation_freq": 1.0
     },
     {
-      "head": "L15H7",
-      "score": 0.7171802520751953,
+      "head": "L11H3",
+      "score": 0.6497864127159119,
       "activation_freq": 1.0
     },
     {
-      "head": "L19H5",
-      "score": 0.6099776029586792,
+      "head": "L3H7",
+      "score": 0.6299359798431396,
       "activation_freq": 1.0
     },
     {
-      "head": "L23H1",
-      "score": 0.6093082427978516,
+      "head": "L23H6",
+      "score": 0.554740309715271,
       "activation_freq": 1.0
     },
     {
-      "head": "L23H5",
-      "score": 0.5962924957275391,
+      "head": "L23H2",
+      "score": 0.5111168622970581,
       "activation_freq": 1.0
     },
     {
-      "head": "L23H0",
-      "score": 0.5723147392272949,
+      "head": "L7H6",
+      "score": 0.4726686477661133,
       "activation_freq": 1.0
     },
     {
-      "head": "L19H0",
-      "score": 0.5148389935493469,
+      "head": "L11H6",
+      "score": 0.41171351075172424,
       "activation_freq": 1.0
     },
     {
-      "head": "L23H3",
-      "score": 0.5127745270729065,
+      "head": "L3H4",
+      "score": 0.4093140661716461,
       "activation_freq": 1.0
     },
     {
-      "head": "L19H6",
-      "score": 0.5080488324165344,
+      "head": "L7H0",
+      "score": 0.39518147706985474,
       "activation_freq": 1.0
     },
     {
-      "head": "L19H2",
-      "score": 0.4908439517021179,
+      "head": "L7H2",
+      "score": 0.2848584055900574,
+      "activation_freq": 0.9866666793823242
+    },
+    {
+      "head": "L3H5",
+      "score": 0.21907633543014526,
       "activation_freq": 1.0
     },
     {
-      "head": "L19H7",
-      "score": 0.49055594205856323,
+      "head": "L7H4",
+      "score": 0.1804223209619522,
+      "activation_freq": 0.9866666793823242
+    },
+    {
+      "head": "L7H3",
+      "score": 0.16234372556209564,
       "activation_freq": 1.0
     },
     {
-      "head": "L19H3",
-      "score": 0.46067580580711365,
+      "head": "L7H1",
+      "score": 0.156956285238266,
       "activation_freq": 1.0
     },
     {
-      "head": "L23H7",
-      "score": 0.441219687461853,
+      "head": "L3H6",
+      "score": 0.1378910094499588,
+      "activation_freq": 0.7066666483879089
+    },
+    {
+      "head": "L7H5",
+      "score": 0.12968440353870392,
+      "activation_freq": 0.5199999809265137
+    },
+    {
+      "head": "L11H4",
+      "score": 0.12610594928264618,
+      "activation_freq": 0.9866666793823242
+    },
+    {
+      "head": "L11H5",
+      "score": 0.11541629582643509,
+      "activation_freq": 0.9200000166893005
+    },
+    {
+      "head": "L11H0",
+      "score": 0.10835329443216324,
       "activation_freq": 1.0
     },
     {
-      "head": "L19H1",
-      "score": 0.41587507724761963,
-      "activation_freq": 1.0
-    },
-    {
-      "head": "L15H5",
-      "score": 0.37934091687202454,
-      "activation_freq": 1.0
-    },
-    {
-      "head": "L19H4",
-      "score": 0.37070170044898987,
-      "activation_freq": 1.0
-    },
-    {
-      "head": "L15H3",
-      "score": 0.3366842567920685,
-      "activation_freq": 1.0
-    },
-    {
-      "head": "L15H1",
-      "score": 0.30188605189323425,
-      "activation_freq": 1.0
-    },
-    {
-      "head": "L15H4",
-      "score": 0.25840988755226135,
-      "activation_freq": 1.0
-    },
-    {
-      "head": "L23H4",
-      "score": 0.2525090277194977,
-      "activation_freq": 1.0
+      "head": "L3H1",
+      "score": 0.1009356901049614,
+      "activation_freq": 0.9333333373069763
     }
   ],
   "pairing_comparison": {
     "primary": {
-      "next_step": [
-        "L11H1",
-        "L15H7",
-        "L19H5",
-        "L23H1",
-        "L23H5",
-        "L23H0",
-        "L19H0",
-        "L23H3",
-        "L19H6",
-        "L19H2"
-      ]
-    },
-    "secondary": {
       "same_step": [
         "L7H7",
         "L11H3",
@@ -264,50 +250,64 @@
         "L7H2"
       ]
     },
+    "secondary": {
+      "next_step": [
+        "L11H1",
+        "L15H7",
+        "L19H5",
+        "L23H1",
+        "L23H5",
+        "L23H0",
+        "L19H0",
+        "L23H3",
+        "L19H6",
+        "L19H2"
+      ]
+    },
     "top_k": 10,
     "overlap": 0,
     "jaccard": 0.0
   },
   "aligned_top_heads": [
     {
-      "head": "L11H1",
-      "aligned_score": 0.7263705560196785
+      "head": "L7H7",
+      "aligned_score": 0.894329341873201
     },
     {
-      "head": "L15H7",
-      "aligned_score": 0.7010145734707139
+      "head": "L11H3",
+      "aligned_score": 0.6326937714657013
     },
     {
-      "head": "L19H5",
-      "aligned_score": 0.5872208298524086
+      "head": "L3H7",
+      "aligned_score": 0.6069033695349486
     },
     {
-      "head": "L23H1",
-      "aligned_score": 0.5870026919149726
+      "head": "L23H6",
+      "aligned_score": 0.5300037129861693
     },
     {
-      "head": "L23H5",
-      "aligned_score": 0.5749391998514801
+      "head": "L23H2",
+      "aligned_score": 0.48948760790866025
     },
     {
-      "head": "L23H0",
-      "aligned_score": 0.5502599090318391
+      "head": "L7H6",
+      "aligned_score": 0.45933537547572634
     },
     {
-      "head": "L19H0",
-      "aligned_score": 0.5020569943376963
+      "head": "L11H6",
+      "aligned_score": 0.4000594077787061
     },
     {
-      "head": "L23H3",
-      "aligned_score": 0.4978371855564837
+      "head": "L3H4",
+      "aligned_score": 0.394802747609765
     },
     {
-      "head": "L19H6",
-      "aligned_score": 0.490028775642811
+      "head": "L7H0",
+      "aligned_score": 0.3818481388656828
     },
     {
-      "head": "L19H2",
-      "aligned_score": 0.47896407685881315
+      "head": "L7H2",
+      "aligned_score": 0.28152510906896866
     }
   ],
   "n_planned": 75,

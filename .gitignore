@@ -20,11 +20,11 @@ logs/
 # scratch files must live here instead.
 .tmp/
 
-# Large binary result blobs; regenerate with the CLI.  The pattern applies to both
-# trees: the `ds-results/` .npz files are already tracked (a tracked file is not
-# affected by .gitignore), and new matrices in either tree stay out of the index.
+# Result blobs.  The `results/` (CPU) matrices are regenerated and stay ignored;
+# the `ds-results/` (GPU) matrices *are* committed on purpose -- the tables and
+# figures in the repo are derived from exactly those files, they are a few KB
+# each, and a reader must be able to check a number without a GPU run.
 results/**/*.npz
-ds-results/**/*.npz
 
 # Registry copy written by the job driver when it overrides the dtype; the
 # tracked configs/models.json is never modified.
@@ -34,6 +34,11 @@ configs/models.runtime.json
 ds-*-logs*/
 ds-download/
 ds-smoke-results/
+
+# Staging tree for a resumed job: the previous run's artifacts are uploaded via
+# `local-paths` so the remaining stages can reuse them (a copy, never the tracked
+# ds-results/).
+ds-resume/
 
 # Windows "downloaded from the internet" metadata, pure noise in a repo
 *:Zone.Identifier

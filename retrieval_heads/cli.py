@@ -162,14 +162,16 @@ def resolve_detection_settings(args: argparse.Namespace, scores: Any) -> Detecti
                               requested_threshold == DEFAULT_THRESHOLD)
 
     recorded_corpus = meta.get("corpus_path")
-    if args.corpus is None and recorded_corpus:
+    # `qa`/`cot` have no --corpus flag at all, so this must not assume one.
+    requested_corpus = getattr(args, "corpus", None)
+    if requested_corpus is None and recorded_corpus:
         log.info("corpus=%r taken from the detect run", recorded_corpus)
         settings.corpus_path = recorded_corpus
     else:
-        if args.corpus != recorded_corpus:
+        if requested_corpus != recorded_corpus:
             log.warning("corpus=%r differs from the value detect recorded (%r); the "
-                        "filler distribution changes", args.corpus, recorded_corpus)
-        settings.corpus_path = args.corpus
+                        "filler distribution changes", requested_corpus, recorded_corpus)
+        settings.corpus_path = requested_corpus
     return settings
 
 

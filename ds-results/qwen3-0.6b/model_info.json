@@ -127,8 +127,25 @@
     "26": 8,
     "27": 8
   },
+  "num_linear_heads": {},
   "head_dim": 128,
   "hidden_size": 1024,
   "max_position_embeddings": 40960,
-  "n_scoreable_heads": 448
+  "dtype": "bfloat16",
+  "model_class": "Qwen3ForCausalLM",
+  "n_scoreable_heads": 448,
+  "n_all_heads": 448,
+  "schema_version": 5,
+  "provenance": {
+    "schema_version": 5,
+    "git_rev": null,
+    "git_dirty": false,
+    "python": "3.10.12",
+    "torch": "2.10.0+cu128",
+    "transformers": "5.18.0",
+    "numpy": "2.2.6",
+    "matplotlib": "3.10.9",
+    "deterministic": false,
+    "dtype": "bfloat16"
+  }
 }

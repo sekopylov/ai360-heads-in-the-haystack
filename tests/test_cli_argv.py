@@ -150,21 +150,47 @@ def test_driver_has_exactly_one_main_and_it_runs_the_stages():
 
 
 def test_every_command_only_reads_flags_its_parser_defines():
-    """A `cmd_*` reading `args.<flag>` its subparser lacks raises AttributeError.
+    """No `args.<flag>` a command reaches may be absent from its subparser.
 
-    That is how the shared condition resolver broke `mask` twice (no
-    `--argmax-domain`, no `--capture-method` there): the drift only shows up when
-    the command runs, and `mask` needs a checkpoint to get that far.
+    The first version of this test only scanned the `cmd_*` bodies, so it missed
+    `resolve_detection_settings` reading `args.corpus` -- which `qa`/`cot` do not
+    define, and the GPU job died on the `qa` stage with an AttributeError.  The
+    check now walks the intra-module call graph from each command, so shared
+    helpers are covered too, while `getattr(args, ..., default)` stays allowed.
     """
-    import inspect
-    import re
+    import ast
 
     from retrieval_heads import cli
+
+    source = (REPO_ROOT / "retrieval_heads" / "cli.py").read_text(encoding="utf-8")
+    reads: dict[str, set[str]] = {}
+    calls: dict[str, set[str]] = {}
+    for node in ast.parse(source).body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        reads[node.name] = {
+            child.attr for child in ast.walk(node)
+            if isinstance(child, ast.Attribute) and isinstance(child.value, ast.Name)
+            and child.value.id == "args"
+        }
+        calls[node.name] = {
+            child.func.id for child in ast.walk(node)
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+        }
+
+    def reachable_flags(name: str, seen: set[str] | None = None) -> set[str]:
+        seen = seen if seen is not None else set()
+        if name in seen:
+            return set()
+        seen.add(name)
+        flags = set(reads.get(name, ()))
+        for callee in calls.get(name, ()):
+            flags |= reachable_flags(callee, seen)
+        return flags
 
     parser = cli.build_parser()
     for command, function in (("detect", cli.cmd_detect), ("mask", cli.cmd_mask),
                               ("qa", cli.cmd_qa), ("cot", cli.cmd_cot)):
         namespace = vars(parser.parse_args([command, "--model", "m"]))
-        used = set(re.findall(r"args\.([a-z_]+)", inspect.getsource(function)))
-        missing = sorted(used - set(namespace))
-        assert not missing, f"{command}: {function.__name__} reads undefined flags {missing}"
+        missing = sorted(reachable_flags(function.__name__) - set(namespace))
+        assert not missing, f"{command}: {function.__name__} reaches undefined flags {missing}"

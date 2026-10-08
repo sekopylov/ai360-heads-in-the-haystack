@@ -260,53 +260,11 @@
     "L11H12"
   ],
   "meta": {
-    "config": {
-      "lengths": [
-        1024,
-        2048,
-        4096,
-        8192,
-        16384
-      ],
-      "depths_per_length": 5,
-      "max_new_tokens": 48,
-      "needles": [
-        {
-          "needle": "The best thing to do in San Francisco is to eat a sandwich in Dolores Park on a sunny day.",
-          "question": "What is the best thing to do in San Francisco?"
-        },
-        {
-          "needle": "The recommended procedure for sealing the Vermilion Observatory dome is to apply three coats of zinc primer and then wait forty-eight hours before polishing.",
-          "question": "What is the recommended procedure for sealing the Vermilion Observatory dome?"
-        },
-        {
-          "needle": "The object Professor Alaric Voss keeps in the Harbourside loft is a brass barometer that once belonged to his grandfather.",
-          "question": "What does Professor Alaric Voss keep in the Harbourside loft?"
-        }
-      ],
-      "threshold": 0.1,
-      "pairing": "next_step",
-      "chat_template": true,
-      "enable_thinking": false,
-      "system_prompt": null,
-      "prefill_impl": "sdpa",
-      "capture_impl": "eager",
-      "capture_method": "patch",
-      "prefill_chunk": 4096,
-      "seed": 0,
-      "argmax_domain": "prompt",
-      "limit": null,
-      "dropped_lengths": [],
-      "grid_size": 75,
-      "grid_size_unlimited": 75
-    },
     "corpus": "synthetic",
-    "corpus_path": null,
-    "argmax_domain": "prompt",
-    "needle_tokens_mean": 25.666666666666668,
-    "unique_needle_tokens_mean": 24.666666666666668,
-    "tokenization_attainable_mean": 1.0,
-    "denominator_inflation": 1.0405405405405406
+    "recited_only": true,
+    "recall_threshold": 0.3,
+    "n_instances": 75,
+    "pairing": "next_step"
   },
   "schema_version": 5,
   "provenance": {

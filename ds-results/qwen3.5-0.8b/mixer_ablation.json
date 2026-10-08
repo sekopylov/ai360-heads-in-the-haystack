@@ -10,26 +10,203 @@
     0.6666666666666666
   ],
   "full_attention": [
-    100.0,
-    84.98765432098766,
-    42.59259259259259
+    38.52663569153444,
+    25.855998509687037,
+    11.207153502235471
   ],
   "linear_attention": [
-    0.0,
-    1.2345679012345678,
-    1.2345679012345678
+    56.42307975890179,
+    51.76310428209669,
+    14.594367381252631
   ],
+  "fractions_linear": [
+    0.05555555555555555,
+    0.1111111111111111,
+    0.2222222222222222
+  ],
+  "full_attention_masked": [
+    1,
+    2,
+    4
+  ],
+  "linear_attention_masked": [
+    1,
+    2,
+    4
+  ],
+  "full_attention_std": [
+    8.57512387692987,
+    5.560679708085361,
+    2.05483120951763
+  ],
+  "linear_attention_std": [
+    3.7394604263730633,
+    8.315123993540514,
+    18.784845973514006
+  ],
+  "full_attention_trials": [
+    [
+      44.59016393442622,
+      26.399579205750857,
+      44.59016393442622
+    ],
+    [
+      33.57892449080973,
+      20.710382513661205,
+      23.27868852459017
+    ],
+    [
+      14.098360655737704,
+      10.01490312965723,
+      9.508196721311476
+    ]
+  ],
+  "linear_attention_trials": [
+    [
+      53.77888193343466,
+      53.77888193343466,
+      61.711475409836055
+    ],
+    [
+      41.967213114754095,
+      62.295081967213115,
+      51.027017764322856
+    ],
+    [
+      1.3114754098360655,
+      1.3114754098360655,
+      41.16015132408576
+    ]
+  ],
+  "full_attention_layers": [
+    [
+      [
+        15
+      ],
+      [
+        19
+      ],
+      [
+        15
+      ]
+    ],
+    [
+      [
+        23,
+        15
+      ],
+      [
+        19,
+        23
+      ],
+      [
+        15,
+        19
+      ]
+    ],
+    [
+      [
+        11,
+        23,
+        19,
+        15
+      ],
+      [
+        19,
+        15,
+        7,
+        23
+      ],
+      [
+        23,
+        3,
+        19,
+        11
+      ]
+    ]
+  ],
+  "linear_attention_layers": [
+    [
+      [
+        5
+      ],
+      [
+        5
+      ],
+      [
+        21
+      ]
+    ],
+    [
+      [
+        14,
+        18
+      ],
+      [
+        12,
+        22
+      ],
+      [
+        1,
+        13
+      ]
+    ],
+    [
+      [
+        13,
+        18,
+        2,
+        0
+      ],
+      [
+        5,
+        18,
+        0,
+        12
+      ],
+      [
+        13,
+        22,
+        17,
+        21
+      ]
+    ]
+  ],
+  "seed": 0,
   "full_attention_exact_match": [
-    100.0,
-    100.0,
+    0.0,
+    0.0,
     0.0
   ],
   "linear_attention_exact_match": [
     0.0,
-    0.0,
+    3.3333333333333335,
     0.0
   ],
-  "baseline": 86.66666666666667,
+  "baseline": 46.3792664752281,
   "n_full_layers": 6,
-  "n_linear_layers": 18
+  "n_linear_layers": 18,
+  "needle": "The instrument that the lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant engraved with the initials R. M.",
+  "question": "What instrument does the lighthouse keeper of Cape Winterbourne polish?",
+  "needle_source": "eval",
+  "model": "Qwen3.5-0.8B",
+  "max_new_tokens": 32,
+  "prefill_chunk": 4096,
+  "chat_template": true,
+  "system_prompt": null,
+  "corpus": "synthetic",
+  "corpus_path": null,
+  "schema_version": 5,
+  "provenance": {
+    "schema_version": 5,
+    "git_rev": null,
+    "git_dirty": false,
+    "python": "3.10.12",
+    "torch": "2.10.0+cu128",
+    "transformers": "5.18.0",
+    "numpy": "2.2.6",
+    "matplotlib": "3.10.9",
+    "deterministic": false,
+    "dtype": "bfloat16"
+  }
 }

@@ -2,22 +2,93 @@
   "task": "cot_reasoning",
   "n_samples": 8,
   "k": 4,
+  "k_effective": 4,
+  "n_scoreable_heads": 48,
+  "n_non_retrieval_heads": 15,
+  "random_control_contaminated": false,
+  "model": "Qwen3.5-0.8B",
+  "max_new_tokens": 256,
+  "prefill_chunk": 4096,
+  "enable_thinking": false,
+  "chat_template": true,
+  "system_prompt": null,
   "results": {
     "answer_only": {
       "baseline": 75.0,
-      "retrieval_masked": 25.0,
-      "random_masked_mean": 68.75,
-      "random_masked_std": 31.25,
-      "drop_retrieval": 50.0,
-      "drop_random": 6.25
+      "retrieval_masked": 87.5,
+      "random_masked_mean": 62.5,
+      "random_masked_std": 25.0,
+      "random_retrieval_overlap": [
+        0,
+        0
+      ],
+      "drop_retrieval": -12.5,
+      "drop_random": 12.5,
+      "masked_heads": [
+        "L11H1",
+        "L15H7",
+        "L19H5",
+        "L23H1"
+      ],
+      "random_picks": [
+        [
+          "L3H2",
+          "L7H7",
+          "L3H3",
+          "L7H6"
+        ],
+        [
+          "L3H2",
+          "L7H7",
+          "L23H6",
+          "L3H6"
+        ]
+      ]
     },
     "cot": {
       "baseline": 100.0,
-      "retrieval_masked": 50.0,
-      "random_masked_mean": 93.75,
+      "retrieval_masked": 75.0,
+      "random_masked_mean": 31.25,
       "random_masked_std": 6.25,
-      "drop_retrieval": 50.0,
-      "drop_random": 6.25
+      "random_retrieval_overlap": [
+        0,
+        0
+      ],
+      "drop_retrieval": 25.0,
+      "drop_random": 68.75,
+      "masked_heads": [
+        "L11H1",
+        "L15H7",
+        "L19H5",
+        "L23H1"
+      ],
+      "random_picks": [
+        [
+          "L11H3",
+          "L3H2",
+          "L7H0",
+          "L7H4"
+        ],
+        [
+          "L3H7",
+          "L11H3",
+          "L7H0",
+          "L3H4"
+        ]
+      ]
     }
+  },
+  "schema_version": 5,
+  "provenance": {
+    "schema_version": 5,
+    "git_rev": null,
+    "git_dirty": false,
+    "python": "3.10.12",
+    "torch": "2.10.0+cu128",
+    "transformers": "5.18.0",
+    "numpy": "2.2.6",
+    "matplotlib": "3.10.9",
+    "deterministic": false,
+    "dtype": "bfloat16"
   }
 }

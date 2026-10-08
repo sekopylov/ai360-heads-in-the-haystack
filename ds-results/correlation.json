@@ -6,12 +6,25 @@
   "values": [
     [
       1.0,
-      0.9260529621703681
+      0.9257849628255146
     ],
     [
-      0.9260529621703681,
+      0.9257849628255146,
       1.0
     ]
   ],
-  "mode": "sorted"
+  "mode": "sorted",
+  "caveat": "mode='sorted' correlates sorted score vectors, not head positions; a high value does not mean the models use the same heads",
+  "schema_version": 5,
+  "provenance": {
+    "schema_version": 5,
+    "git_rev": null,
+    "git_dirty": false,
+    "python": "3.10.12",
+    "torch": "2.10.0+cu128",
+    "transformers": "5.18.0",
+    "numpy": "2.2.6",
+    "matplotlib": "3.10.9",
+    "deterministic": false
+  }
 }

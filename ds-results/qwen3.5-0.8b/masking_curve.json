@@ -1,4 +1,215 @@
 {
+  "model": "Qwen3.5-0.8B",
+  "baseline_exact_match": 0.0,
+  "n_samples": 10,
+  "pairing": "next_step",
+  "n_scoreable_heads": 48,
+  "n_non_retrieval_heads": 15,
+  "random_control_contaminated": false,
+  "max_new_tokens": 32,
+  "prefill_chunk": 4096,
+  "argmax_domain": "prompt",
+  "baseline_recall": 48.69565217391304,
+  "k_fraction_requested": [
+    0.020833333333333332,
+    0.041666666666666664,
+    0.08333333333333333,
+    0.16666666666666666,
+    0.3333333333333333
+  ],
+  "k_fraction_effective": [
+    0.020833333333333332,
+    0.041666666666666664,
+    0.08333333333333333,
+    0.16666666666666666,
+    0.3125
+  ],
+  "seed": 0,
+  "masked_retrieval_heads": {
+    "1": [
+      "L11H1"
+    ],
+    "2": [
+      "L11H1",
+      "L15H7"
+    ],
+    "4": [
+      "L11H1",
+      "L15H7",
+      "L19H5",
+      "L23H1"
+    ],
+    "8": [
+      "L11H1",
+      "L15H7",
+      "L19H5",
+      "L23H1",
+      "L23H5",
+      "L23H0",
+      "L19H0",
+      "L23H3"
+    ],
+    "16": [
+      "L11H1",
+      "L15H7",
+      "L19H5",
+      "L23H1",
+      "L23H5",
+      "L23H0",
+      "L19H0",
+      "L23H3",
+      "L19H6",
+      "L19H2",
+      "L19H7",
+      "L19H3",
+      "L23H7",
+      "L19H1",
+      "L15H5"
+    ]
+  },
+  "random_picks": {
+    "1": [
+      [
+        "L3H2"
+      ],
+      [
+        "L3H2"
+      ],
+      [
+        "L11H3"
+      ]
+    ],
+    "2": [
+      [
+        "L3H7",
+        "L11H3"
+      ],
+      [
+        "L7H6",
+        "L7H0"
+      ],
+      [
+        "L3H6",
+        "L7H7"
+      ]
+    ],
+    "4": [
+      [
+        "L7H0",
+        "L3H3",
+        "L7H6",
+        "L3H6"
+      ],
+      [
+        "L3H2",
+        "L7H5",
+        "L7H7",
+        "L3H1"
+      ],
+      [
+        "L11H3",
+        "L3H0",
+        "L3H6",
+        "L3H4"
+      ]
+    ],
+    "8": [
+      [
+        "L3H1",
+        "L7H6",
+        "L3H4",
+        "L23H2",
+        "L7H0",
+        "L3H2",
+        "L23H6",
+        "L3H7"
+      ],
+      [
+        "L3H7",
+        "L7H4",
+        "L23H2",
+        "L3H6",
+        "L3H1",
+        "L7H7",
+        "L3H4",
+        "L3H2"
+      ],
+      [
+        "L7H6",
+        "L23H6",
+        "L3H2",
+        "L3H7",
+        "L3H3",
+        "L3H1",
+        "L3H4",
+        "L3H6"
+      ]
+    ],
+    "16": [
+      [
+        "L7H0",
+        "L3H0",
+        "L3H1",
+        "L3H4",
+        "L3H2",
+        "L3H7",
+        "L23H2",
+        "L3H6",
+        "L7H5",
+        "L3H3",
+        "L7H6",
+        "L11H3",
+        "L23H6",
+        "L7H4",
+        "L7H7"
+      ],
+      [
+        "L23H2",
+        "L11H3",
+        "L7H4",
+        "L7H7",
+        "L3H0",
+        "L3H1",
+        "L3H4",
+        "L23H6",
+        "L7H6",
+        "L3H6",
+        "L3H2",
+        "L3H3",
+        "L3H7",
+        "L7H5",
+        "L7H0"
+      ],
+      [
+        "L7H6",
+        "L7H4",
+        "L23H2",
+        "L3H7",
+        "L7H5",
+        "L3H6",
+        "L3H1",
+        "L7H0",
+        "L3H2",
+        "L7H7",
+        "L3H3",
+        "L11H3",
+        "L3H4",
+        "L23H6",
+        "L3H0"
+      ]
+    ]
+  },
+  "corpus": "synthetic",
+  "corpus_path": null,
+  "needle": "The instrument that the lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant engraved with the initials R. M.",
+  "question": "What instrument does the lighthouse keeper of Cape Winterbourne polish?",
+  "needle_source": "eval",
+  "chat_template": true,
+  "system_prompt": null,
+  "enable_thinking": false,
+  "threshold": 0.1,
+  "detection_pairing": "next_step",
+  "capture_method": "patch",
   "k_values": [
     1,
     2,
@@ -6,81 +217,1527 @@
     8,
     16
   ],
+  "k_effective": [
+    1,
+    2,
+    4,
+    8,
+    15
+  ],
+  "retrieval_masked": [
+    1,
+    2,
+    4,
+    8,
+    15
+  ],
+  "random_masked_mean": [
+    1.0,
+    2.0,
+    4.0,
+    8.0,
+    15.0
+  ],
+  "random_retrieval_overlap": [
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ]
+  ],
+  "random_above_threshold": [
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ]
+  ],
+  "per_sample": {
+    "1": {
+      "retrieval": {
+        "f1": 42.14079074252652,
+        "exact_match": 0.0,
+        "recall": 43.91304347826086,
+        "n": 10,
+        "f1s": [
+          59.01639344262296,
+          45.90163934426229,
+          45.90163934426229,
+          45.90163934426229,
+          45.90163934426229,
+          45.90163934426229,
+          62.29508196721311,
+          23.52941176470588,
+          23.52941176470588,
+          23.52941176470588
+        ],
+        "exact_matches": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "recalls": [
+          65.21739130434783,
+          52.17391304347826,
+          52.17391304347826,
+          52.17391304347826,
+          52.17391304347826,
+          52.17391304347826,
+          73.91304347826086,
+          13.043478260869565,
+          13.043478260869565,
+          13.043478260869565
+        ],
+        "prefix_recalls": [
+          43.47826086956522,
+          26.08695652173913,
+          26.08695652173913,
+          26.08695652173913,
+          26.08695652173913,
+          26.08695652173913,
+          4.3478260869565215,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "generated_texts": [
+          "The instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThis is found in the final sentence of the text",
+          "Based on the text provided, the instrument that the lighthouse keeper polishes is a **brass sextant**.\n\nThe text states: \"The instrument that",
+          "Based on the text provided, the instrument that the lighthouse keeper polishes is a **brass sextant**.\n\nThe text states: \"The instrument that",
+          "Based on the text provided, the instrument that the lighthouse keeper polishes is a **brass sextant**.\n\nThe text states: \"The instrument that",
+          "Based on the text provided, the instrument that the lighthouse keeper polishes is a **brass sextant**.\n\nThe text states: \"The instrument that",
+          "Based on the text provided, the instrument that the lighthouse keeper polishes is a **brass sextant**.\n\nThe text states: \"The instrument that",
+          "Based on the text provided, the lighthouse keeper of Cape Winterbourne polishes a **brass sextant** engraved with the initials **R. M.**",
+          "A brass sextant.",
+          "A brass sextant.",
+          "A brass sextant."
+        ]
+      },
+      "random": [
+        {
+          "f1": 53.658536585365866,
+          "exact_match": 0.0,
+          "recall": 39.130434782608695,
+          "n": 10,
+          "f1s": [
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695
+          ],
+          "prefix_recalls": [
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215
+          ],
+          "generated_texts": [
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M."
+          ]
+        },
+        {
+          "f1": 53.658536585365866,
+          "exact_match": 0.0,
+          "recall": 39.130434782608695,
+          "n": 10,
+          "f1s": [
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586,
+            53.65853658536586
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695
+          ],
+          "prefix_recalls": [
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215
+          ],
+          "generated_texts": [
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M.",
+            "A brass sextant engraved with the initials R. M."
+          ]
+        },
+        {
+          "f1": 46.22950819672131,
+          "exact_match": 0.0,
+          "recall": 49.565217391304344,
+          "n": 10,
+          "f1s": [
+            42.62295081967213,
+            39.344262295081975,
+            49.18032786885246,
+            52.459016393442624,
+            52.459016393442624,
+            39.344262295081975,
+            49.18032786885246,
+            36.0655737704918,
+            52.459016393442624,
+            49.18032786885246
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            43.47826086956522,
+            43.47826086956522,
+            52.17391304347826,
+            56.52173913043478,
+            56.52173913043478,
+            43.47826086956522,
+            52.17391304347826,
+            39.130434782608695,
+            56.52173913043478,
+            52.17391304347826
+          ],
+          "prefix_recalls": [
+            8.695652173913043,
+            4.3478260869565215,
+            43.47826086956522,
+            43.47826086956522,
+            43.47826086956522,
+            4.3478260869565215,
+            43.47826086956522,
+            4.3478260869565215,
+            43.47826086956522,
+            43.47826086956522
+          ],
+          "generated_texts": [
+            "Based on the text provided, the lighthouse keeper of Cape Winterbourne is described as having a specific instrument. The text states: \"According to the bramble",
+            "Based on the text provided, the lighthouse keeper of Cape Winterbourne is described as polishing a specific object. The text states: \"A grove of garden",
+            "Based on the text provided, the instrument that the lighthouse keeper of Cape Winterbourne polishes is a **quartz** (specifically described as a \"",
+            "Based on the text provided, the instrument that the lighthouse keeper of Cape Winterbourne polishes is a **candle**.\n\nThe text states: \"The",
+            "Based on the text provided, the instrument that the lighthouse keeper of Cape Winterbourne polishes is a **quartz**.\n\nThe relevant sentence states: \"",
+            "Based on the text provided, the lighthouse keeper of Cape Winterbourne polishes a **copper** of the **orchid** (specifically, a",
+            "Based on the text provided, the instrument that the lighthouse keeper of Cape Winterbourne polishes is a **garnet** (specifically described as a",
+            "Based on the text provided, the lighthouse keeper of Cape Winterbourne polishes the **nectar** (specifically, the \"nectar near the k",
+            "Based on the text provided, the instrument that the lighthouse keeper of Cape Winterbourne polishes is a **garnet**.\n\nThe relevant sentence states:",
+            "Based on the text provided, the instrument that the lighthouse keeper of Cape Winterbourne polishes is a **glass** (specifically described as a \"glass"
+          ]
+        }
+      ]
+    },
+    "2": {
+      "retrieval": {
+        "f1": 40.17357762777242,
+        "exact_match": 0.0,
+        "recall": 36.95652173913044,
+        "n": 10,
+        "f1s": [
+          23.52941176470588,
+          49.18032786885246,
+          45.90163934426229,
+          45.90163934426229,
+          49.18032786885246,
+          45.90163934426229,
+          45.90163934426229,
+          49.18032786885246,
+          23.52941176470588,
+          23.52941176470588
+        ],
+        "exact_matches": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "recalls": [
+          13.043478260869565,
+          34.78260869565217,
+          52.17391304347826,
+          52.17391304347826,
+          52.17391304347826,
+          52.17391304347826,
+          52.17391304347826,
+          34.78260869565217,
+          13.043478260869565,
+          13.043478260869565
+        ],
+        "prefix_recalls": [
+          0.0,
+          34.78260869565217,
+          26.08695652173913,
+          26.08695652173913,
+          4.3478260869565215,
+          26.08695652173913,
+          26.08695652173913,
+          34.78260869565217,
+          0.0,
+          0.0
+        ],
+        "generated_texts": [
+          "A brass sextant.",
+          "Based on the text provided, the instrument is a **brass sextant**.\n\nThe text states: \"The instrument that the lighthouse keeper of Cape Winter",
+          "Based on the text provided, the instrument that the lighthouse keeper polishes is a **brass sextant**.\n\nThe text states: \"The instrument that",
+          "Based on the text provided, the instrument that the lighthouse keeper polishes is a **brass sextant**.\n\nThe text states: \"The instrument that",
+          "Based on the text provided, the lighthouse keeper of Cape Winterbourne polishes a **brass sextant**.\n\nThe specific sentence in the text states:",
+          "Based on the text provided, the instrument that the lighthouse keeper polishes is a **brass sextant**.\n\nThe text states: \"The instrument that",
+          "Based on the text provided, the instrument that the lighthouse keeper polishes is a **brass sextant**.\n\nThe text states: \"The instrument that",
+          "Based on the text provided, the instrument is a **brass sextant**.\n\nThe text states: \"The instrument that the lighthouse keeper of Cape Winter",
+          "A brass sextant.",
+          "A brass sextant."
+        ]
+      },
+      "random": [
+        {
+          "f1": 45.86260733801718,
+          "exact_match": 0.0,
+          "recall": 38.260869565217384,
+          "n": 10,
+          "f1s": [
+            52.38095238095239,
+            42.62295081967213,
+            42.62295081967213,
+            36.0655737704918,
+            36.0655737704918,
+            52.38095238095239,
+            39.344262295081975,
+            52.38095238095239,
+            52.38095238095239,
+            52.38095238095239
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            34.78260869565217,
+            47.82608695652174,
+            39.130434782608695,
+            39.130434782608695,
+            39.130434782608695,
+            34.78260869565217,
+            43.47826086956522,
+            34.78260869565217,
+            34.78260869565217,
+            34.78260869565217
+          ],
+          "prefix_recalls": [
+            8.695652173913043,
+            8.695652173913043,
+            8.695652173913043,
+            8.695652173913043,
+            8.695652173913043,
+            8.695652173913043,
+            8.695652173913043,
+            8.695652173913043,
+            8.695652173913043,
+            8.695652173913043
+          ],
+          "generated_texts": [
+            "The instrument does the lighthouse keeper of Cape Winterbourne polish.",
+            "The instrument the lighthouse keeper of Cape Winterbourne polish is a **saddle** of the **yarn** for most of the **tundra**.\n\n",
+            "The instrument does the lighthouse keeper of Cape Winterbourne polish.\n\nAnswer: The instrument does the lighthouse keeper of Cape Winterbourne polish.\n\nThe instrument",
+            "The instrument does the lighthouse keeper of Cape Winterbourne polish?\n\nAnswer: **The instrument does the lighthouse keeper of Cape Winterbourne polish?**\n\nAnswer",
+            "The instrument does the lighthouse keeper of Cape Winterbourne polish?\n\nAnswer: The instrument does the lighthouse keeper of Cape Winterbourne polish?\n\nThe instrument",
+            "The instrument does the lighthouse keeper of Cape Winterbourne polish.",
+            "The instrument does the lighthouse keeper of Cape Winterbourne polish?\n\nAnswer: A piano of the octave for later octave.\n\nThe octave measured the piano twice",
+            "The instrument does the lighthouse keeper of Cape Winterbourne polish.",
+            "The instrument does the lighthouse keeper of Cape Winterbourne polish.",
+            "The instrument does the lighthouse keeper of Cape Winterbourne polish."
+          ]
+        },
+        {
+          "f1": 63.66441658630666,
+          "exact_match": 0.0,
+          "recall": 62.17391304347826,
+          "n": 10,
+          "f1s": [
+            72.1311475409836,
+            72.1311475409836,
+            72.1311475409836,
+            49.18032786885246,
+            72.1311475409836,
+            72.1311475409836,
+            72.1311475409836,
+            59.01639344262296,
+            72.1311475409836,
+            23.52941176470588
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            73.91304347826086,
+            73.91304347826086,
+            78.26086956521739,
+            34.78260869565217,
+            78.26086956521739,
+            73.91304347826086,
+            73.91304347826086,
+            43.47826086956522,
+            78.26086956521739,
+            13.043478260869565
+          ],
+          "prefix_recalls": [
+            73.91304347826086,
+            73.91304347826086,
+            78.26086956521739,
+            34.78260869565217,
+            78.26086956521739,
+            73.91304347826086,
+            73.91304347826086,
+            43.47826086956522,
+            78.26086956521739,
+            0.0
+          ],
+          "generated_texts": [
+            "A brass sextant.\n\nThe text states: \"The instrument that the lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant",
+            "A brass sextant.\n\nThe text states: \"The instrument that the lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant",
+            "Brass sextant\n\nThe text states: \"The instrument that the lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant engraved",
+            "Based on the text provided, the instrument is a **brass sextant**.\n\nThe text states: \"The instrument that the lighthouse keeper of Cape Winter",
+            "Brass sextant\n\nThe text states: \"The instrument that the lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant engraved",
+            "A brass sextant.\n\nThe text states: \"The instrument that the lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant",
+            "A brass sextant.\n\nThe text states: \"The instrument that the lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant",
+            "The instrument is a **brass sextant**.\n\nThis is stated in the text: \"The instrument that the lighthouse keeper of Cape Winterbourne polishes",
+            "Brass sextant\n\nThe text states: \"The instrument that the lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant engraved",
+            "A brass sextant."
+          ]
+        },
+        {
+          "f1": 59.81525302922309,
+          "exact_match": 0.0,
+          "recall": 50.43478260869565,
+          "n": 10,
+          "f1s": [
+            59.01639344262296,
+            59.01639344262296,
+            59.01639344262296,
+            59.01639344262296,
+            68.0,
+            56.52173913043479,
+            56.52173913043479,
+            56.52173913043479,
+            56.52173913043479,
+            68.0
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            47.82608695652174,
+            47.82608695652174,
+            47.82608695652174,
+            65.21739130434783,
+            60.86956521739131,
+            43.47826086956522,
+            43.47826086956522,
+            43.47826086956522,
+            43.47826086956522,
+            60.86956521739131
+          ],
+          "prefix_recalls": [
+            21.73913043478261,
+            21.73913043478261,
+            21.73913043478261,
+            43.47826086956522,
+            43.47826086956522,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            43.47826086956522
+          ],
+          "generated_texts": [
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant**.\n\nThis is stated in the text: \"The instrument that the lighthouse",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant**.\n\nThis is confirmed by the text: \"The instrument that the lighthouse",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant**.\n\nThis is confirmed by the text: \"The instrument that the lighthouse",
+            "The instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThis is confirmed by the text: \"The instrument",
+            "The instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant**.",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant**.",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant**.",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant**.",
+            "The instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**."
+          ]
+        }
+      ]
+    },
+    "4": {
+      "retrieval": {
+        "f1": 43.12439729990356,
+        "exact_match": 0.0,
+        "recall": 40.869565217391305,
+        "n": 10,
+        "f1s": [
+          59.01639344262296,
+          59.01639344262296,
+          45.90163934426229,
+          45.90163934426229,
+          23.52941176470588,
+          45.90163934426229,
+          59.01639344262296,
+          45.90163934426229,
+          23.52941176470588,
+          23.52941176470588
+        ],
+        "exact_matches": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "recalls": [
+          65.21739130434783,
+          65.21739130434783,
+          34.78260869565217,
+          52.17391304347826,
+          13.043478260869565,
+          52.17391304347826,
+          65.21739130434783,
+          34.78260869565217,
+          13.043478260869565,
+          13.043478260869565
+        ],
+        "prefix_recalls": [
+          43.47826086956522,
+          43.47826086956522,
+          34.78260869565217,
+          26.08695652173913,
+          0.0,
+          26.08695652173913,
+          43.47826086956522,
+          34.78260869565217,
+          0.0,
+          0.0
+        ],
+        "generated_texts": [
+          "Based on the text provided, the instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThe relevant sentence states",
+          "Based on the text provided, the instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThe specific sentence in",
+          "Based on the text provided, the instrument is a **brass sextant**.\n\nThe relevant sentence states: \"The instrument that the lighthouse keeper of Cape",
+          "Based on the text provided, the instrument that the lighthouse keeper polishes is a **brass sextant**.\n\nThe relevant sentence states: \"The instrument",
+          "A brass sextant.",
+          "Based on the text provided, the instrument that the lighthouse keeper polishes is a **brass sextant**.\n\nThe specific sentence in the text states:",
+          "Based on the text provided, the instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThe specific sentence in",
+          "Based on the text provided, the instrument is a **brass sextant**.\n\nThe relevant sentence states: \"The instrument that the lighthouse keeper of Cape",
+          "A brass sextant.",
+          "A brass sextant."
+        ]
+      },
+      "random": [
+        {
+          "f1": 56.72131147540983,
+          "exact_match": 0.0,
+          "recall": 54.347826086956516,
+          "n": 10,
+          "f1s": [
+            59.01639344262296,
+            59.01639344262296,
+            55.73770491803278,
+            49.18032786885246,
+            49.18032786885246,
+            59.01639344262296,
+            59.01639344262296,
+            59.01639344262296,
+            59.01639344262296,
+            59.01639344262296
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            43.47826086956522,
+            65.21739130434783,
+            39.130434782608695,
+            34.78260869565217,
+            34.78260869565217,
+            65.21739130434783,
+            65.21739130434783,
+            65.21739130434783,
+            65.21739130434783,
+            65.21739130434783
+          ],
+          "prefix_recalls": [
+            43.47826086956522,
+            43.47826086956522,
+            39.130434782608695,
+            34.78260869565217,
+            34.78260869565217,
+            43.47826086956522,
+            43.47826086956522,
+            43.47826086956522,
+            43.47826086956522,
+            43.47826086956522
+          ],
+          "generated_texts": [
+            "The instrument is a **brass sextant**.\n\nThis is confirmed by the text: \"The instrument that the lighthouse keeper of Cape Winterbourne polishes",
+            "The instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThis is explicitly stated in the text: \"The",
+            "The instrument is a **brass sextant**.\n\nThis is explicitly stated in the text: \"The instrument that the lighthouse keeper of Cape Winterbourne pol",
+            "Based on the text provided, the instrument is a **brass sextant**.\n\nThe text states: \"The instrument that the lighthouse keeper of Cape Winter",
+            "Based on the text provided, the instrument is a **brass sextant**.\n\nThe text states: \"The instrument that the lighthouse keeper of Cape Winter",
+            "The instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThis is confirmed by the text: \"The instrument",
+            "The instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThis is confirmed by the text: \"The instrument",
+            "The instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThis is confirmed by the text: \"The instrument",
+            "The instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThis is based on the text provided: \"The",
+            "The instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThis is confirmed by the text: \"the instrument"
+          ]
+        },
+        {
+          "f1": 22.459893048128343,
+          "exact_match": 0.0,
+          "recall": 13.043478260869563,
+          "n": 10,
+          "f1s": [
+            18.181818181818183,
+            23.52941176470588,
+            23.52941176470588,
+            23.52941176470588,
+            23.52941176470588,
+            18.181818181818183,
+            23.52941176470588,
+            23.52941176470588,
+            23.52941176470588,
+            23.52941176470588
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            13.043478260869565,
+            13.043478260869565,
+            13.043478260869565,
+            13.043478260869565,
+            13.043478260869565,
+            13.043478260869565,
+            13.043478260869565,
+            13.043478260869565,
+            13.043478260869565,
+            13.043478260869565
+          ],
+          "prefix_recalls": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "generated_texts": [
+            "A brass sextant",
+            "A brass sextant.",
+            "A brass sextant.",
+            "A brass sextant.",
+            "A brass sextant.",
+            "A brass sextant",
+            "A brass sextant.",
+            "A brass sextant.",
+            "A brass sextant.",
+            "A brass sextant."
+          ]
+        },
+        {
+          "f1": 51.475409836065566,
+          "exact_match": 0.0,
+          "recall": 55.65217391304349,
+          "n": 10,
+          "f1s": [
+            42.62295081967213,
+            39.344262295081975,
+            55.73770491803278,
+            59.01639344262296,
+            52.459016393442624,
+            42.62295081967213,
+            55.73770491803278,
+            49.18032786885246,
+            59.01639344262296,
+            59.01639344262296
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            43.47826086956522,
+            43.47826086956522,
+            60.86956521739131,
+            65.21739130434783,
+            56.52173913043478,
+            43.47826086956522,
+            60.86956521739131,
+            52.17391304347826,
+            65.21739130434783,
+            65.21739130434783
+          ],
+          "prefix_recalls": [
+            4.3478260869565215,
+            4.3478260869565215,
+            8.695652173913043,
+            43.47826086956522,
+            43.47826086956522,
+            4.3478260869565215,
+            43.47826086956522,
+            8.695652173913043,
+            43.47826086956522,
+            43.47826086956522
+          ],
+          "generated_texts": [
+            "Based on the text provided, the lighthouse keeper of Cape Winterbourne polishes a **candle**.\n\nThe relevant sentence in the text states:\n>",
+            "Based on the text provided, the lighthouse keeper of Cape Winterbourne polishes a **glass** (specifically described as \"glass\" in the context of",
+            "Based on the text provided, the instrument the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThe relevant sentence in the",
+            "Based on the text provided, the instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThe relevant sentence in",
+            "Based on the text provided, the instrument that the lighthouse keeper of Cape Winterbourne polishes is a **quartz**.\n\nThe relevant sentence in the text",
+            "Based on the text provided, the lighthouse keeper of Cape Winterbourne polishes a **copper** of the **orchid**.\n\nThe relevant sentence in",
+            "Based on the text provided, the instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass** instrument.\n\nThe relevant sentence in",
+            "Based on the text provided, the instrument the lighthouse keeper of Cape Winterbourne polishes is a **quartz**.\n\nThe relevant sentence in the text states",
+            "Based on the text provided, the instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThe relevant sentence in",
+            "Based on the text provided, the instrument that the lighthouse keeper of Cape Winterbourne polishes is a **brass sextant**.\n\nThe relevant sentence in"
+          ]
+        }
+      ]
+    },
+    "8": {
+      "retrieval": {
+        "f1": 34.99517839922854,
+        "exact_match": 0.0,
+        "recall": 27.82608695652174,
+        "n": 10,
+        "f1s": [
+          45.90163934426229,
+          36.0655737704918,
+          32.786885245901644,
+          45.90163934426229,
+          17.647058823529413,
+          45.90163934426229,
+          36.0655737704918,
+          42.62295081967213,
+          23.52941176470588,
+          23.52941176470588
+        ],
+        "exact_matches": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "recalls": [
+          52.17391304347826,
+          30.434782608695656,
+          30.434782608695656,
+          34.78260869565217,
+          8.695652173913043,
+          34.78260869565217,
+          30.434782608695656,
+          30.434782608695656,
+          13.043478260869565,
+          13.043478260869565
+        ],
+        "prefix_recalls": [
+          26.08695652173913,
+          26.08695652173913,
+          17.391304347826086,
+          34.78260869565217,
+          0.0,
+          34.78260869565217,
+          26.08695652173913,
+          17.391304347826086,
+          0.0,
+          0.0
+        ],
+        "generated_texts": [
+          "Based on the text provided, the instrument that the lighthouse keeper polishes is a **brass sextant**.\n\nThe relevant sentence states: \"The instrument",
+          "Based on the text provided, the instrument is a **brass sextant**.\n\nThe relevant sentence states: \"The instrument that the **lighthouse keeper**",
+          "Based on the text provided, the instrument is a **brass sextant**.\n\nThe relevant sentence states: \"The instrument that the instrument of the instrument of",
+          "Based on the text provided, the instrument is a **brass sextant**.\n\nThe relevant sentence states: \"The instrument that the lighthouse keeper of Cape",
+          "A brass sextet.",
+          "Based on the text provided, the instrument is a **brass sextant**.\n\nThe relevant sentence states: \"The instrument that the lighthouse keeper of Cape",
+          "Based on the text provided, the instrument is a **brass sextant**.\n\nThe relevant sentence states: \"The instrument that the **lighthouse keeper**",
+          "Based on the text provided, the instrument is a **brass sextant**.\n\nThe relevant sentence states: \"The instrument that the instrument keeper of Cape Winter",
+          "A brass sextant.",
+          "A brass sextant."
+        ]
+      },
+      "random": [
+        {
+          "f1": 50.81967213114753,
+          "exact_match": 0.0,
+          "recall": 48.26086956521739,
+          "n": 10,
+          "f1s": [
+            55.73770491803278,
+            55.73770491803278,
+            45.90163934426229,
+            59.01639344262296,
+            42.62295081967213,
+            45.90163934426229,
+            59.01639344262296,
+            42.62295081967213,
+            42.62295081967213,
+            59.01639344262296
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            47.82608695652174,
+            47.82608695652174,
+            43.47826086956522,
+            56.52173913043478,
+            43.47826086956522,
+            43.47826086956522,
+            56.52173913043478,
+            43.47826086956522,
+            43.47826086956522,
+            56.52173913043478
+          ],
+          "prefix_recalls": [
+            8.695652173913043,
+            8.695652173913043,
+            8.695652173913043,
+            4.3478260869565215,
+            4.3478260869565215,
+            8.695652173913043,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215
+          ],
+          "generated_texts": [
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant** (or a similar brass instrument, as the text does not specify the exact",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant** (or a similar brass instrument, as the text does not specify the exact",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant** (or a similar long-tennis instrument, such as a **br",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant** (engraved with the initials \"R. M.\").\n\n**Reason",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant** (or **brass barometer** or **brass pendulum**",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant** (or a similar long-tennis instrument, such as a **br",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant** (engraved with the initials \"R. M.\").\n\n**Reason",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant** (or a **brass telescope** or a **brass barometer",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant** (or **brass sextant**).\n\n**Reasoning:**\n",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant** (engraved with the initials \"R. M.\").\n\n**Reason"
+          ]
+        },
+        {
+          "f1": 78.3174048174048,
+          "exact_match": 0.0,
+          "recall": 68.26086956521739,
+          "n": 10,
+          "f1s": [
+            90.9090909090909,
+            90.9090909090909,
+            94.54545454545455,
+            94.54545454545455,
+            94.54545454545455,
+            90.9090909090909,
+            75.0,
+            46.15384615384615,
+            94.54545454545455,
+            11.11111111111111
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            82.6086956521739,
+            82.6086956521739,
+            86.95652173913044,
+            86.95652173913044,
+            86.95652173913044,
+            82.6086956521739,
+            43.47826086956522,
+            34.78260869565217,
+            86.95652173913044,
+            8.695652173913043
+          ],
+          "prefix_recalls": [
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            43.47826086956522,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215
+          ],
+          "generated_texts": [
+            "A lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant engraved with the initials R. M.",
+            "A lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant engraved with the initials R. M.",
+            "The lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant engraved with the initials R. M.",
+            "The lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant engraved with the initials R. M.",
+            "The lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant engraved with the initials R. M.",
+            "A lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant engraved with the initials R. M.",
+            "A brass sextant is the instrument that the lighthouse keeper of Cape Winterbourne polishes.",
+            "The lighthouse keeper of Cape Winterbourne polishes the **bramble** for most of the **candle**.",
+            "The lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant engraved with the initials R. M.",
+            "Cinder of the urchin"
+          ]
+        },
+        {
+          "f1": 68.02495203432662,
+          "exact_match": 0.0,
+          "recall": 71.73913043478262,
+          "n": 10,
+          "f1s": [
+            65.57377049180329,
+            69.0909090909091,
+            72.1311475409836,
+            69.0909090909091,
+            72.1311475409836,
+            56.52173913043479,
+            77.96610169491527,
+            56.52173913043479,
+            72.1311475409836,
+            69.0909090909091
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            73.91304347826086,
+            69.56521739130434,
+            86.95652173913044,
+            69.56521739130434,
+            86.95652173913044,
+            43.47826086956522,
+            86.95652173913044,
+            43.47826086956522,
+            86.95652173913044,
+            69.56521739130434
+          ],
+          "prefix_recalls": [
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215,
+            4.3478260869565215
+          ],
+          "generated_texts": [
+            "According to the text, the lighthouse keeper of Cape Winterbourne polishes a **brass sextant** engraved with the initials **R. M.**.",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant** engraved with the initials **R. M.**",
+            "The lighthouse keeper of Cape Winterbourne polishes every **second Tuesday** is a **brass sextant** engraved with the initials **R. M.**",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant** engraved with the initials **R. M.**",
+            "The lighthouse keeper of Cape Winterbourne polishes every **second Tuesday** is a **brass sextant** engraved with the initials **R. M.**",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant**.",
+            "The lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a **brass sextant** engraved with the initials **R. M.**",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant**.",
+            "The lighthouse keeper of Cape Winterbourne polishes every **second Tuesday** is a **brass sextant** engraved with the initials **R. M.**",
+            "The lighthouse keeper of Cape Winterbourne polishes a **brass sextant** engraved with the initials **R. M.**"
+          ]
+        }
+      ]
+    },
+    "16": {
+      "retrieval": {
+        "f1": 22.95081967213115,
+        "exact_match": 0.0,
+        "recall": 21.73913043478261,
+        "n": 10,
+        "f1s": [
+          19.672131147540988,
+          22.950819672131146,
+          26.229508196721312,
+          22.950819672131146,
+          26.229508196721312,
+          19.672131147540988,
+          26.229508196721312,
+          22.950819672131146,
+          29.50819672131148,
+          13.114754098360656
+        ],
+        "exact_matches": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "recalls": [
+          21.73913043478261,
+          21.73913043478261,
+          26.08695652173913,
+          30.434782608695656,
+          21.73913043478261,
+          21.73913043478261,
+          21.73913043478261,
+          21.73913043478261,
+          21.73913043478261,
+          8.695652173913043
+        ],
+        "prefix_recalls": [
+          8.695652173913043,
+          8.695652173913043,
+          4.3478260869565215,
+          8.695652173913043,
+          8.695652173913043,
+          8.695652173913043,
+          17.391304347826086,
+          8.695652173913043,
+          21.73913043478261,
+          8.695652173913043
+        ],
+        "generated_texts": [
+          "Based on the text provided, the instrument mentioned is a **silver** (or silver-colored) **compass**.\n\nThe relevant sentence states: \"The **l",
+          "Based on the text provided, the instrument is a **harp**.\n\nThe relevant sentence states: \"The **hollow** of the **giant**",
+          "Based on the text provided, specifically the sentence beginning with \"The **lighthouse** is a device used by the **captain** of the **garrison",
+          "Based on the text provided, the instrument is a **sundial**.\n\nThe relevant sentence states: \"The **lighthouse** is a device used by the",
+          "Based on the text provided, the instrument is a **sundial**.\n\nThe relevant sentence states: \"The **skeleton** of the **lighthouse**",
+          "Based on the text provided, the instrument is a **six-pointed star** (a **harp** or **stroboscopy**).\n\nThe",
+          "Based on the text provided, the instrument is a **harp**.\n\nThe relevant sentence states: \"The **harp** is the instrument that the l",
+          "Based on the text provided, the instrument is a **sixth** (or **seminar**) of a **laser**.\n\nThe relevant sentence states",
+          "Based on the text provided, the instrument is a **harp**.\n\nThe text states: \"The **harp** is the instrument that the lighthouse",
+          "A **harp** (also referred to as a **pizzicato** or **pizzicato harp** in some contexts) is the instrument mentioned"
+        ]
+      },
+      "random": [
+        {
+          "f1": 6.557377049180327,
+          "exact_match": 0.0,
+          "recall": 0.0,
+          "n": 10,
+          "f1s": [
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "prefix_recalls": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "generated_texts": [
+            "1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10"
+          ]
+        },
+        {
+          "f1": 6.557377049180327,
+          "exact_match": 0.0,
+          "recall": 0.0,
+          "n": 10,
+          "f1s": [
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "prefix_recalls": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "generated_texts": [
+            "1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10"
+          ]
+        },
+        {
+          "f1": 6.557377049180327,
+          "exact_match": 0.0,
+          "recall": 0.0,
+          "n": 10,
+          "f1s": [
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328,
+            6.557377049180328
+          ],
+          "exact_matches": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "recalls": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "prefix_recalls": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "generated_texts": [
+            "1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10",
+            "1. 1. 2. 3. 4. 5. 6. 7. 8. 9. 10"
+          ]
+        }
+      ]
+    }
+  },
+  "retrieval_std": [
+    13.419581270125619,
+    10.980401566696283,
+    13.929857472588367,
+    9.93019887079214,
+    4.398822250819259
+  ],
+  "retrieval_exact_std": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
   "retrieval": [
-    84.0,
-    79.01234567901234,
-    45.06172839506172,
-    70.37037037037037,
-    32.09876543209876
+    42.14079074252652,
+    40.17357762777242,
+    43.12439729990356,
+    34.99517839922854,
+    22.95081967213115
   ],
   "random_mean": [
-    89.33333333333333,
-    92.88888888888887,
-    69.5274751876059,
-    75.52627413738524,
-    35.324947589098535
+    51.18219378915101,
+    56.44742565118231,
+    43.55220478653458,
+    65.72067632762632,
+    6.557377049180327
   ],
   "random_std": [
-    7.542472332656507,
-    6.285393610547088,
-    10.683767191138092,
-    1.0539605231914921,
-    17.638748440618084
+    3.502077567491956,
+    7.647779593421523,
+    15.0674944135823,
+    11.3435323898858,
+    0.0
   ],
   "random_trials": [
     [
-      84.0,
-      100.0,
-      84.0
+      53.658536585365866,
+      53.658536585365866,
+      46.22950819672131
     ],
     [
-      84.0,
-      97.33333333333333,
-      97.33333333333333
+      45.86260733801718,
+      63.66441658630666,
+      59.81525302922309
     ],
     [
-      66.04938271604938,
-      58.53304284676833,
-      84.0
+      56.72131147540983,
+      22.459893048128343,
+      51.475409836065566
     ],
     [
-      74.07407407407408,
-      75.96153846153845,
-      76.5432098765432
+      50.81967213114753,
+      78.3174048174048,
+      68.02495203432662
     ],
     [
-      49.802003261122756,
-      10.493827160493826,
-      45.67901234567901
+      6.557377049180327,
+      6.557377049180327,
+      6.557377049180327
     ]
   ],
+  "retrieval_recall": [
+    43.91304347826086,
+    36.95652173913044,
+    40.869565217391305,
+    27.82608695652174,
+    21.73913043478261
+  ],
+  "random_recall_mean": [
+    42.608695652173914,
+    50.28985507246376,
+    41.01449275362319,
+    62.753623188405804,
+    0.0
+  ],
   "retrieval_exact_match": [
-    100.0,
-    100.0,
     0.0,
-    100.0,
+    0.0,
+    0.0,
+    0.0,
     0.0
   ],
   "random_exact_match_mean": [
-    100.0,
-    100.0,
-    66.66666666666667,
-    61.111111111111114,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
     0.0
   ],
-  "baseline_exact_match": 100.0,
   "metric": "f1",
-  "baseline": 86.66666666666667,
+  "baseline": 46.3792664752281,
   "score_threshold": 0.1,
-  "model": "Qwen3.5-0.8B",
-  "n_samples": 6,
-  "pairing": "next_step",
-  "n_scoreable_heads": 48,
-  "k_fraction": [
-    0.020833333333333332,
-    0.041666666666666664,
-    0.08333333333333333,
-    0.16666666666666666,
-    0.3333333333333333
-  ]
+  "schema_version": 5,
+  "provenance": {
+    "schema_version": 5,
+    "git_rev": null,
+    "git_dirty": false,
+    "python": "3.10.12",
+    "torch": "2.10.0+cu128",
+    "transformers": "5.18.0",
+    "numpy": "2.2.6",
+    "matplotlib": "3.10.9",
+    "deterministic": false,
+    "dtype": "bfloat16"
+  }
 }

@@ -16,13 +16,14 @@ tied to a job id) → this file (where things stand and what is left).
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
 * 212 tests: 195 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
   the real checkpoints. All green.
-* A full GPU run finished successfully (job `bt1hqv1b91ht36s2egdp`, ~39 min,
-  NVIDIA L4): 75 instances per model, masking curves, QA, CoT, correlation, nine
-  figures. Artifacts in `ds-results/`, tables in `docs/results-gpu.md`.
-* **Those artifacts do not match the current code.** `ds-results/`, `results/` and
-  `docs/results-gpu.md` were produced by earlier versions of the code and were not
-  regenerated. Nothing is running: a re-run was launched (`bt118ho5hbrhf08j60qq`)
-  and cancelled on purpose, and it waits on a review of the current working tree.
+* **The committed artifacts now match the code.** The GPU run was refreshed in two
+  jobs on an NVIDIA L4, 75 instances per model:
+  `bt1ethsb4jlpds7m6i32` (`t4-cached`, ~31 min: describe/detect/mask for both
+  models, then failed on `qa` because of a bug of mine) and
+  `bt18bmvbuggt68cnel9p` (`t4-resume`, ~17 min: qa/cot/compare/figures reusing the
+  first job's artifacts through `local-paths`).  `ds-results/` holds the merged
+  tree (schema 5) and `docs/results-gpu.md` is generated from it.  The `results/`
+  CPU tree is **not** refreshed and stays historical.
 * DataSphere path works: cached venv on the project disk, ~40 s job startup
   instead of ~9 min. Job `bt107kjm3es8vung7130` proves all seven stages run on GPU.
 * **The ablations now reuse every condition `detect` recorded**, not just the
@@ -185,7 +186,9 @@ IAM token for ~11 h afterwards.
 
 | job id | what it is | outcome |
 |---|---|---|
-| `bt1hqv1b91ht36s2egdp` | `rh-t4-cached`, full `t4` pipeline, both models | **SUCCESS**, ~39 min, produced `ds-results/` |
+| `bt18bmvbuggt68cnel9p` | `rh-t4-resume`, qa/cot/compare/figures on the previous detect/mask | **SUCCESS**, ~17 min, completed the committed `ds-results/` |
+| `bt1ethsb4jlpds7m6i32` | `rh-t4-cached`, describe/detect/mask for both models | ran ~31 min, then failed on `qa` (an `AttributeError` of mine); its artifacts were reused by the resume job |
+| `bt1hqv1b91ht36s2egdp` | `rh-t4-cached`, full `t4` pipeline, both models | **SUCCESS**, ~39 min, the previous (now superseded) `ds-results/` |
 | `bt107kjm3es8vung7130` | `rh-t4-smoke`, all 7 stages at smoke scale | **SUCCESS**, proves the GPU path |
 | `bt1k1hndn5lm6ld0lvjc` | venv bootstrap on the project disk | env built; died later on a code bug |
 | `bt1e0iq7jakl30kd3qjn` | first full run, float32 | **OOM** at 16K — see findings §18 |
@@ -345,14 +348,17 @@ Actions will not run at all, and a commit that takes only the *modified* tracked
 files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 `generation` and `provenance`).  Stage the whole tree, not a subset.
 
-**Blocked on a GPU run / external input**
+**Done / no longer blocked**
 
-1. **Regenerate every artifact.** `ds-results/` does not match the current code,
-   so the committed tables are stale. One `t4-cached.yaml` run (~40 min)
-   regenerates them; expect the masking curves and the Qwen3-0.6B K-plateau to
-   change shape. Refresh `docs/results-gpu.md` afterwards with
-   `scripts/summarize_results.py` and drop the "stale" banner. Note the job
-   snapshots `local-paths` at creation (§5.3), so finish editing before launching.
+1. ~~**Regenerate every artifact.**~~ Done: `ds-results/` and
+   `docs/results-gpu.md` were regenerated from the two jobs above (schema 5), and
+   the "stale" banners are gone from the README and the results doc.  The numbers
+   moved as expected: dense `>0.1` 4.9% -> 6.2% with the zeroed/weak shares now
+   inside the paper's Fig. 2 ranges, hybrid 62.5% -> 68.8%, all 75 instances
+   recited (LCS recall), and the dense exact-match collapse starts at ~4% of heads
+   rather than 2%.  `results/` (CPU) was deliberately left historical.
+
+**Blocked on a GPU run / external input**
 2. **Paper-scale grid.** `--profile paper` with
    `--lengths 1024 … 49152` and 10 depths. VRAM is fine with bf16 + chunking, but
    budget the time; consider `gt4i.1` vs `g2.1` (A100) for the widest contexts.

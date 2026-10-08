@@ -76,8 +76,44 @@
     "19": 2,
     "23": 2
   },
+  "num_linear_heads": {
+    "0": 16,
+    "1": 16,
+    "2": 16,
+    "4": 16,
+    "5": 16,
+    "6": 16,
+    "8": 16,
+    "9": 16,
+    "10": 16,
+    "12": 16,
+    "13": 16,
+    "14": 16,
+    "16": 16,
+    "17": 16,
+    "18": 16,
+    "20": 16,
+    "21": 16,
+    "22": 16
+  },
   "head_dim": 256,
   "hidden_size": 1024,
   "max_position_embeddings": 262144,
-  "n_scoreable_heads": 48
+  "dtype": "bfloat16",
+  "model_class": "Qwen3_5ForCausalLM",
+  "n_scoreable_heads": 48,
+  "n_all_heads": 336,
+  "schema_version": 5,
+  "provenance": {
+    "schema_version": 5,
+    "git_rev": null,
+    "git_dirty": false,
+    "python": "3.10.12",
+    "torch": "2.10.0+cu128",
+    "transformers": "5.18.0",
+    "numpy": "2.2.6",
+    "matplotlib": "3.10.9",
+    "deterministic": false,
+    "dtype": "bfloat16"
+  }
 }
