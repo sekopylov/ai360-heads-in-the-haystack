@@ -402,11 +402,19 @@ meaningful within a family.
   default). With `full` the already-generated positions compete too, which makes a
   head's credit depend on how much the model happened to generate; the two domains
   give different head sets, and every artifact records which one was used.
-* **The random control is drawn from the non-retrieval pool.** A uniform draw over
-  all heads would occasionally include a retrieval head (and would make the control
-  stronger); `control_pool` excludes everything above the threshold and the
-  per-trial overlap with the retrieval arm is recorded, so the choice is visible
-  rather than implied.
+* **The random control is drawn from the non-retrieval pool, and that biases the
+  contrast *in favour* of the treatment.** Treatment heads are picked for a high
+  retrieval score, control heads for a low one, so if the score correlates with a
+  head's general importance the gap is overstated relative to the paper's uniform
+  draw over all heads. `control_pool` excludes everything above the threshold and
+  the per-trial overlap with the retrieval arm is recorded, so the choice is
+  visible rather than implied -- but "random barely moves it" should be read with
+  that direction in mind. No uniform-control arm is implemented.
+* **The masking curve measures F1/EM against the whole needle, while the question
+  asks for a sub-span**, so a correct short answer is penalised by the metric
+  itself. The curve also records the LCS needle recall (`retrieval_recall`,
+  `random_recall_mean`, plottable with `metric="recall"`), which does not have that
+  confound -- read the two together before attributing a drop to lost retrieval.
 * **The pairing choice changes which heads are "retrieval heads".** `next_step` is
   the default because the row that *produces* `w` is the literal "attention scores
   at the step where `w` is generated"; `same_step` (the row at `w`'s own position,
@@ -418,7 +426,16 @@ meaningful within a family.
   the raw needle length as the paper's "9 of 10" example reads. The artifact records
   both counts, `denominator_inflation`, and the per-head numerator
   (`copied_tokens`), so the raw-denominator variant is recomputable; the >0.1 shares
-  in the tables are unique-token shares.
+  in the tables are unique-token shares. Note the consequence for the threshold
+  itself: because the scale is inflated by `denominator_inflation` (~1.16 on these
+  needles), "score > 0.1" is *weaker* than "copied 10% of the needle tokens"; the
+  equivalent raw-denominator threshold is `0.1 / denominator_inflation`. The counts
+  in the tables are therefore not directly comparable to the paper's.
+* **The length grid is geometric, not uniform.** The paper samples 20 lengths
+  uniformly over 1K-50K, so its long contexts carry far more weight; `paper` here is
+  7 geometric lengths (210 instances) and `t4` is 5 lengths up to 16K. "The
+  mechanism reproduces" is a claim about this grid, and on the hybrid 15 of the 22
+  failures sit at the longest contexts, so the choice is load-bearing.
 * **Fig. 3's "activation frequency" is not an independent axis.** It is
   `P(score > 0)` -- the same score thresholded -- so the figure compares an average
   with its own indicator. The paper's version counts *tokens* within instances,

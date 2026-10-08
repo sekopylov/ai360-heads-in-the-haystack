@@ -236,6 +236,12 @@ class MaskingCurve:
     retrieval_exact: list[float] = field(default_factory=list)
     random_exact_mean: list[float] = field(default_factory=list)
     baseline_exact: float = 0.0
+    #: LCS needle recall.  F1/EM compare against the *whole* needle while the
+    #: question asks for a sub-span, so a correct short answer is penalised; recall
+    #: is the metric that does not have that confound.
+    retrieval_recall: list[float] = field(default_factory=list)
+    random_recall_mean: list[float] = field(default_factory=list)
+    baseline_recall: float = 0.0
     #: Realized heads masked per point, for both arms.  They are equal by
     #: construction; recording them makes a mismatch visible instead of implicit.
     k_effective: list[int] = field(default_factory=list)
@@ -265,6 +271,9 @@ class MaskingCurve:
             "random_mean": self.random_mean,
             "random_std": self.random_std,
             "random_trials": self.random_trials,
+            "retrieval_recall": self.retrieval_recall,
+            "random_recall_mean": self.random_recall_mean,
+            "baseline_recall": self.baseline_recall,
             "retrieval_exact_match": self.retrieval_exact,
             "random_exact_match_mean": self.random_exact_mean,
             "baseline_exact_match": self.baseline_exact,
@@ -331,6 +340,7 @@ def masking_curve(
     curve = MaskingCurve(
         k_values=[], retrieval=[], random_mean=[], random_std=[],
         baseline=baseline.f1, baseline_exact=baseline.exact_match,
+        baseline_recall=baseline.recall,
         score_threshold=scores.threshold,
         meta={"model": info.name, "baseline_exact_match": baseline.exact_match,
               "n_samples": len(samples), "pairing": scores.pairing,
@@ -369,6 +379,7 @@ def masking_curve(
         curve.k_effective.append(k_eff)
         curve.retrieval_masked.append(len(top))
         curve.retrieval.append(metrics.f1)
+        curve.retrieval_recall.append(metrics.recall)
         curve.retrieval_std.append(float(np.std(metrics.f1s)) if metrics.f1s else 0.0)
         curve.retrieval_exact.append(metrics.exact_match)
         curve.retrieval_exact_std.append(
@@ -378,7 +389,7 @@ def masking_curve(
                  k, len(top), 100 * len(top) / max(info.n_scoreable_heads, 1),
                  metrics.f1, metrics.exact_match)
 
-        trials, exact_trials, overlaps = [], [], []
+        trials, exact_trials, recall_trials, overlaps = [], [], [], []
         masked_counts = []
         for trial in range(n_random_trials):
             pick = rng.permutation(len(pool))[:k_eff]
@@ -392,10 +403,12 @@ def masking_curve(
             m = evaluate_samples(model, tokenizer, info, samples, masked_heads=random_heads,
                                  max_new_tokens=max_new_tokens, prefill_chunk=prefill_chunk)
             trials.append(m.f1)
+            recall_trials.append(m.recall)
             exact_trials.append(m.exact_match)
         curve.random_trials.append(trials)
         curve.random_retrieval_overlap.append(overlaps)
         curve.random_masked_mean.append(float(np.mean(masked_counts)))
+        curve.random_recall_mean.append(float(np.mean(recall_trials)))
         curve.random_mean.append(float(np.mean(trials)))
         curve.random_std.append(float(np.std(trials)))
         curve.random_exact_mean.append(float(np.mean(exact_trials)))

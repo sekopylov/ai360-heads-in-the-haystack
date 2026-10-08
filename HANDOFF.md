@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 200 tests: 183 fast (`pytest -m "not integration"`, ~10 s), 17 integration against
+* 205 tests: 188 fast (`pytest -m "not integration"`, ~12 s), 17 integration against
   the real checkpoints. All green.
 * A full GPU run finished successfully (job `bt1hqv1b91ht36s2egdp`, ~39 min,
   NVIDIA L4): 75 instances per model, masking curves, QA, CoT, correlation, nine
@@ -25,6 +25,17 @@ tied to a job id) → this file (where things stand and what is left).
   and cancelled on purpose, and it waits on a review of the current working tree.
 * DataSphere path works: cached venv on the project disk, ~40 s job startup
   instead of ~9 min. Job `bt107kjm3es8vung7130` proves all seven stages run on GPU.
+* **A regression I introduced and then fixed:** the ragged-artifact guard in
+  `plot_masking_curve` was inserted *before* the `baseline`/`*_yerr` assignments, so
+  the default `metric="f1"` path raised `UnboundLocalError` and the `figures` stage
+  died after 5 of 9 PDFs (it catches only `ValueError`).  Fixed, and now covered by
+  a default-metric tripwire plus an end-to-end `cmd_figures` test on a synthetic
+  tree -- the missing test is exactly why it slipped through.
+* **The masking curve now records the LCS needle recall** (`retrieval_recall`,
+  `random_recall_mean`, `baseline_recall`, `metric="recall"`).  F1/EM compare
+  against the whole needle while the question asks for a sub-span, so a correct
+  short answer is penalised by the metric; recall is the series without that
+  confound.
 * **The attention argmax now runs over the prompt by default** (`--argmax-domain`,
   recorded in every artifact).  Criterion (2) is "the *input* token that receives the
   most attention", so letting already-generated positions win made a head's credit
@@ -352,7 +363,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 200 passed (183 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 205 passed (188 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

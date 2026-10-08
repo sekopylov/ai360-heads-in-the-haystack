@@ -287,8 +287,9 @@ def decode_with_attention(
         # The loop ran out of budget: the final *decode* step predicted a token that
         # was never emitted.  next_step would credit that hypothetical token; scope
         # the step to same_step (whose `fed_token` is the real last token) so both
-        # pairings cover exactly the generated stream.  With max_new_tokens <= 0
-        # there is no decode step, and the prefill row must stay with next_step.
+        # pairings cover exactly the generated stream.  The `any(step.step >= 0)`
+        # guard is belt-and-braces: max_new_tokens <= 0 is rejected up front, so the
+        # prefill row can never be the only step here.
         for step in reversed(trace.steps):
             if step.applies_to is None:
                 step.applies_to = ("same_step",)

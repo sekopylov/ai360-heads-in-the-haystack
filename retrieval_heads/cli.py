@@ -304,6 +304,7 @@ def cmd_detect(args: argparse.Namespace) -> int:
         pairing=args.pairing,
         chat_template=not args.no_chat_template,
         enable_thinking=None if args.thinking else False,
+        system_prompt=args.system_prompt,
         capture_method=args.capture_method,
         argmax_domain=args.argmax_domain,
         capture_impl=args.capture_impl,
@@ -616,6 +617,9 @@ def build_parser() -> argparse.ArgumentParser:
                    choices=["output_attentions", "patch"],
                    help="patch (default) keys captured maps by layer_idx and cannot "
                         "be confused by attention-map ordering")
+    p.add_argument("--system-prompt", default=None,
+                   help="system message used by the chat template (keep it identical "
+                        "between detect and the ablations)")
     p.add_argument("--argmax-domain", default="prompt", choices=["prompt", "full"],
                    help="positions the attention argmax may choose from; 'prompt' is "
                         "the paper's input-token criterion, 'full' also allows the "

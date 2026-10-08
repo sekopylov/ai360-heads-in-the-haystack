@@ -240,9 +240,9 @@ def mixer_section(root: Path, keys: list[str]) -> list[str]:
         ablation = load(root / key / "mixer_ablation.json")
         if not ablation:
             continue
-        out.append(f"**{key}** — {ablation['n_full_layers']} full-attention layers, "
-                   f"{ablation['n_linear_layers']} linear layers, "
-                   f"baseline f1={fmt(ablation['baseline'], 1)}")
+        out.append(f"**{key}** — {at(ablation, 'n_full_layers')} full-attention layers, "
+                   f"{at(ablation, 'n_linear_layers')} linear layers, "
+                   f"baseline f1={fmt(at(ablation, 'baseline'), 1)}")
         out.append("")
         out.append("| K | full-attention masked | linear masked |")
         out.append("|---|---|---|")
@@ -294,11 +294,15 @@ def correlation_section(root: Path) -> list[str]:
     if not correlation:
         return []
     out = [f"Retrieval-score correlation (mode `{at(correlation, 'mode', '?')}`):", ""]
-    labels = correlation["labels"]
+    labels = at(correlation, "labels", []) or []
+    values = at(correlation, "values", []) or []
+    if not labels or not values:
+        return out
     out.append("| | " + " | ".join(labels) + " |")
     out.append("|---" * (len(labels) + 1) + "|")
     for i, label in enumerate(labels):
-        cells = " | ".join(fmt(correlation["values"][i][j]) for j in range(len(labels)))
+        row = at(values, i, []) or []
+        cells = " | ".join(fmt(at(row, j)) for j in range(len(labels)))
         out.append(f"| {label} | {cells} |")
     return out
 

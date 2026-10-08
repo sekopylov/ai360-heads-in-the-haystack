@@ -257,8 +257,10 @@ def plot_masking_curve(curves: Mapping[str, Any],
     ``"exact_match"``.  It used to change only the axis label while always
     plotting f1.
     """
-    if metric not in {"f1", "exact_match"}:
-        raise ValueError(f"metric must be 'f1' or 'exact_match', got {metric!r}")
+    if metric not in {"f1", "exact_match", "recall"}:
+        raise ValueError(
+            f"metric must be 'f1', 'exact_match' or 'recall', got {metric!r}"
+        )
     capped: list[str] = []
     fig, axes = plt.subplots(1, max(len(curves), 1),
                              figsize=(4.4 * max(len(curves), 1), 3.2), squeeze=False)
@@ -267,7 +269,16 @@ def plot_masking_curve(curves: Mapping[str, Any],
         # Plot against the K that was actually masked when the artifact records it;
         # otherwise a capped K would be drawn at its requested position.
         k = data.get("k_effective") or data["k_values"]
-        if metric == "exact_match":
+        if metric == "recall":
+            top, rand = data.get("retrieval_recall"), data.get("random_recall_mean")
+            baseline = data.get("baseline_recall", 0.0)
+            top_yerr = None
+            rand_yerr = None
+            if not top or not rand:
+                raise ValueError(
+                    f"{name}: this artifact has no recall series; re-run `mask`"
+                )
+        elif metric == "exact_match":
             top = data.get("retrieval_exact_match")
             rand = data.get("random_exact_match_mean")
             if not top or not rand:
@@ -283,14 +294,16 @@ def plot_masking_curve(curves: Mapping[str, Any],
             rand_yerr = None  # no per-trial exact-match std is stored
         else:
             top, rand = data.get("retrieval"), data.get("random_mean")
+            baseline = data.get("baseline", 0.0)
+            top_yerr = data.get("retrieval_std")
+            rand_yerr = data.get("random_std")
+        # The length check must come *after* the assignments (an earlier edit put the
+        # raise first, which turned them into dead code and broke the default path).
         if not top or not rand or len(top) != len(k) or len(rand) != len(k):
             raise ValueError(
                 f"{name}: the artifact's series have inconsistent lengths "
                 f"(k={len(k)}, retrieval={len(top or [])}, random={len(rand or [])})"
             )
-            baseline = data.get("baseline", 0.0)
-            top_yerr = data.get("retrieval_std")
-            rand_yerr = data.get("random_std")
         # The two error bars are different quantities: retrieval is the spread
         # across evaluation samples, random is the spread across random trials.
         ax.errorbar(k, top, yerr=top_yerr, fmt="-o", color=PALETTE[3], capsize=3,

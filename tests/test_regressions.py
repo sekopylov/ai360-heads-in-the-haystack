@@ -1199,6 +1199,116 @@ def test_head_overlap_artifact_carries_its_mode():
     assert payload["mode"] == "grid", payload
 
 
+def _well_formed_curve() -> dict:
+    return {"m": {"k_values": [1, 2], "k_effective": [1, 2], "retrieval": [90.0, 80.0],
+                  "retrieval_std": [3.0, 4.0], "random_mean": [95.0, 94.0],
+                  "random_std": [1.0, 1.5], "baseline": 97.0,
+                  "retrieval_exact_match": [80.0, 70.0], "retrieval_exact_std": [5.0, 6.0],
+                  "random_exact_match_mean": [90.0, 89.0], "retrieval_recall": [70.0, 60.0],
+                  "random_recall_mean": [88.0, 87.0], "baseline_recall": 92.0}}
+
+
+def test_plot_masking_curve_default_metric_is_the_f1_series():
+    """The default path must draw the F1 series.
+
+    A guard inserted before its assignments made it raise UnboundLocalError, and no
+    test used the default metric -- the figures stage died after 5 of 9 PDFs.
+    """
+    import matplotlib.pyplot as plt
+
+    from retrieval_heads.plotting import plot_masking_curve
+
+    fig = plot_masking_curve(_well_formed_curve())
+    try:
+        errbars = [c for c in fig.axes[0].containers
+                   if type(c).__name__ == "ErrorbarContainer"]
+        assert len(errbars) == 2, errbars
+        assert any("no masking" in (line.get_label() or "") for line in fig.axes[0].lines)
+    finally:
+        plt.close(fig)
+
+
+def test_plot_masking_curve_can_plot_recall():
+    import matplotlib.pyplot as plt
+
+    from retrieval_heads.plotting import plot_masking_curve
+
+    fig = plot_masking_curve(_well_formed_curve(), metric="recall")
+    plt.close(fig)
+
+
+def test_plot_masking_curve_rejects_a_ragged_artifact():
+    import matplotlib.pyplot as plt
+
+    from retrieval_heads.plotting import plot_masking_curve
+
+    curve = _well_formed_curve()
+    curve["m"]["retrieval"] = [90.0]          # shorter than k_values
+    with pytest.raises(ValueError, match="inconsistent lengths"):
+        plot_masking_curve(curve)
+    plt.close("all")
+
+
+def test_cmd_figures_writes_every_figure(tmp_path):
+    """End-to-end figures stage on a synthetic run tree.
+
+    `test_every_stage_and_profile_builds_parseable_argv` only parses argv, so a
+    figure that cannot be drawn at all went unnoticed.
+    """
+    import json
+
+    from retrieval_heads.cli import main
+
+    run = tmp_path / "m"
+    run.mkdir()
+    info = attention_info(1, 2)
+    scores = RetrievalScores(info=info, score=torch.tensor([[0.9, 0.1]]),
+                             activation_freq=torch.zeros(1, 2), n_instances=1)
+    scores.save(run / "scores_next_step")
+    # The artifact on disk is a single curve, not the {label: curve} mapping the
+    # plotting function takes in memory.
+    (run / "masking_curve.json").write_text(
+        json.dumps(_well_formed_curve()["m"]), encoding="utf-8")
+    (run / "task_qa.json").write_text(json.dumps({
+        "baseline_f1": 50.0, "n_samples": 2, "n_scoreable_heads": 2,
+        "by_k": {"1": {"k_effective": 1, "retrieval_f1": 10.0, "drop_retrieval": 40.0,
+                       "random_f1_mean": 45.0, "drop_random": 5.0}}}), encoding="utf-8")
+    (run / "task_cot.json").write_text(json.dumps({
+        "k": 1, "n_samples": 2, "results": {"cot": {
+            "baseline": 50.0, "retrieval_masked": 10.0, "random_masked_mean": 45.0,
+            "random_masked_std": 5.0}}}), encoding="utf-8")
+    (run / "mixer_ablation.json").write_text(json.dumps({
+        "baseline": 50.0, "k_values": [1], "full_attention": [10.0],
+        "linear_attention": [40.0], "n_full_layers": 1, "n_linear_layers": 1}),
+        encoding="utf-8")
+
+    out = tmp_path / "figs"
+    assert main(["figures", "--runs", str(run), "--out", str(out)]) == 0
+    produced = {path.name for path in out.glob("*.pdf")}
+    for name in ("ring_graph.pdf", "masking_heads.pdf", "task_qa.pdf", "task_cot.pdf",
+                 "mixer_ablation.pdf", "corr_map.pdf"):
+        assert name in produced, (name, sorted(produced))
+
+
+def test_aligned_credits_are_a_subset_of_the_loose_ones():
+    """The strict variant must never credit a token the paper's rule does not."""
+    from retrieval_heads.scoring import (
+        DecodeTrace, StepTrace, credits_aligned, credits_from_trace,
+    )
+    from tests.test_scoring import FakeSample, make_info, spike
+
+    sample = FakeSample([11, 7, 8, 12, 13], (1, 3))
+    info = make_info(num_layers=1, heads=1)
+    trace = DecodeTrace(prompt_len=5, steps=[
+        StepTrace(step=0, fed_token=1, predicted_token=7, attn={0: spike(1, 5, {0: 2})}),
+        StepTrace(step=1, fed_token=7, predicted_token=8, attn={0: spike(1, 6, {0: 2})}),
+    ])
+    loose, _, _ = credits_from_trace(trace, sample, info, pairing="next_step")
+    strict = credits_aligned(trace, sample, info, pairing="next_step")
+    for head in info.scoreable_heads:
+        assert strict[head] <= loose[head], (head, strict[head], loose[head])
+
+
 def test_plot_task_cot_gets_a_figure_title():
     import matplotlib.pyplot as plt
 
