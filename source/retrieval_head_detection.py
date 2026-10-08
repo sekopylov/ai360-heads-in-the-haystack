@@ -429,11 +429,14 @@ class LLMNeedleHaystackTester:
             
         if self.save_results:
             # Save the context to file for retesting
-            if not os.path.exists(f'results/graph/{self.model_version}'):
-                os.makedirs(f'results/graph/{self.model_version}')
+            # [OUR CHANGE] a separate folder for the run with the corrected needle insertion:
+            # results/graph/<model> is also the folder of the no-mask run of needle_in_haystack_with_mask.py
+            graph_name = self.model_version + ("_detect_insfix" if self.correct_insertion else "")
+            if not os.path.exists(f'results/graph/{graph_name}'):
+                os.makedirs(f'results/graph/{graph_name}')
             
             # Save the result to file for retesting
-            p = f'results/graph/{self.model_version}/{context_file_location}_results.json'
+            p = f'results/graph/{graph_name}/{context_file_location}_results.json'
             print("Writing at %s" % p)
             with open(p, 'w') as f:
                 json.dump(results, f)

@@ -398,7 +398,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 
 Основной прогон (разделы 3–4) повторяет запуск авторов, где игла на Qwen вставляется не на заданной глубине. Этот прогон — те же данные с флагом `--correct_insertion`: граница предложения ищется по словарю самой модели. Всё пишется в отдельные папки, основной прогон не затрагивается.
 
-Запускать после раздела 3.3: папка `results/graph/Qwen1.5-14B-Chat` должна быть уже переименована в `_detect`.
+Детекция с этим флагом сама пишет результаты в `results/graph/Qwen1.5-14B-Chat_detect_insfix`, переименовывать ничего не нужно. Запускать можно в любой момент после основной детекции, в том числе после маскирования.
 
 ### 6.1. Детекция
 
@@ -412,10 +412,6 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --dump_dir results/dump_insfix \
     --head_score_dir head_score_ours_insfix \
     2>&1 | tee logs/detect_insfix.log
-```
-
-```python
-!mv results/graph/Qwen1.5-14B-Chat results/graph/Qwen1.5-14B-Chat_detect_insfix
 ```
 
 ### 6.2. Сравнение двух вставок
