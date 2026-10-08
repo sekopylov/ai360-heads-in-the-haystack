@@ -5,7 +5,9 @@ The code keeps the original Qwen3.5 checkpoint and separates four concerns:
 ```text
 experiment/data     builds a context and inserts the needle
 experiment/locator  finds the expected-answer span in prompt tokens
-models/qwen35       runs the original Qwen model token by token
+models/qwen_common  shared original-model loading and token-by-token decode
+models/qwen35       Qwen3.5 hybrid full-attention layer selection
+models/qwen3        dense Qwen3 and Thinking final-answer extraction
 attention           observes or masks full-attention heads during decoding
 ```
 
@@ -46,9 +48,39 @@ cd updated
 python -m pip install -r requirements.txt
 ```
 
-The checkpoint is downloaded automatically by Transformers on first use.
-SDPA is the cross-platform prefill default. FlashAttention is an optional
-Linux-only optimization and can be installed from `requirements-flash.txt`.
+Use `--model` for a Hub ID or a direct checkpoint path, and `--adapter` for
+the architecture implementation (`qwen35` or dense `qwen3`). Repeat
+`--model-search-dir /path/to/models` to search roots in order for
+`ROOT/Qwen/Qwen3.5-0.8B` before falling back to Hugging Face.
+There is no implicit search directory. All job YAMLs explicitly pass
+`--model-search-dir ${DS_PROJECT_HOME}/models` and attach the project disk.
+See [DATASPHERE_GUIDE.md](DATASPHERE_GUIDE.md) for
+the one-time download into project storage and reuse across jobs.
+Local checkpoints are loaded offline; incomplete local folders raise an error.
+The checkpoint is downloaded automatically by Transformers if not found locally.
+SDPA is the cross-platform prefill default.
+
+## Qwen3 Thinking
+
+`--adapter qwen3 --model Qwen/Qwen3-4B-Thinking-2507` selects the dense Qwen3
+adapter. The 4B checkpoint has 36 full-attention layers with 32 heads each.
+Generation remains greedy. Attention observers receive only final-answer tokens
+after `</think>`; thinking and the closing marker are excluded from scores and
+saved traces. Masking still applies throughout decode. Unlike the legacy Qwen3.5 rule, newlines do not stop
+Qwen3 decoding; EOS or `--max-new-tokens` does. The checkpoint's own chat template
+is preserved, including its opening thinking tag.
+
+ROUGE uses only the final answer after `</think>`. Results retain
+`raw_model_response`, `generated_token_ids` and `finish_reason`; an unfinished
+thinking segment yields an empty final answer, so quoting a needle in a thought
+does not falsely count as a correct response. With unfinished thinking, no
+attention steps reach the collectors. Trace step indices retain their positions
+in the complete generated-token sequence; the first captured step need not be 0.
+
+`datasphere/qwen3-smoke.yaml` loads the model strictly from project storage,
+offline, on T4/float16: 3 detection cases, context 1000, depth 50, limit 2048 new
+tokens. This finite smoke budget may truncate thinking. See the DataSphere guide
+for the command and checkpoint path. The existing Qwen3.5 storage smoke is unchanged.
 
 ## Attention modes
 
@@ -84,8 +116,8 @@ python retrieval_head_detection.py \
   --depths 50
 ```
 
-The default `--capture top1` is sufficient for the original retrieval-head
-metric. To retain every attention probability for every generated token:
+The default `--capture top1` is sufficient for retrieval-head scoring.
+To retain every attention probability for each analyzed token:
 
 ```bash
 python retrieval_head_detection.py \
@@ -104,10 +136,30 @@ detection/attention/*.pt   full traces, only with --capture full
 ```
 
 The `.pt` trace is a plain dictionary loadable with `torch.load`. It contains
-`prompt_token_ids` and one entry per generated token. Each step stores
+`prompt_token_ids` and one entry per analyzed token. Each step stores
 `token_id` and `layers[layer_index]`, shaped `[heads, key_length]`. The case ID
 is included in every result, context and trace filename so the three detection
 cases do not overwrite one another.
+
+The default retrieval metric is `needle_token_multiset_v1`. For each head, count token
+IDs in the located needle span with a Counter. A generated token is credited
+only when that head's attention argmax points to an identical token in the
+needle. Credits for each token ID are capped at its frequency in the needle,
+independently per head. Score = credited tokens / needle-span length, in [0, 1].
+Repeated hits to the same position can use that token's remaining quota.
+Detection still averages scores only over successful answers (ROUGE recall > 50).
+Run manifests and detection result metadata record `retrieval_metric` and
+`attention_scope`. Previously saved scores use the old uncapped formula;
+rerun detection to obtain the new metric. ROUGE and masking modes are unchanged.
+To select the original uncapped formula, pass `--retrieval-metric legacy` to
+`retrieval_head_detection.py` or `datasphere/job.py` (add it to YAML `cmd` for Jobs).
+Legacy adds `1 / needle-span length` for every matching hit, including repeats;
+it can exceed 1. The Qwen3 answer-only filter applies with either metric.
+Implementations are separate classes in `experiment/scoring.py`:
+`LegacyRetrievalScoreCollector` and `MultisetRetrievalScoreCollector`.
+Detection selects one through `create_retrieval_collector(metric, ...)`;
+the abstract `RetrievalScoreCollector` shares only hit detection and the interface.
+Add a new implementation to `_RETRIEVAL_COLLECTORS` to expose another metric.
 
 ```python
 import torch

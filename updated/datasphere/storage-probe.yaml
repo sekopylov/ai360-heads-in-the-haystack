@@ -1,0 +1,16 @@
+name: qwen-storage-probe
+desc: Read-only checkpoint path inventory on the project disk
+flags:
+  - attach-project-disk
+cmd: python3 storage_probe.py
+outputs:
+  - datasphere-results/storage-probe
+env:
+  python:
+    type: manual
+    version: "3.12"
+    requirements-file: datasphere/requirements-probe.txt
+    local-paths:
+      - datasphere/storage_probe.py
+cloud-instance-types:
+  - c1.4

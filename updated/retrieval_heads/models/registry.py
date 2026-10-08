@@ -4,10 +4,12 @@ from collections.abc import Callable
 
 from .base import ModelAdapter
 from .qwen35 import Qwen35Adapter
+from .qwen3 import Qwen3Adapter
 
 ModelFactory = Callable[..., ModelAdapter]
 _MODELS: dict[str, ModelFactory] = {
     "qwen35": Qwen35Adapter,
+    "qwen3": Qwen3Adapter,
 }
 
 

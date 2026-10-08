@@ -1,2 +1,0 @@
--r requirements.txt
-flash-attn>=2.8,<3; sys_platform == "linux"

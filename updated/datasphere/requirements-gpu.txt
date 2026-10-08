@@ -1,0 +1,5 @@
+torch==2.6.0+cu118
+transformers>=5.17,<6
+accelerate>=1.0
+rouge-score>=0.1.2
+sentencepiece>=0.2

@@ -1,0 +1,43 @@
+name: qwen3-thinking-retrieval-survey
+desc: 36 detection cases across four lengths, three depths and three original corpora
+
+flags:
+  - attach-project-disk
+
+cmd: >
+  python3 job.py
+  --profile smoke
+  --adapter qwen3
+  --model ${DS_PROJECT_HOME}/c0/models/Qwen/Qwen3-4B-Thinking-2507
+  --output-root datasphere-results/qwen3-survey
+  --detection-data ${DETECTION_DATA}
+  --dtype float16
+  --device-map cuda:0
+  --prefill-attention sdpa_memory_efficient
+  --lengths 4000,8000,16000,24000
+  --depths 15,45,75
+  --max-new-tokens 2048
+  --retrieval-metric needle_token_multiset_v1
+  --context-seed 42
+
+inputs:
+  - data/haystack_for_detect: DETECTION_DATA
+outputs:
+  - datasphere-results/qwen3-survey
+env:
+  vars:
+    - HF_HUB_OFFLINE: "1"
+    - TRANSFORMERS_OFFLINE: "1"
+  python:
+    type: manual
+    version: "3.12"
+    requirements-file: datasphere/requirements-gpu.txt
+    pip:
+      extra-index-urls:
+        - https://download.pytorch.org/whl/cu118
+    local-paths:
+      - datasphere/job.py
+      - retrieval_head_detection.py
+      - retrieval_heads
+cloud-instance-types:
+  - gt4.1

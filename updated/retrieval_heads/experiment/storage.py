@@ -63,6 +63,10 @@ def result_payload(
             "%Y-%m-%d %H:%M:%S%z"
         ),
     }
+    if result.generation.raw_text is not None:
+        payload["raw_model_response"] = result.generation.raw_text
+        payload["generated_token_ids"] = result.generation.token_ids
+        payload["finish_reason"] = result.generation.finish_reason
     if experiment is not None:
         payload["experiment"] = experiment
     return payload

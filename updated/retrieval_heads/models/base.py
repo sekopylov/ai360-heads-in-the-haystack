@@ -17,6 +17,8 @@ class Prompt:
 class GenerationResult:
     token_ids: list[int]
     text: str
+    raw_text: str | None = None
+    finish_reason: str | None = None
 
 
 class ModelAdapter(ABC):
@@ -54,4 +56,3 @@ class ModelAdapter(ABC):
         observer: AttentionObserver | None = None,
     ) -> GenerationResult:
         raise NotImplementedError
-

@@ -35,6 +35,8 @@ def parse_args() -> argparse.Namespace:
         choices=available_models(),
     )
     parser.add_argument("--model", "--model_path", default="Qwen/Qwen3.5-0.8B")
+    parser.add_argument("--model-search-dir", action="append",
+                        help="explicit root containing MODEL_ID; repeat for ordered search; no default search directory")
     parser.add_argument(
         "--s",
         "--min-context",
@@ -80,6 +82,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device-map", default="auto")
     parser.add_argument("--dtype", default="auto")
     parser.add_argument("--prefill-attention", default="sdpa")
+    parser.add_argument("--attention-scope", choices=("answer_only", "all_decode_tokens"),
+                        help="attention analysis scope; defaults to adapter policy; does not change masking or ROUGE")
     parser.add_argument(
         "--haystack-dir",
         type=Path,
@@ -91,6 +95,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_ranked_heads(args: argparse.Namespace, model) -> list[Head]:
+    if args.head_scores is None:
+        manifest = args.output_root / "detection" / "run.json"
+        run = read_json(manifest) if manifest.exists() else {}
+        if len(run.get("retrieval_metrics", [])) > 1:
+            raise ValueError("Multiple retrieval metrics: explicitly select a ranking JSON with --head-scores")
     score_path = args.head_scores or (
         args.output_root / "detection" / "head_scores.json"
     )
@@ -165,9 +174,11 @@ def main() -> None:
     model = create_model(
         args.adapter,
         model_id=args.model,
+        model_search_dirs=args.model_search_dir,
         device_map=args.device_map,
         dtype=args.dtype,
         prefill_attention=args.prefill_attention,
+        attention_scope=args.attention_scope,
     )
     context_builder = ContextBuilder(
         model.tokenizer,
@@ -209,6 +220,8 @@ def main() -> None:
         "lengths": lengths,
         "depths": depths,
         "mask_mode": args.mask_mode,
+        "head_scores_file": str((args.head_scores or args.output_root / "detection" / "head_scores.json").resolve())
+                            if args.mask_topk else None,
         "blocked_heads": (
             [list(head) for head in sorted(stable_blocked)]
             if args.mask_topk >= 0

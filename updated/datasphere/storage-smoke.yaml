@@ -1,35 +1,31 @@
-name: qwen35-retrieval-full
-desc: Qwen3.5-0.8B detection plus paired masking sweep
+name: qwen35-storage-smoke
+desc: Offline Qwen3.5-0.8B loading from project storage plus three short GPU detection cases
 
 flags:
   - attach-project-disk
 
 cmd: >
   python3 job.py
-  --profile full
+  --profile smoke
   --adapter qwen35
-  --model Qwen/Qwen3.5-0.8B
-  --model-search-dir ${DS_PROJECT_HOME}/models
-  --output-root datasphere-results/full
+  --model ${DS_PROJECT_HOME}/c0/models/Qwen/Qwen3.5-0.8B
+  --output-root datasphere-results/storage-smoke
   --detection-data ${DETECTION_DATA}
-  --mask-data ${MASK_DATA}
   --dtype float16
   --device-map cuda:0
-  --lengths 10000
-  --depths 25,50,75
-  --topks 4,8,16
-  --context-count 3
-  --random-repeats 3
-  --seed 42
+  --lengths 1000
+  --depths 50
 
 inputs:
   - data/haystack_for_detect: DETECTION_DATA
-  - data/PaulGrahamEssays: MASK_DATA
 
 outputs:
-  - datasphere-results/full
+  - datasphere-results/storage-smoke
 
 env:
+  vars:
+    - HF_HUB_OFFLINE: "1"
+    - TRANSFORMERS_OFFLINE: "1"
   python:
     type: manual
     version: "3.12"
@@ -40,7 +36,6 @@ env:
     local-paths:
       - datasphere/job.py
       - retrieval_head_detection.py
-      - needle_in_haystack_with_mask.py
       - retrieval_heads
 
 cloud-instance-types:

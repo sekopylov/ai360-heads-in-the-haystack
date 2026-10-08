@@ -1,5 +1,5 @@
-name: qwen35-retrieval-smoke
-desc: Qwen3.5-0.8B retrieval-head smoke test
+name: qwen35-gpu-smoke
+desc: T4 CUDA diagnostics and Qwen3.5 detection at 6000 tokens
 
 flags:
   - attach-project-disk
@@ -10,25 +10,31 @@ cmd: >
   --adapter qwen35
   --model Qwen/Qwen3.5-0.8B
   --model-search-dir ${DS_PROJECT_HOME}/models
-  --output-root datasphere-results/smoke
+  --output-root datasphere-results/gpu-smoke
   --detection-data ${DETECTION_DATA}
-  --dtype float32
+  --dtype float16
+  --device-map cuda:0
+  --lengths 6000
+  --depths 50
 
 inputs:
   - data/haystack_for_detect: DETECTION_DATA
 
 outputs:
-  - datasphere-results/smoke
+  - datasphere-results/gpu-smoke
 
 env:
   python:
     type: manual
     version: "3.12"
-    requirements-file: requirements.txt
+    requirements-file: datasphere/requirements-gpu.txt
+    pip:
+      extra-index-urls:
+        - https://download.pytorch.org/whl/cu118
     local-paths:
       - datasphere/job.py
       - retrieval_head_detection.py
       - retrieval_heads
 
 cloud-instance-types:
-  - c1.4
+  - gt4.1
