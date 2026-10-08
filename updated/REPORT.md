@@ -213,15 +213,13 @@ survey агрегация по успешным случаям совпадае�
 
 <img src="report-assets/survey-multiset-top.png" alt="Multiset: средние и per-case оценки" width="550">
 
+<img src="report-assets/survey-mass-top.png" alt="Attention-mass: средние и per-case оценки" width="550">
+
 Ниже heatmap основной top-1 метрики **multiset**: внимание должно попасть
 в needle-span с совпадающим token ID, а повторные зачёты ограничены частотами
 токенов. Карта показывает средние оценки всех слоёв и голов на шкале0–1.
 
 <img src="report-assets/survey-multiset-heatmap.png" alt="Multiset: heatmap по слоям и головам" width="550">
-
-<img src="report-assets/survey-mass-top.png" alt="Attention-mass: средние и per-case оценки" width="550">
-
-<img src="report-assets/survey-mass-heatmap.png" alt="Attention-mass по слоям и головам" width="550">
 
 ### Связь между метриками
 
