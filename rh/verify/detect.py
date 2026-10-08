@@ -1,13 +1,13 @@
 """
 Retrieval head detection with the new code. Writes one .npz per sample in the format of the dump of the
-old code, so source/check_dump.py and rh.compare_dumps work on the result.
+old code, so source/check_dump.py and rh.verify.compare_dumps work on the result.
 
 Replay the inputs of an old dump (checks the model side only, the inputs are taken from the dump):
-python -m rh.detect --model_path Qwen/Qwen1.5-14B-Chat --legacy \
+python -m rh.verify.detect --model_path Qwen/Qwen1.5-14B-Chat --legacy \
     --replay source/results/dump/Qwen1.5-14B-Chat/detect --needle 0 --out results/new/replay
 
 Build the contexts (legacy = as the authors' code with the default provider):
-python -m rh.detect --model_path Qwen/Qwen1.5-14B-Chat --legacy \
+python -m rh.verify.detect --model_path Qwen/Qwen1.5-14B-Chat --legacy \
     --haystack_dir source/haystack_for_detect --s_len 1000 --e_len 30000 --out results/new/detect
 """
 import argparse

@@ -7,8 +7,8 @@ import torch
 from torch import nn
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from . import attention
-from .attention import STATE
+from .. import attention
+from ..attention import STATE
 
 
 def find_layers(model):

@@ -1,7 +1,7 @@
 """
 Compares two dumps sample by sample: the old code (reference) and the new code.
 
-python -m rh.compare_dumps source/results/dump/Qwen1.5-14B-Chat/detect results/new/replay
+python -m rh.verify.compare_dumps source/results/dump/Qwen1.5-14B-Chat/detect results/new/replay
 """
 import argparse
 import glob

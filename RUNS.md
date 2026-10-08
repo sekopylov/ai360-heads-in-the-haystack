@@ -480,7 +480,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 
 ```python
 !mkdir -p logs
-!cd .. && .venv_new/bin/python -u -m rh.detect \
+!cd .. && .venv_new/bin/python -u -m rh.verify.detect \
     --model_path Qwen/Qwen3-8B \
     --s_len 1000 \
     --e_len 30000 \
@@ -501,7 +501,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 Новый код заново собирает контексты и промпты и сравнивает их с тем, что подал в модель старый код.
 
 ```python
-!cd .. && .venv_new/bin/python -m rh.detect \
+!cd .. && .venv_new/bin/python -m rh.verify.detect \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --legacy \
     --inputs_only \
@@ -517,7 +517,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 
 ```python
 !mkdir -p logs
-!cd .. && .venv_new/bin/python -u -m rh.detect \
+!cd .. && .venv_new/bin/python -u -m rh.verify.detect \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --legacy \
     --replay source/results/dump/Qwen1.5-14B-Chat/detect \
@@ -531,7 +531,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 
 ```python
 !mkdir -p logs
-!cd .. && .venv_new/bin/python -u -m rh.detect \
+!cd .. && .venv_new/bin/python -u -m rh.verify.detect \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --legacy \
     --replay source/results/dump/Qwen1.5-14B-Chat/detect \
@@ -543,7 +543,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 ### 7.5. Сравнение
 
 ```python
-!cd .. && .venv_new/bin/python -m rh.compare_dumps \
+!cd .. && .venv_new/bin/python -m rh.verify.compare_dumps \
     source/results/dump/Qwen1.5-14B-Chat/detect \
     results/new/replay_needle0
 ```
@@ -563,7 +563,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 
 ```python
 !mkdir -p logs
-!cd .. && HF_HUB_CACHE="$TRANSFORMERS_CACHE" .venv_new/bin/python -u -m rh.detect \
+!cd .. && HF_HUB_CACHE="$TRANSFORMERS_CACHE" .venv_new/bin/python -u -m rh.verify.detect \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --legacy \
     --replay source/results/dump/Qwen1.5-14B-Chat/detect \
@@ -575,7 +575,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 ```
 
 ```python
-!cd .. && .venv_new/bin/python -m rh.compare_dumps \
+!cd .. && .venv_new/bin/python -m rh.verify.compare_dumps \
     results/new/replay_needle0 \
     results/new/replay_needle0_noflash
 ```
@@ -584,7 +584,165 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 
 Если прогон упадёт по памяти на длинных контекстах, добавить `--limit 20`: другое ядро может требовать больше памяти.
 
-## 8. Известные особенности
+## 8. Новый конвейер: прогон и метрики
+
+Основной код для экспериментов. Прогон (`rh.run`) и метрики (`rh.metrics`) — отдельные процессы, общаются только через файлы в папке `spool`. Решения авторов, признанные ошибочными, здесь не используются: игла ставится на границе предложения, её положение точное, генерация останавливается на конце ответа.
+
+Все команды — из ноутбука в `source/`, запуск идёт из корня репозитория (`cd ..`). Для Qwen1.5-14B-Chat перед `.venv_new/bin/python` добавить `HF_HUB_CACHE="$TRANSFORMERS_CACHE"`.
+
+### 8.1. Малый тест
+
+3 иглы × 2 длины × 3 глубины = 18 примеров.
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_detect.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 2 \
+    --depths 0,50,100 \
+    --out results/new/qwen3_small \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_small.log
+```
+
+В конце печатается сводка; она же лежит в `results/new/qwen3_small/summary.json`.
+
+### 8.2. Детекция
+
+3 иглы × 20 длин × 10 глубин = 600 примеров.
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_detect.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --out results/new/qwen3_detect \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_detect.log
+```
+
+Если прогон прервался, та же команда продолжит с места остановки: примеры, которые уже есть в `samples.jsonl`, пропускаются.
+
+### 8.3. Маскирование
+
+Оценочная игла (`data/needles_eval.jsonl`), 20 длин × 10 глубин = 200 примеров на запуск. Внимание не сохраняется (`--save none`), только ответы. Головы берутся из детекции.
+
+Без маски:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --out results/new/qwen3_mask_none \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_none.log
+```
+
+Лучшие головы:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_top 60 \
+    --out results/new/qwen3_mask_top60 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_top60.log
+```
+
+Случайные головы (вне 100 лучших, одни и те же на весь прогон):
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random 60 \
+    --seed 0 \
+    --out results/new/qwen3_mask_random60 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_random60.log
+```
+
+Число голов задаётся в штуках, а сравнивать модели нужно в долях: у Qwen3-8B 1152 головы, 60 — это около 5%; у Qwen1.5-14B-Chat 1600 голов, 5% — это 80. Для каждого значения и каждого seed нужна своя папка `--out`.
+
+### 8.4. Что сохраняется и сколько это занимает
+
+`--save` задаёт, что прогон пишет на каждый шаг генерации:
+
+| Режим | Что пишется | Объём на шаг, Qwen3-8B на 30000 токенов |
+|---|---|---|
+| `compact` (по умолчанию) | 5 лучших позиций внимания каждой головы и доля внимания на каждый размеченный фрагмент | около 50 КБ |
+| `rows` | то же плюс вся строка внимания каждой головы | около 70 МБ |
+| `none` | только сгенерированные токены | байты |
+
+`--buffer_gb` (по умолчанию 2) — сколько непрочитанных данных может лежать в `spool`. Когда лимит достигнут, прогон ждёт, пока метрики прочитают и удалят файлы. `--buffer_gb 0` снимает лимит: всё остаётся на диске, метрики можно посчитать потом.
+
+В режиме `rows` ответ в 50 токенов на 30000 токенов контекста — это около 3,5 ГБ на пример; ответ в 2000 токенов — около 140 ГБ. С окном это помещается на диск, но время прогона определяется скоростью записи. Для длинных ответов режим по умолчанию — `compact`.
+
+### 8.5. Метрики отдельно от прогона
+
+`--with_metrics` только запускает второй процесс. То же вручную, в любой момент и сколько угодно раз:
+
+```python
+!cd .. && .venv_new/bin/python -m rh.metrics results/new/qwen3_detect/spool --out results/new/qwen3_detect
+```
+
+- `--follow` — читать, пока прогон не закончится;
+- `--consume` — удалять прочитанное из `spool`. Без этого флага файлы остаются, и прогон с лимитом буфера остановится в ожидании.
+
+Результаты в папке `--out`:
+
+| Файл | Что в нём |
+|---|---|
+| `samples.jsonl` | по строке на пример: длина, глубина, ответ, ROUGE, успех |
+| `heads/<пример>.npz` | метрики голов на этом примере |
+| `summary.json` | сводка: доля успешных, лучшие головы, сходство метрик |
+| `head_score_<метрика>.json` | скоры голов по успешным примерам, в формате авторов |
+
+Метрики голов: `copy_count` — скор как в коде авторов, `copy_recall` — как в статье, `needle_mass` — средняя доля внимания на ответ в игле.
+
+### 8.6. Если прогон прервался
+
+Достаточно запустить ту же команду ещё раз, с тем же `--out`. Единица возобновления — пример:
+
+- примеры, результат которых уже есть в `samples.jsonl`, пропускаются;
+- примеры, которые сгенерированы, но ещё не прочитаны метриками, не генерируются заново — метрики дочитают их из `spool`;
+- пример, на котором прогон оборвался, удаляется из `spool` и генерируется с начала: продолжить генерацию с середины нельзя, кэш модели не сохраняется;
+- пример, на котором оборвались метрики, тоже генерируется заново: прочитанные части уже удалены, а накопленное состояние метрик было только в памяти.
+
+Одну папку `--out` должен писать один прогон. Второй одновременный прогон в ту же папку примет файлы первого за остатки прерванного и удалит их.
+
+Метрики с `--follow` останавливаются сами, если прогон завершился с ошибкой, а при жёстком обрыве — через час без новых данных (`--idle_timeout`).
+
+## 9. Известные особенности
 
 - Перед первым запуском нужна папка `logs/`: без неё `tee` завершается с ошибкой, и ячейка падает уже после прогона.
 - Игла вставляется не на заданной глубине. При `--model_provider` по умолчанию конец предложения ищется по id точек из словаря Llama; в тесте на 1000 токенов игла на глубинах 0 и 50 оказалась в позиции 0 (`insertion at 0` в логе). Фактическая позиция пишется в выгрузку (`needle_start`).
