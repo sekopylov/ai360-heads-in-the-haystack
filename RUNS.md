@@ -41,6 +41,7 @@
 ```
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u retrieval_head_detection.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -66,6 +67,7 @@
 Головы для теста берутся из файла авторов (скрипт маскирования его только читает).
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -81,6 +83,7 @@
 ### 2.4. Маскирование, top-30
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -96,6 +99,7 @@
 ### 2.5. Маскирование, 30 случайных голов
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -171,6 +175,7 @@ print("можно запускать")
 ### 3.2. Детекция: 3 иглы × 20 длин × 10 глубин = 600 примеров
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u retrieval_head_detection.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -219,6 +224,7 @@ print("можно запускать")
 ### 4.1. Без маски
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -233,6 +239,7 @@ print("можно запускать")
 ### 4.2. Top-30
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -247,6 +254,7 @@ print("можно запускать")
 ### 4.3. Random-30
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -261,6 +269,7 @@ print("можно запускать")
 ### 4.4. Top-50 (точка из статьи)
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -275,6 +284,7 @@ print("можно запускать")
 ### 4.5. Random-50
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -291,6 +301,7 @@ print("можно запускать")
 Top-10:
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -305,6 +316,7 @@ Top-10:
 Top-20:
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -319,6 +331,7 @@ Top-20:
 Top-100:
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -333,6 +346,7 @@ Top-100:
 Random-10:
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -347,6 +361,7 @@ Random-10:
 Random-20:
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -361,6 +376,7 @@ Random-20:
 Random-100:
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -403,6 +419,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 ### 6.1. Детекция
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u retrieval_head_detection.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -429,6 +446,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 Любая ячейка из раздела 4 с тремя заменами: добавить `--correct_insertion`, взять головы из `head_score_ours_insfix`, писать выгрузку в `results/dump_mask_insfix`. Папки результатов получают окончание `_insfix`. Пример для top-30:
 
 ```python
+!mkdir -p logs
 !../.venv/bin/python -u needle_in_haystack_with_mask.py \
     --model_path Qwen/Qwen1.5-14B-Chat \
     --s 1000 \
@@ -443,7 +461,103 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 
 В архив из раздела 5 добавить `head_score_ours_insfix results/dump_insfix results/dump_mask_insfix`.
 
-## 7. Известные особенности
+## 7. Новый код: сверка со старым на первой игле
+
+Новый код лежит в `rh/` и требует свежий `transformers`, поэтому ему нужно отдельное окружение; старое (`.venv`) не трогаем. Сверка идёт на уже посчитанной выгрузке старого кода, заново старый код запускать не нужно.
+
+### 7.1. Окружение
+
+```python
+!cd .. && python3 -m venv .venv_new && .venv_new/bin/pip install -q -r requirements-new.txt
+!cd .. && .venv_new/bin/python -c "import torch, transformers; print(torch.__version__, transformers.__version__, torch.cuda.is_available())"
+```
+
+Порядок: сначала малый тест на Qwen3-8B (7.2) — что новый код вообще работает на новой модели; затем сверка со старым кодом на части уже посчитанных данных Qwen1.5-14B-Chat (7.3–7.5). Если сверка сходится, новый код считаем валидным и дальше работаем на нём.
+
+### 7.2. Малый тест на Qwen3-8B
+
+3 иглы × 2 длины × 3 глубины = 18 примеров. Без `--legacy`: игла ставится на границе предложения, её положение ищется точно, генерация останавливается на конце ответа.
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.detect \
+    --model_path Qwen/Qwen3-8B \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 2 \
+    --depths 0,50,100 \
+    --out results/new/qwen3_test \
+    2>&1 | tee logs/new_qwen3_test.log
+```
+
+```python
+!cd .. && .venv_new/bin/python source/check_dump.py results/new/qwen3_test
+```
+
+Что смотреть: прогон не падает на 30000 токенов; `needle not found: 0`; есть успешные примеры; ответы в логе осмысленные и без `<think>`; в сводке есть головы со скором выше 0,1.
+
+### 7.3. Входы Qwen1.5-14B-Chat: модель не загружается, GPU не нужен
+
+Новый код заново собирает контексты и промпты и сравнивает их с тем, что подал в модель старый код.
+
+```python
+!cd .. && .venv_new/bin/python -m rh.detect \
+    --model_path Qwen/Qwen1.5-14B-Chat \
+    --legacy \
+    --inputs_only \
+    --ref_dump source/results/dump/Qwen1.5-14B-Chat/detect \
+    --needle 0
+```
+
+Ожидается `inputs identical to the old code: 200/200`.
+
+### 7.4. Модель: повтор входов старого кода, первая игла
+
+Входы берутся из выгрузки старого кода, так что проверяется только модельная часть: перехват внимания, генерация, подсчёт скора. Сначала малая часть: каждый пятый пример первой иглы, 40 штук на всех длинах от 1000 до 30000:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.detect \
+    --model_path Qwen/Qwen1.5-14B-Chat \
+    --legacy \
+    --replay source/results/dump/Qwen1.5-14B-Chat/detect \
+    --needle 0 \
+    --every 5 \
+    --out results/new/replay_needle0 \
+    2>&1 | tee logs/new_replay_test.log
+```
+
+Сравнить (ячейка 7.5). Если сошлось, этого достаточно; при желании — все 200 примеров первой иглы:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.detect \
+    --model_path Qwen/Qwen1.5-14B-Chat \
+    --legacy \
+    --replay source/results/dump/Qwen1.5-14B-Chat/detect \
+    --needle 0 \
+    --out results/new/replay_needle0 \
+    2>&1 | tee logs/new_replay.log
+```
+
+### 7.5. Сравнение
+
+```python
+!cd .. && .venv_new/bin/python -m rh.compare_dumps \
+    source/results/dump/Qwen1.5-14B-Chat/detect \
+    results/new/replay_needle0
+```
+
+Что смотреть:
+
+- `inputs identical` — должны совпасть все (входы взяты из выгрузки);
+- `generated tokens identical` — ожидается почти все; отдельные расхождения возможны из-за разных реализаций быстрого внимания в старом и новом коде;
+- `top-1 attention position identical` — доля совпавших позиций, ожидается выше 0,99;
+- `head scores ... spearman` и `top20 overlap` — пороги из PLAN.md, раздел 5: корреляция не ниже 0,95, пересечение top-20 не ниже 18.
+
+Выгрузка нового кода в том же формате, что у старого, поэтому `check_dump.py` работает и на ней.
+
+## 8. Известные особенности
 
 - Перед первым запуском нужна папка `logs/`: без неё `tee` завершается с ошибкой, и ячейка падает уже после прогона.
 - Игла вставляется не на заданной глубине. При `--model_provider` по умолчанию конец предложения ищется по id точек из словаря Llama; в тесте на 1000 токенов игла на глубинах 0 и 50 оказалась в позиции 0 (`insertion at 0` в логе). Фактическая позиция пишется в выгрузку (`needle_start`).
