@@ -63,7 +63,7 @@ def samples_from_grid(args, enc):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_path', type=str, required=True)
-    parser.add_argument('--out', type=str, required=True, help='folder for the .npz files')
+    parser.add_argument('--out', type=str, default=None, help='folder for the .npz files, not needed with --inputs_only')
     parser.add_argument('--legacy', action='store_true', help="repeat the authors' code: Llama period ids for the needle insertion and their stop condition")
     parser.add_argument('--replay', type=str, default=None, help='folder with the dump of the old code: take the inputs from it')
     parser.add_argument('--haystack_dir', type=str, default="source/haystack_for_detect")
@@ -80,6 +80,10 @@ if __name__ == "__main__":
     parser.add_argument('--inputs_only', action='store_true', help='build the inputs and compare them with --ref_dump, the model is not loaded')
     parser.add_argument('--ref_dump', type=str, default=None)
     args = parser.parse_args()
+    if args.inputs_only and not args.ref_dump:
+        parser.error('--inputs_only needs --ref_dump')
+    if not args.inputs_only and not args.out:
+        parser.error('--out is required')
 
     if args.inputs_only:
         from transformers import AutoTokenizer
