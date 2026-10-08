@@ -298,6 +298,40 @@ def decode_with_attention(
 
 
 # --------------------------------------------------------------------------- credit
+def match_masks(argmax: torch.Tensor, prompt_ids: torch.Tensor, token: int,
+                span: tuple[int, int], sink_position: int,
+                heads: int) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-head ``(matched, sink)`` booleans for one layer-step, computed on the host.
+
+    Vectorised on purpose: the previous per-head Python loop called
+    ``int(argmax[head])`` for every head of every step, which is a device->host
+    synchronisation per head (hundreds per step on the dense control).  Here it is
+    one transfer per layer-step, and criterion (2) is evaluated with tensor ops.
+
+    ``argmax`` may point outside the prompt when ``argmax_domain="full"``, so the
+    index is clamped before indexing ``prompt_ids`` and the out-of-span positions
+    are masked out afterwards.
+    """
+    idx = argmax[:heads].detach().to("cpu", torch.long)
+    start, end = span
+    inside = (idx >= start) & (idx < end)
+    if prompt_ids.numel():
+        same = prompt_ids[idx.clamp(0, prompt_ids.numel() - 1)] == token
+        matched = inside & same
+    else:  # pragma: no cover - a sample always has prompt tokens
+        matched = torch.zeros_like(inside)
+    return matched, idx == sink_position
+
+
+def _per_head(counts: dict[int, torch.Tensor], info: ModelInfo) -> dict[HeadRef, int]:
+    """Materialise the per-layer accumulators as the public per-head mapping."""
+    out: dict[HeadRef, int] = {h: 0 for h in info.scoreable_heads}
+    for layer, values in counts.items():
+        for head, value in enumerate(values.tolist()):
+            out[HeadRef(layer, head)] = int(value)
+    return out
+
+
 def credits_from_trace(
     trace: DecodeTrace,
     sample: NeedleSample,
@@ -325,11 +359,16 @@ def credits_from_trace(
     # (b) could never credit `"."`; `max_attainable_score` now records the ceiling.
     needle_set = set(getattr(sample, "needle_text_ids", None) or sample.needle_ids)
     start, end = sample.needle_span
-    prompt_ids = sample.input_ids[0]
+    prompt_ids = sample.input_ids[0].detach().to("cpu")
 
-    credits: dict[HeadRef, set[int]] = {h: set() for h in info.scoreable_heads}
-    sink_counts: dict[HeadRef, int] = {h: 0 for h in info.scoreable_heads}
-    considered: dict[HeadRef, int] = {h: 0 for h in info.scoreable_heads}
+    # Accumulate per layer on the host, in whole-head vectors.  The old shape of
+    # this loop called `int(argmax[head])` once per head per step, i.e. a
+    # device->host synchronisation for every head of every step (~448 x 48 x 75 x 4
+    # transfers on the dense control).  Now there is one `.cpu()` per layer-step and
+    # one `nonzero()` for the heads that actually matched.
+    considered_t: dict[int, torch.Tensor] = {}
+    sink_t: dict[int, torch.Tensor] = {}
+    hits: list[tuple[int, int, int]] = []
 
     for step in trace.steps:
         if step.applies_to is not None and pairing not in step.applies_to:
@@ -343,18 +382,23 @@ def credits_from_trace(
                 # which can include a module (e.g. a vision tower) this model does
                 # not score.  Skip it rather than KeyError.
                 continue
-            heads = info.num_heads[layer]
-            for head in range(min(heads, argmax.shape[0])):
-                ref = HeadRef(layer, head)
-                considered[ref] += 1
-                j = int(argmax[head])
-                if j == sink_position:
-                    sink_counts[ref] += 1
-                if j >= end or j < start:     # criterion (2), position inside the needle
-                    continue
-                if int(prompt_ids[j]) != token:  # criterion (2), same token
-                    continue
-                credits[ref].add(token)
+            heads = min(info.num_heads[layer], argmax.shape[0])
+            counts = considered_t.get(layer)
+            if counts is None or counts.numel() != heads:
+                counts = torch.zeros(heads, dtype=torch.long)
+                considered_t[layer] = counts
+            counts += 1
+            matched, sink = match_masks(argmax, prompt_ids, token, (start, end),
+                                        sink_position, heads)
+            sink_t.setdefault(layer, torch.zeros(heads, dtype=torch.long))[:] += sink.long()
+            hits.extend((layer, int(head), token)
+                        for head in matched.nonzero(as_tuple=False).flatten().tolist())
+
+    credits: dict[HeadRef, set[int]] = {h: set() for h in info.scoreable_heads}
+    for layer, head, token in hits:
+        credits[HeadRef(layer, head)].add(token)
+    sink_counts = _per_head(sink_t, info)
+    considered = _per_head(considered_t, info)
     return credits, sink_counts, considered
 
 
@@ -390,8 +434,8 @@ def credits_aligned(
     alignment = dict(lcs_alignment(stream, needle_ids))
 
     start, end = sample.needle_span
-    prompt_ids = sample.input_ids[0]
-    credits: dict[HeadRef, set[int]] = {h: set() for h in info.scoreable_heads}
+    prompt_ids = sample.input_ids[0].detach().to("cpu")
+    hits: list[tuple[int, int, int]] = []
     for pos, needle_index in alignment.items():
         step = steps[pos]
         token = stream[pos]
@@ -400,10 +444,14 @@ def credits_aligned(
         for layer, argmax in step.positions().items():
             if layer not in info.num_heads:
                 continue
-            for head in range(min(info.num_heads[layer], argmax.shape[0])):
-                j = int(argmax[head])
-                if start <= j < end and int(prompt_ids[j]) == token:
-                    credits[HeadRef(layer, head)].add(token)
+            heads = min(info.num_heads[layer], argmax.shape[0])
+            matched, _sink = match_masks(argmax, prompt_ids, token, (start, end),
+                                         0, heads)
+            hits.extend((layer, int(head), token)
+                        for head in matched.nonzero(as_tuple=False).flatten().tolist())
+    credits: dict[HeadRef, set[int]] = {h: set() for h in info.scoreable_heads}
+    for layer, head, token in hits:
+        credits[HeadRef(layer, head)].add(token)
     return credits
 
 

@@ -274,3 +274,21 @@ def test_prompt_domain_credits_where_full_domain_does_not():
 
     assert credits("prompt") == {8}
     assert credits("full") == set()
+
+
+def test_match_masks_is_safe_for_a_position_beyond_the_prompt():
+    """`domain="full"` can point past the prompt; the vectorised path must not index
+    out of bounds (the old per-head loop skipped those before indexing)."""
+    from retrieval_heads.scoring import match_masks
+
+    prompt_ids = torch.tensor([11, 7, 8, 12])
+    argmax = torch.tensor([2, 4, 0])          # 4 is beyond the prompt
+    matched, sink = match_masks(argmax, prompt_ids, 8, (1, 3), 0, 3)
+    assert matched.tolist() == [True, False, False]
+    assert sink.tolist() == [False, False, True]
+
+    # The credit path agrees with the position-by-position reference.
+    needle_set = {8}
+    credits = {head for head, hit in enumerate(matched.tolist())
+               if hit and 8 in needle_set}
+    assert credits == {0}

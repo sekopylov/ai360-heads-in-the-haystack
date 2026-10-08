@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 210 tests: 193 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
+* 211 tests: 194 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
   the real checkpoints. All green.
 * A full GPU run finished successfully (job `bt1hqv1b91ht36s2egdp`, ~39 min,
   NVIDIA L4): 75 instances per model, masking curves, QA, CoT, correlation, nine
@@ -25,6 +25,15 @@ tied to a job id) → this file (where things stand and what is left).
   and cancelled on purpose, and it waits on a review of the current working tree.
 * DataSphere path works: cached venv on the project disk, ~40 s job startup
   instead of ~9 min. Job `bt107kjm3es8vung7130` proves all seven stages run on GPU.
+* **The credit loop is vectorised** (`match_masks`): it used to call
+  `int(argmax[head])` once per head per step, i.e. a device->host synchronisation
+  for every head of every step (~448 x 48 x 75 x 4 transfers on the dense control);
+  now there is one `.cpu()` per layer-step plus one `nonzero()` for the heads that
+  matched.  Verified identical to the old per-head logic on a real trace (credits,
+  sink counts and considered counts, both pairings) and ~2.5x faster on a
+  dense-shaped CPU microbenchmark (the CUDA gain is larger).  A test pins the new
+  edge case: `argmax_domain="full"` can point past the prompt, and the vectorised
+  index is clamped before it reads `prompt_ids`.
 * **A regression I introduced and then fixed:** the ragged-artifact guard in
   `plot_masking_curve` was inserted *before* the `baseline`/`*_yerr` assignments, so
   the default `metric="f1"` path raised `UnboundLocalError` and the `figures` stage
@@ -384,7 +393,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 210 passed (193 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 211 passed (194 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b
