@@ -23,7 +23,7 @@ from retrieval_heads.generation import greedy_ids
 from retrieval_heads.scoring import needle_prefix_recall, needle_recall
 from retrieval_heads.haystack import NeedleSample, build_needle_sample
 from retrieval_heads.models import ModelInfo
-from retrieval_heads.scoring import RetrievalScores, needle_recall
+from retrieval_heads.scoring import RetrievalScores
 from retrieval_heads.utils import HeadRef, eos_ids, get_logger, save_json, squad_f1
 
 log = get_logger("masking")
@@ -196,6 +196,7 @@ def make_eval_samples(
     chat_template: bool = True,
     enable_thinking: bool | None = False,
     corpus: Sequence[str] | None = None,
+    system_prompt: str | None = None,
 ) -> list[NeedleSample]:
     """A small held-out NIAH set (disjoint seeds from the detection grid).
 
@@ -212,7 +213,8 @@ def make_eval_samples(
             out.append(build_needle_sample(
                 tokenizer, needle=needle, question=question, target_tokens=length,
                 depth=depth, builder=builder, chat_template=chat_template,
-                enable_thinking=enable_thinking, seed=sample_seed,
+                enable_thinking=enable_thinking, system_prompt=system_prompt,
+                seed=sample_seed,
             ))
     return out
 

@@ -396,6 +396,30 @@ meaningful within a family.
   heads and to show the masking effect, but the paper's per-head numbers come from
   ~600 instances and are smoother than what you get here. Raise `--profile paper`
   on a GPU for that grid.
+* **The pairing choice changes which heads are "retrieval heads".** `next_step` is
+  the default because the row that *produces* `w` is the literal "attention scores
+  at the step where `w` is generated"; `same_step` (the row at `w`'s own position,
+  what a naive `output_attentions` + `generated_ids` pairing gives) is stored beside
+  it. The two top-10 sets overlap 0/10 here, so every number in the tables is
+  pairing-specific -- read `summary_same_step.json` before quoting one.
+* **Thresholds depend on the denominator convention.** The score divides by the
+  number of *unique* needle tokens (so `g_h` being a set is self-consistent), not by
+  the raw needle length as the paper's "9 of 10" example reads. The artifact records
+  both counts, `denominator_inflation`, and the per-head numerator
+  (`copied_tokens`), so the raw-denominator variant is recomputable; the >0.1 shares
+  in the tables are unique-token shares.
+* **Fig. 3's "activation frequency" is not an independent axis.** It is
+  `P(score > 0)` -- the same score thresholded -- so the figure compares an average
+  with its own indicator. The paper's version counts *tokens* within instances,
+  which `copied_tokens` now makes answerable but no figure computes yet.
+* **Masking is inference-time ablation, not pruning.** Zeroing a head's `o_proj`
+  slice is exactly equivalent to zeroing its attention row (proved by test), but it
+  removes neither parameters nor KV entries, so the Sec. 5 KV-compression reading
+  does not follow directly.
+* **`mean_sink_rate` is "argmax at prompt position 0"**, which under a chat template
+  is a template token rather than necessarily a BOS sink. `exact_match` in the
+  artifacts is a normalised-contains check (NIAH convention), not character-exact
+  equality.
 * **Synthetic filler by default.** Every shipped profile generates the haystack
   from a 60-word template pool, so a 1K-50K context is highly repetitive text.
   Attention argmax is sensitive to that regularity, so the *absolute* scores are

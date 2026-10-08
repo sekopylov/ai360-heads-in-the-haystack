@@ -401,6 +401,8 @@ class InstanceResult:
     #: variant is a robustness check on the loose set-based rule, so it is stored
     #: alongside the paper's score rather than recomputed on demand.
     aligned_scores: dict[str, dict[str, float]] = field(default_factory=dict)
+    #: pairing -> {head: sorted copied token ids} (sparse: only non-empty credits).
+    copied_tokens: dict[str, dict[str, list[int]]] = field(default_factory=dict)
     meta: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -411,6 +413,7 @@ class InstanceResult:
             "sample": self.sample,
             "scores": self.scores,
             "aligned_scores": self.aligned_scores,
+            "copied_tokens": self.copied_tokens,
             "activations": self.activations,
             "considered": self.considered,
             "sink_rate": self.sink_rate,
@@ -533,6 +536,10 @@ def score_instance(
     considered_out: dict[str, dict[str, int]] = {}
     aligned_out: dict[str, dict[str, float]] = {}
     sink_rates: dict[str, dict[str, float]] = {}
+    # Sparse audit trail of the numerator |g_h ∩ k| per head (only heads that copied
+    # something, so it is bounded by the number of retrieving heads).  The paper's
+    # Fig. 3 claims are about *tokens*, which an aggregate score cannot answer.
+    copied_tokens: dict[str, dict[str, list[int]]] = {}
 
     for p in pairings:
         credits, sinks, considered = credits_from_trace(trace, sample, info, pairing=p)
@@ -545,6 +552,8 @@ def score_instance(
         considered_out[p] = {str(h): considered[h] for h in info.scoreable_heads}
         total_sink = sum(sinks.values())
         total_considered = sum(considered.values()) or 1
+        copied_tokens[p] = {str(h): sorted(credits[h])
+                            for h in info.scoreable_heads if credits[h]}
         rates = {str(h): sinks[h] / max(considered[h], 1) for h in info.scoreable_heads}
         rates["__overall__"] = total_sink / total_considered
         sink_rates[p] = rates
@@ -561,6 +570,7 @@ def score_instance(
         needle_recall=needle_recall(text, sample.needle_text),
         n_steps=len(generated),
         aligned_scores=aligned_out,
+        copied_tokens=copied_tokens,
         meta={"pairing": pairing, "eos_reached": trace.stopped_on_eos,
               "truncated": not trace.stopped_on_eos,
               # The old prefix-anchored diagnostic, kept so the change is auditable.

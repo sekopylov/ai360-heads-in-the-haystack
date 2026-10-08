@@ -207,11 +207,14 @@ class DetectionRun:
         primary = [str(h) for h in scores.ranked_heads()[:top_k]]
         if self.secondary is None:
             return {"primary": {scores.pairing: primary}}
-        other = [str(h) for h in self.secondary.ranked_heads()[:top_k]]
+        # `other` must be the *other* aggregate: using `self.secondary` unconditionally
+        # made `summary(secondary)` compare same_step with itself (overlap == top_k).
+        other_scores = self.scores if scores is self.secondary else self.secondary
+        other = [str(h) for h in other_scores.ranked_heads()[:top_k]]
         overlap = len(set(primary) & set(other))
         return {
             "primary": {scores.pairing: primary},
-            "secondary": {self.secondary.pairing: other},
+            "secondary": {other_scores.pairing: other},
             "top_k": top_k,
             "overlap": overlap,
             "jaccard": overlap / len(set(primary) | set(other)) if primary or other else float("nan"),
@@ -265,6 +268,13 @@ class DetectionRun:
             "n_instances_truncated": sum(
                 1 for i in self.instances
                 if i.meta.get("truncated", not i.meta.get("eos_reached", True))
+            ),
+            # Both head bases, so "62.5% of scoreable heads" and "8 of 336 heads"
+            # can be read from one artifact instead of two documents.
+            "n_all_heads": self.model_info.n_all_heads,
+            "n_instances_low_ceiling": sum(
+                1 for i in self.instances
+                if i.sample.get("tokenization_attainable_score", 1.0) < 0.98
             ),
             "mean_needle_prefix_recall": (
                 sum(i.meta.get("needle_prefix_recall", 0.0) for i in self.instances) / n
@@ -433,8 +443,9 @@ def run_detection(
         # the score relative to a per-token reading.
         "needle_tokens_mean": float(np.mean(needle_tokens)) if needle_tokens else 0.0,
         "unique_needle_tokens_mean": float(np.mean(unique_tokens)) if unique_tokens else 0.0,
-        "max_attainable_score_mean": float(np.mean(
-            [r.sample.get("max_attainable_score", 1.0) for r in results])) if results else 1.0,
+        "tokenization_attainable_mean": float(np.mean(
+            [r.sample.get("tokenization_attainable_score", 1.0)
+             for r in results])) if results else 1.0,
         "denominator_inflation": (
             float(np.mean(needle_tokens)) / float(np.mean(unique_tokens))
             if unique_tokens and float(np.mean(unique_tokens)) else 1.0

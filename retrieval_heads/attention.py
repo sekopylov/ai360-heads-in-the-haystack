@@ -342,7 +342,9 @@ class TokenMixerMasker(_HookGroup):
                             if isinstance(model, nn.Module) else None)
         resolved = []
         for layer in self.layers:
-            module = info.attention_modules.get(layer) or info.linear_modules.get(layer)
+            # `or` on an nn.Module would be wrong for a module whose __len__ is 0.
+            module = (info.attention_modules[layer] if layer in info.attention_modules
+                      else info.linear_modules.get(layer))
             if module is None:
                 raise KeyError(f"no token mixer found for layer {layer}")
             if model_module_ids is not None and id(module) not in model_module_ids:

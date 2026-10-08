@@ -104,6 +104,9 @@ def tiny_hybrid():
     these things through the integration tests.
     """
     transformers = pytest.importorskip("transformers")
+    for attr in ("Qwen3_5TextConfig", "Qwen3_5ForCausalLM"):
+        if not hasattr(transformers, attr):
+            pytest.skip(f"transformers {getattr(transformers, '__version__', '?')} has no {attr}")
     from retrieval_heads.models import build_model_info, require_scoreable
 
     config = transformers.Qwen3_5TextConfig(

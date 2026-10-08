@@ -373,7 +373,7 @@ def build_needle_sample(
         seed=seed,
         meta={"span_tight": tight, "span_straddles_boundary": straddles,
               "needle_text_ids": list(needle_text_ids),
-              "max_attainable_score": max_attainable},
+              "tokenization_attainable_score": max_attainable},
     )
     log.debug("built sample: %d tokens, needle %s (%d tok) at depth %.2f",
               len(ids), span, span[1] - span[0], depth)

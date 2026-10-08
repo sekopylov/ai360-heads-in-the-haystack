@@ -284,8 +284,14 @@ def model_device(model: nn.Module) -> torch.device:
 
 
 def _inhomogeneous(field: str, values: set[int]) -> int:
-    """0 for a model whose scoreable layers disagree on ``field`` -- loudly."""
-    log.warning("scoreable layers disagree on %s (%s); recording 0", field, sorted(values))
+    """0 for a model whose scoreable layers disagree on ``field`` -- loudly.
+
+    An empty set (no scoreable module at all) is not a disagreement: `require_scoreable`
+    reports that case, and warning here only added a misleading first line.
+    """
+    if values:
+        log.warning("scoreable layers disagree on %s (%s); recording 0",
+                    field, sorted(values))
     return 0
 
 

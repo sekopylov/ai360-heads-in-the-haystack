@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from typing import Any, Sequence
 
 import numpy as np
-import torch
 
 from retrieval_heads.scoring import RetrievalScores
 from retrieval_heads.utils import get_logger
@@ -224,6 +223,9 @@ class HeadOverlap:
     jaccard: float
     shared: list[str] = field(default_factory=list)
     only_a: list[str] = field(default_factory=list)
+    #: Which comparison produced this (the summarizer prints it; it used to be absent).
+    mode: str = "grid"
+    caveat: str | None = None
     only_b: list[str] = field(default_factory=list)
     score_correlation: float = float("nan")
     #: False when the two runs do not share a layer x head layout: ``jaccard`` is
@@ -234,6 +236,7 @@ class HeadOverlap:
     def as_dict(self) -> dict[str, Any]:
         return {
             "model_a": self.model_a, "model_b": self.model_b, "threshold": self.threshold,
+            "mode": self.mode, "caveat": self.caveat,
             "n_a": self.n_a, "n_b": self.n_b, "n_shared": self.n_shared,
             "jaccard": self.jaccard, "score_correlation": self.score_correlation,
             "comparable": self.comparable,

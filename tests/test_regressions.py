@@ -933,6 +933,7 @@ def test_run_detection_aggregates_streams_and_writes_conditional(tmp_path, monke
             needle_recall=0.9 if recited else 0.0, n_steps=1,
             aligned_scores={"next_step": {"L0H0": 0.9, "L0H1": 0.2},
                             "same_step": {"L0H0": 0.8, "L0H1": 0.1}},
+            copied_tokens={"next_step": {"L0H0": [11, 12]}, "same_step": {"L0H0": [11]}},
         )
 
     monkeypatch.setattr(detection, "build_needle_sample", fake_build)
@@ -954,6 +955,14 @@ def test_run_detection_aggregates_streams_and_writes_conditional(tmp_path, monke
         run.conditional["same_step"].sparsity()
     assert summary["config"]["grid_size"] == 2
     assert summary["needle_stats"]["denominator_inflation"] > 1.0   # 3 vs 2 unique
+    # All four needle statistics must actually be present (one was written under a
+    # different name and silently dropped).
+    for key in ("needle_tokens_mean", "unique_needle_tokens_mean",
+                "denominator_inflation", "tokenization_attainable_mean"):
+        assert key in summary["needle_stats"], (key, summary["needle_stats"])
+    # The numerator |g_h ∩ k| is auditable per head now.
+    instance = run.instances[0]
+    assert instance.copied_tokens["next_step"]["L0H0"], instance.copied_tokens
     assert summary["sparsity_recited"] is not None, "conditional matrices missing"
     assert summary["top_heads_recited"]
 
@@ -1179,6 +1188,17 @@ def test_score_instance_always_records_both_pairings():
     assert "compute_second_pairing" not in inspect.signature(score_instance).parameters
 
 
+def test_head_overlap_artifact_carries_its_mode():
+    from retrieval_heads.properties import head_overlap
+
+    a = RetrievalScores(info=attention_info(1, 2), score=torch.tensor([[0.9, 0.0]]),
+                        activation_freq=torch.zeros(1, 2), n_instances=1)
+    b = RetrievalScores(info=attention_info(1, 2), score=torch.tensor([[0.8, 0.0]]),
+                        activation_freq=torch.zeros(1, 2), n_instances=1)
+    payload = head_overlap(a, b, mode="grid").as_dict()
+    assert payload["mode"] == "grid", payload
+
+
 def test_plot_task_cot_gets_a_figure_title():
     import matplotlib.pyplot as plt
 
@@ -1243,6 +1263,12 @@ def test_detection_summary_surfaces_aligned_and_honours_the_pairing():
 
     same = run.summary(secondary)
     assert "same_step" in same["pairing_comparison"]["primary"], "primary pairing not honoured"
+    # It must compare same_step against next_step, not against itself (which gave
+    # overlap == top_k and jaccard == 1.0 in every sidecar).
+    comparison = same["pairing_comparison"]
+    assert set(comparison["primary"]) | set(comparison["secondary"]) == {
+        "next_step", "same_step"}, comparison
+    assert comparison["overlap"] < comparison["top_k"], comparison
     assert same["aligned_top_heads"][0]["head"] == "L0H1"      # same_step aligned ranking
     assert same["n_planned"] == 5
     # sink rate is per pairing now: the secondary summary must not show next_step's

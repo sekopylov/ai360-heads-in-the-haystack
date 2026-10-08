@@ -361,6 +361,8 @@ def cmd_mask(args: argparse.Namespace) -> int:
         chat_template=not args.no_chat_template,
         enable_thinking=None if args.thinking else False,
         corpus=corpus,
+        # Same prompt as detection measured (the config already carries it there).
+        system_prompt=getattr(args, "system_prompt", None),
     )
     k_values = resolve_k(args, info, default_fracs=DEFAULT_K_FRACS["mask"])
     log.info("masking K values %s (%.1f%%-%.1f%% of %d scoreable heads)",
