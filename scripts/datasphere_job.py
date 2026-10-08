@@ -68,7 +68,7 @@ SCALES: dict[str, dict[str, list[str]]] = {
         "mask": ["--k-frac", "0.01", "0.02", "0.04", "0.08", "0.17", "0.33",
                  "--lengths", "4096", "8192", "16384", "--random-trials", "5"],
         "qa": ["--k-frac", "0.04", "0.08", "0.17", "--random-trials", "5"],
-        "cot": ["--k-frac", "0.08", "--random-trials", "3"],
+        "cot": ["--k-frac", "0.08", "--random-trials", "3", "--max-new-tokens", "256"],
     },
 }
 

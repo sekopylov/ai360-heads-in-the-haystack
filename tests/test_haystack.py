@@ -82,6 +82,20 @@ def test_haystack_grows_with_target(tokenizer):
     assert large.length > small.length
 
 
+def test_load_corpus_rejects_an_empty_file(tmp_path):
+    """An empty corpus would silently fall back to the synthetic filler."""
+    from retrieval_heads.haystack import load_corpus
+
+    empty = tmp_path / "empty.txt"
+    empty.write_text("\n\n   \n", encoding="utf-8")
+    with pytest.raises(ValueError, match="no non-empty lines"):
+        load_corpus(empty)
+
+    real = tmp_path / "real.txt"
+    real.write_text("One sentence.\nAnother.\n", encoding="utf-8")
+    assert load_corpus(real) == ["One sentence.", "Another."]
+
+
 def test_filler_tokenizer_that_returns_nothing_raises_instead_of_hanging():
     class EmptyTok:
         def __call__(self, text, **kwargs):

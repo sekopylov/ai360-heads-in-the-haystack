@@ -253,14 +253,17 @@ def _generate_text(
 
 
 def _chat(tokenizer: Any, user: str, *, enable_thinking: bool | None,
-          chat_template: bool = True) -> str:
+          chat_template: bool = True, system_prompt: str | None = None) -> str:
     """`--no-chat-template` actually disables the template here, too."""
     if not chat_template:
         return user
     from retrieval_heads.haystack import render_chat
 
-    return render_chat(tokenizer, [{"role": "user", "content": user}],
-                       enable_thinking=enable_thinking)
+    messages: list[dict[str, str]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": user})
+    return render_chat(tokenizer, messages, enable_thinking=enable_thinking)
 
 
 # --------------------------------------------------------------------------- evaluators
@@ -275,6 +278,7 @@ def evaluate_extractive_qa(
     enable_thinking: bool | None = False,
     prefill_chunk: int | None = None,
     chat_template: bool = True,
+    system_prompt: str | None = None,
 ) -> float:
     """Mean word-level F1 on extractive QA."""
     masker = HeadMasker(model, info, masked_heads) if masked_heads else None
@@ -285,6 +289,7 @@ def evaluate_extractive_qa(
                 tokenizer,
                 f"{sample.context}\n\nQuestion: {sample.question}\nAnswer with the shortest exact span from the document.",
                 enable_thinking=enable_thinking, chat_template=chat_template,
+                system_prompt=system_prompt,
             )
             text = _generate_text(model, tokenizer, prompt, max_new_tokens=max_new_tokens,
                                   prefill_chunk=prefill_chunk)
@@ -307,6 +312,7 @@ def evaluate_reasoning(
     enable_thinking: bool | None = False,
     prefill_chunk: int | None = None,
     chat_template: bool = True,
+    system_prompt: str | None = None,
 ) -> float:
     """Accuracy on reasoning tasks, with or without chain-of-thought."""
     instruction = (
@@ -320,7 +326,8 @@ def evaluate_reasoning(
     try:
         for sample in samples:
             prompt = _chat(tokenizer, f"{sample.question}\n\n{instruction}",
-                           enable_thinking=enable_thinking, chat_template=chat_template)
+                           enable_thinking=enable_thinking, chat_template=chat_template,
+                           system_prompt=system_prompt)
             text = _generate_text(model, tokenizer, prompt, max_new_tokens=max_new_tokens,
                                   prefill_chunk=prefill_chunk)
             hits.append(accuracy(final_answer(text), sample.answer))
@@ -345,6 +352,7 @@ def qa_ablation(
     prefill_chunk: int | None = 4096,
     enable_thinking: bool | None = False,
     chat_template: bool = True,
+    system_prompt: str | None = None,
 ) -> dict[str, Any]:
     """Extractive QA: baseline, retrieval heads masked, random heads masked.
 
@@ -356,14 +364,16 @@ def qa_ablation(
                                       max_new_tokens=max_new_tokens,
                                       prefill_chunk=prefill_chunk,
                                       enable_thinking=enable_thinking,
-                                      chat_template=chat_template)
+                                      chat_template=chat_template,
+                                      system_prompt=system_prompt)
     log.info("QA baseline F1=%.1f", baseline)
     rng = np.random.default_rng(seed)
     out: dict[str, Any] = {"task": "extractive_qa", "baseline_f1": baseline,
                            "n_samples": len(samples), "k_values": list(k_values),
                            "n_scoreable_heads": info.n_scoreable_heads,
                            "enable_thinking": enable_thinking,
-                           "chat_template": chat_template, "by_k": {}}
+                           "chat_template": chat_template,
+                           "system_prompt": system_prompt, "by_k": {}}
     retrieval_ranked = scores.ranked_heads()
     pool, contaminated = control_pool(scores)
     if contaminated:
@@ -383,10 +393,12 @@ def qa_ablation(
                                               masked_heads=top, max_new_tokens=max_new_tokens,
                                               prefill_chunk=prefill_chunk,
                                               enable_thinking=enable_thinking,
-                                              chat_template=chat_template)
-        trials, overlaps = [], []
+                                              chat_template=chat_template,
+                                              system_prompt=system_prompt)
+        trials, overlaps, picks = [], [], []
         for _ in range(n_random_trials):
             pick = [pool[i] for i in rng.permutation(len(pool))[:k_eff]]
+            picks.append([str(h) for h in pick])
             # How many of the "random" heads are actually retrieval heads: the
             # audit trail for the control, stored instead of trusted.
             overlaps.append(sum(1 for h in pick if h in set(top)))
@@ -394,7 +406,8 @@ def qa_ablation(
                                                  masked_heads=pick, max_new_tokens=max_new_tokens,
                                                  prefill_chunk=prefill_chunk,
                                                  enable_thinking=enable_thinking,
-                                                 chat_template=chat_template))
+                                                 chat_template=chat_template,
+                                                 system_prompt=system_prompt))
         out["by_k"][str(k)] = {
             "k_effective": k_eff,
             "retrieval_f1": f1_retrieval,
@@ -404,6 +417,7 @@ def qa_ablation(
             "drop_retrieval": baseline - f1_retrieval,
             "drop_random": baseline - float(np.mean(trials)),
             "masked_heads": [str(h) for h in top],
+            "random_picks": picks,
         }
         log.info("QA k=%d: retrieval F1=%.1f (drop %.1f) | random F1=%.1f (drop %.1f)",
                  k, f1_retrieval, baseline - f1_retrieval, np.mean(trials),
@@ -425,6 +439,7 @@ def cot_ablation(
     prefill_chunk: int | None = 4096,
     enable_thinking: bool | None = False,
     chat_template: bool = True,
+    system_prompt: str | None = None,
 ) -> dict[str, Any]:
     """Reasoning accuracy with/without CoT, and with/without retrieval heads.
 
@@ -446,7 +461,8 @@ def cot_ablation(
                            "n_non_retrieval_heads": len(pool),
                            "random_control_contaminated": contaminated,
                            "enable_thinking": enable_thinking,
-                           "chat_template": chat_template, "results": {}}
+                           "chat_template": chat_template,
+                           "system_prompt": system_prompt, "results": {}}
 
     for cot in (False, True):
         variant = "cot" if cot else "answer_only"
@@ -454,22 +470,26 @@ def cot_ablation(
                                       max_new_tokens=max_new_tokens,
                                       prefill_chunk=prefill_chunk,
                                       enable_thinking=enable_thinking,
-                                      chat_template=chat_template)
+                                      chat_template=chat_template,
+                                      system_prompt=system_prompt)
         masked_retrieval = evaluate_reasoning(model, tokenizer, info, samples, cot=cot,
                                               masked_heads=retrieval_ranked[:k_eff],
                                               max_new_tokens=max_new_tokens,
                                               prefill_chunk=prefill_chunk,
                                               enable_thinking=enable_thinking,
-                                              chat_template=chat_template)
-        trials, overlaps = [], []
+                                              chat_template=chat_template,
+                                              system_prompt=system_prompt)
+        trials, overlaps, picks = [], [], []
         for _ in range(n_random_trials):
             pick = [pool[i] for i in rng.permutation(len(pool))[:k_eff]]
+            picks.append([str(h) for h in pick])
             overlaps.append(sum(1 for h in pick if h in set(retrieval_ranked[:k_eff])))
             trials.append(evaluate_reasoning(model, tokenizer, info, samples, cot=cot,
                                              masked_heads=pick, max_new_tokens=max_new_tokens,
                                              prefill_chunk=prefill_chunk,
                                              enable_thinking=enable_thinking,
-                                             chat_template=chat_template))
+                                             chat_template=chat_template,
+                                             system_prompt=system_prompt))
         out["results"][variant] = {
             "baseline": baseline,
             "retrieval_masked": masked_retrieval,
@@ -478,6 +498,9 @@ def cot_ablation(
             "random_retrieval_overlap": overlaps,
             "drop_retrieval": baseline - masked_retrieval,
             "drop_random": baseline - float(np.mean(trials)),
+            # The intervention sets: this artifact used to record neither.
+            "masked_heads": [str(h) for h in retrieval_ranked[:k_eff]],
+            "random_picks": picks,
         }
         log.info("CoT=%s: baseline=%.1f retrieval-masked=%.1f random-masked=%.1f",
                  cot, baseline, masked_retrieval, np.mean(trials))

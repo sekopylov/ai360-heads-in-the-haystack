@@ -502,11 +502,14 @@ def needle_recall(generated_text: str, needle_text: str) -> float:
     a correct extractive answer starts mid-needle.  The old prefix-anchored walk gave
     such answers 0.0 and silently dropped them from the recited-only matrices.
     """
-    needle_words = [_norm_word(word) for word in needle_text.split()]
+    needle_words = [word for word in (_norm_word(w) for w in needle_text.split()) if word]
     if not needle_words:
         return 0.0
-    generated_words = [_norm_word(word)
-                       for word in generated_text.replace("*", " ").lower().split()]
+    # Drop pure-punctuation "words": they normalise to "" and would match each
+    # other, inflating the recall on punctuation noise.
+    generated_words = [word for word in
+                       (_norm_word(w) for w in generated_text.replace("*", " ").lower().split())
+                       if word]
     return lcs_length(needle_words, generated_words) / len(needle_words)
 
 

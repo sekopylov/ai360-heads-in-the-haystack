@@ -186,6 +186,33 @@ def test_eager_capture_and_sdpa_prefill_agree_on_positions(tiny_hybrid):
     assert positions("eager") == positions("sdpa")
 
 
+def test_prefill_and_capture_really_use_different_kernels(tiny_hybrid, monkeypatch):
+    """Comparing positions is not enough: a no-op switch would agree too.
+
+    transformers reads `config._attn_implementation` at forward time, so this spies
+    on the implementation in effect for the multi-token prefill body versus the
+    single-token capture steps.
+    """
+    model, info = tiny_hybrid
+    ids = _ids(length=24)
+    seen: list[tuple[int, str]] = []
+    original = model.forward
+
+    def spy(*args, **kwargs):
+        seen.append((int(kwargs["input_ids"].shape[1]), model.config._attn_implementation))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(model, "forward", spy)
+    decode_with_attention(model, info, ids, max_new_tokens=2, capture_method="patch",
+                          prefill_impl="sdpa", capture_impl="eager", stop_on_eos=False)
+
+    body = [impl for length, impl in seen if length > 1]
+    steps = [impl for length, impl in seen if length == 1]
+    assert body, seen
+    assert all(impl == "sdpa" for impl in body), seen
+    assert steps and all(impl == "eager" for impl in steps), seen
+
+
 def test_argmax_domain_is_recorded_and_positions_stay_in_the_prompt(tiny_hybrid):
     model, info = tiny_hybrid
     ids = _ids(length=24)

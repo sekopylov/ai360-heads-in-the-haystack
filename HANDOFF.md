@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 205 tests: 188 fast (`pytest -m "not integration"`, ~12 s), 17 integration against
+* 210 tests: 193 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
   the real checkpoints. All green.
 * A full GPU run finished successfully (job `bt1hqv1b91ht36s2egdp`, ~39 min,
   NVIDIA L4): 75 instances per model, masking curves, QA, CoT, correlation, nine
@@ -31,6 +31,27 @@ tied to a job id) → this file (where things stand and what is left).
   died after 5 of 9 PDFs (it catches only `ValueError`).  Fixed, and now covered by
   a default-metric tripwire plus an end-to-end `cmd_figures` test on a synthetic
   tree -- the missing test is exactly why it slipped through.
+* **`--system-prompt` is now on every command** (it had landed only on `detect`, so
+  `mask` read a non-existent attribute and always got `None`).  Ablations prefer the
+  value `detect` recorded in `scores.meta['config']` and warn when `--system-prompt`
+  disagrees, so a causal run cannot silently measure a different prompt; `qa`/`cot`
+  thread it into `_chat` and record it in their artifacts.
+* **`figures` now also writes `masking_recall.pdf`** -- the F1/EM panel is the
+  confounded series, so the recall one ships beside it instead of only being
+  available via `metric="recall"`.
+* Other fixes from the same pass: `cmd_figures`' guard catches any exception (a
+  malformed artifact's `KeyError` still killed the stage); `reproduce_laptop.sh`
+  passes `--out` to `describe` so the census artifact exists; an empty `--corpus`
+  file is an error rather than a silent fallback to synthetic filler; `_norm_word`
+  punctuation-only tokens no longer match each other; `resolve_k` rejects a mixed
+  negative list instead of dropping the negatives; the depth cut snaps to the
+  nearest space (depth 0.0 no longer lands after the first word); `_versions` is
+  cached (importing matplotlib per artifact write); `AttentionRecorder.method`
+  defaults to `patch` as the README says; `qa`/`cot` artifacts record their masked
+  heads and random picks; `SCALES['paper']['cot']` pins `--max-new-tokens 256`;
+  CI pins torch to the lock's version.  A new test spies on
+  `config._attn_implementation` during the prefill body and the capture steps, so
+  "the kernel switch is a no-op" can no longer pass by comparing positions alone.
 * **The masking curve now records the LCS needle recall** (`retrieval_recall`,
   `random_recall_mean`, `baseline_recall`, `metric="recall"`).  F1/EM compare
   against the whole needle while the question asks for a sub-span, so a correct
@@ -363,7 +384,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 205 passed (188 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 210 passed (193 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

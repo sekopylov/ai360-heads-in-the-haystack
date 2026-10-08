@@ -22,7 +22,9 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          # torch is pinned to the DataSphere lock's version: a floating torch means
+          # a green CI does not certify the environment the results came from.
+          python -m pip install "torch==2.10.0" --index-url https://download.pytorch.org/whl/cpu
           # transformers is pinned to the version the DataSphere lock uses (5.18.0):
           # the code depends on its internals, so an unpinned major bump can change
           # behaviour without any test noticing.

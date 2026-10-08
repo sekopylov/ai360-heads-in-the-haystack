@@ -402,14 +402,14 @@ meaningful within a family.
   default). With `full` the already-generated positions compete too, which makes a
   head's credit depend on how much the model happened to generate; the two domains
   give different head sets, and every artifact records which one was used.
-* **The random control is drawn from the non-retrieval pool, and that biases the
-  contrast *in favour* of the treatment.** Treatment heads are picked for a high
-  retrieval score, control heads for a low one, so if the score correlates with a
-  head's general importance the gap is overstated relative to the paper's uniform
-  draw over all heads. `control_pool` excludes everything above the threshold and
-  the per-trial overlap with the retrieval arm is recorded, so the choice is
-  visible rather than implied -- but "random barely moves it" should be read with
-  that direction in mind. No uniform-control arm is implemented.
+* **The random control is drawn from the non-retrieval pool, as the paper does.**
+  `tex-src` says "masking out random *non-retrieval* heads" (intro and Sec. 4), and
+  `control_pool` implements exactly that: everything above the threshold is
+  excluded, and the per-trial overlap with the retrieval arm is recorded so the
+  exclusion is auditable. An earlier note here claimed the paper drew uniformly
+  over all heads and that this biased the contrast; that was wrong about the paper.
+  The one thing to keep in mind is the hybrid: its pool is only 18 of 48 heads, so
+  at large K the control is nearly the whole pool and `random_std` collapses.
 * **The masking curve measures F1/EM against the whole needle, while the question
   asks for a sub-span**, so a correct short answer is penalised by the metric
   itself. The curve also records the LCS needle recall (`retrieval_recall`,

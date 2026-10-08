@@ -60,7 +60,9 @@ def _deterministic() -> bool:
         return False
 
 
+@lru_cache(maxsize=1)
 def _versions() -> dict[str, str]:
+    # Cached: importing matplotlib on every artifact write cost seconds per save.
     out = {"python": sys.version.split()[0]}
     for name in ("torch", "transformers", "numpy", "matplotlib"):
         try:

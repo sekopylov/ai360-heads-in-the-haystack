@@ -1290,6 +1290,39 @@ def test_cmd_figures_writes_every_figure(tmp_path):
         assert name in produced, (name, sorted(produced))
 
 
+def test_every_ablation_command_accepts_system_prompt():
+    """detect/mask/qa/cot must expose the flag, or mask silently measures None."""
+    from retrieval_heads.cli import build_parser
+
+    parser = build_parser()
+    for command in ("detect", "mask", "qa", "cot"):
+        args = parser.parse_args([command, "--model", "m", "--system-prompt", "be terse"])
+        assert args.system_prompt == "be terse", command
+
+
+def test_mask_reuses_the_system_prompt_detect_recorded(caplog):
+    """Without the flag the recorded value wins; a clash is loud."""
+    import logging
+    from types import SimpleNamespace
+
+    from retrieval_heads.cli import resolve_system_prompt
+
+    scores = SimpleNamespace(meta={"config": {"system_prompt": "recorded"}})
+    assert resolve_system_prompt(SimpleNamespace(system_prompt=None), scores) == "recorded"
+    with caplog.at_level(logging.WARNING):
+        assert resolve_system_prompt(
+            SimpleNamespace(system_prompt="different"), scores) == "different"
+    assert "different prompt" in caplog.text
+
+
+def test_resolve_k_rejects_a_mixed_negative_list():
+    from retrieval_heads.cli import resolve_k
+
+    info = attention_info(1, 4)
+    with pytest.raises(SystemExit, match="positive throughout"):
+        resolve_k(_Args(k=[-1, 5]), info)
+
+
 def test_aligned_credits_are_a_subset_of_the_loose_ones():
     """The strict variant must never credit a token the paper's rule does not."""
     from retrieval_heads.scoring import (

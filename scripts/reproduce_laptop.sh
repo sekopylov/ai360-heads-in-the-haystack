@@ -21,7 +21,9 @@ for m in "${MODELS[@]}"; do RUNS+=("results/$m"); done
 
 echo "### 1/6 architecture census"
 for m in "${MODELS[@]}"; do
-  "$PY" -m retrieval_heads.cli describe --model "$m"
+  # --out: without it no model_info.json is written and the census artifact is
+  # missing from the run tree (the driver passes it; this script did not).
+  "$PY" -m retrieval_heads.cli describe --model "$m" --out "results/$m"
 done
 
 echo "### 2/6 retrieval-head detection (laptop grid)"

@@ -52,7 +52,15 @@ _TEMPLATES: tuple[str, ...] = (
 def load_corpus(path: str | Path) -> list[str]:
     """Load filler sentences from a text file (one sentence per line)."""
     lines = [ln.strip() for ln in Path(path).read_text(encoding="utf-8").splitlines()]
-    return [ln for ln in lines if ln]
+    corpus = [ln for ln in lines if ln]
+    if not corpus:
+        # An empty file would silently fall back to the synthetic filler, i.e. the
+        # experiment would change without saying so.
+        raise ValueError(
+            f"{path} contains no non-empty lines; refusing to fall back to the "
+            f"synthetic filler (the run would not be the one you asked for)"
+        )
+    return corpus
 
 
 class HaystackBuilder:
@@ -288,9 +296,15 @@ def build_needle_sample(
             raise ValueError("needle already occurs in the filler; pick a more unique needle")
 
         cut = int(len(filler) * depth)
-        # snap to the nearest whitespace so we never split a word
-        while cut < len(filler) and not filler[cut].isspace():
-            cut += 1
+        if 0 < cut < len(filler) and not filler[cut].isspace():
+            # Snap to the *nearest* whitespace.  Snapping forward pushed depth=0.0
+            # past the first word (a systematic shift on a grid where the endpoints
+            # carry much of the weight); depth 0 and 1 now stay at the true ends.
+            back = filler.rfind(" ", 0, cut)
+            forward = filler.find(" ", cut)
+            back = 0 if back < 0 else back
+            forward = len(filler) if forward < 0 else forward
+            cut = back if (cut - back) <= (forward - cut) else forward
         # A space after the needle, before the newline: without it the tokenizer
         # fuses the needle's last character with the newline (`.` + `\n` -> `".\n"`),
         # so the span's last token is not a needle token and the score's ceiling

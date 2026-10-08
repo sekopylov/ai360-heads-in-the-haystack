@@ -95,6 +95,27 @@ def require_matching_scores(scores, info) -> None:
         )
 
 
+def resolve_system_prompt(args: argparse.Namespace, scores: Any) -> str | None:
+    """The system prompt an ablation must use to match detection.
+
+    ``--system-prompt`` wins when given, but the value detection recorded in
+    ``scores.meta['config']`` is the safer default: without it the ablation would
+    silently measure a different prompt (the exact class of drift
+    ``require_matching_scores`` exists to prevent).
+    """
+    recorded = ((getattr(scores, "meta", None) or {}).get("config") or {}).get(
+        "system_prompt")
+    requested = getattr(args, "system_prompt", None)
+    if requested is None:
+        if recorded:
+            log.info("using the system prompt recorded by detect")
+        return recorded
+    if recorded is not None and requested != recorded:
+        log.warning("--system-prompt differs from the one detect recorded; this ablation "
+                    "measures a different prompt")
+    return requested
+
+
 def default_out_dir(model_arg: str, out: str | None) -> Path:
     """Where a command writes when ``--out`` is omitted.
 
@@ -216,12 +237,13 @@ def resolve_k(args: argparse.Namespace, info, *, default_fracs: Sequence[float] 
     """
     raw_k = getattr(args, "k", None)
     raw_frac = getattr(args, "k_frac", None)
-    if raw_k is not None and not any(int(k) > 0 for k in raw_k):
-        raise SystemExit("--k must contain at least one positive value")
-    if raw_frac is not None and not any(float(f) > 0 for f in raw_frac):
-        raise SystemExit("--k-frac must contain at least one positive value")
-    ks = [int(k) for k in (raw_k or []) if k > 0]
-    fracs = [float(f) for f in (raw_frac or []) if f > 0]
+    if raw_k is not None and any(int(k) <= 0 for k in raw_k):
+        # A mixed list like [-1, 5] used to drop the negative silently.
+        raise SystemExit(f"--k must be positive throughout, got {list(raw_k)}")
+    if raw_frac is not None and any(float(f) <= 0 for f in raw_frac):
+        raise SystemExit(f"--k-frac must be positive throughout, got {list(raw_frac)}")
+    ks = [int(k) for k in (raw_k or [])]
+    fracs = [float(f) for f in (raw_frac or [])]
     if not ks and not fracs:
         fracs = [float(f) for f in default_fracs]
 
@@ -340,6 +362,8 @@ def cmd_mask(args: argparse.Namespace) -> int:
     model, tokenizer, info = _load(args.model, dtype=args.dtype)
     require_matching_scores(scores, info)
     corpus = load_corpus(args.corpus) if args.corpus else None
+    # Must match what detect measured: prefer the recorded value, warn on a clash.
+    system_prompt = resolve_system_prompt(args, scores)
 
     # The eval needle is held out of detection: selecting heads on the same text
     # they are then scored on inflates the retrieval arm (paper: "additional set").
@@ -363,8 +387,7 @@ def cmd_mask(args: argparse.Namespace) -> int:
         chat_template=not args.no_chat_template,
         enable_thinking=None if args.thinking else False,
         corpus=corpus,
-        # Same prompt as detection measured (the config already carries it there).
-        system_prompt=getattr(args, "system_prompt", None),
+        system_prompt=system_prompt,
     )
     k_values = resolve_k(args, info, default_fracs=DEFAULT_K_FRACS["mask"])
     log.info("masking K values %s (%.1f%%-%.1f%% of %d scoreable heads)",
@@ -443,7 +466,8 @@ def cmd_qa(args: argparse.Namespace) -> int:
                          seed=args.seed, max_new_tokens=args.max_new_tokens,
                          prefill_chunk=normalize_prefill_chunk(args.prefill_chunk),
                          enable_thinking=None if args.thinking else False,
-                         chat_template=not args.no_chat_template)
+                         chat_template=not args.no_chat_template,
+                         system_prompt=resolve_system_prompt(args, scores))
     save_json(add_provenance(result, dtype=info.dtype), out_dir / "task_qa.json")
     return 0
 
@@ -471,7 +495,8 @@ def cmd_cot(args: argparse.Namespace) -> int:
                           seed=args.seed, max_new_tokens=args.max_new_tokens,
                           prefill_chunk=normalize_prefill_chunk(args.prefill_chunk),
                           enable_thinking=None if args.thinking else False,
-                          chat_template=not args.no_chat_template)
+                          chat_template=not args.no_chat_template,
+                          system_prompt=resolve_system_prompt(args, scores))
     save_json(add_provenance(result, dtype=info.dtype), out_dir / "task_cot.json")
     return 0
 
@@ -531,10 +556,11 @@ def cmd_figures(args: argparse.Namespace) -> int:
 
     def safe(name: str, factory) -> None:
         # One unplottable figure (e.g. mixer sweeps with different K sets) must not
-        # abort the stage after half the PDFs were already written.
+        # abort the stage after half the PDFs were already written.  Catching only
+        # ValueError still let a malformed artifact's KeyError kill the stage.
         try:
             save_fig(factory(), fig_dir / name)
-        except ValueError as exc:
+        except Exception as exc:  # noqa: BLE001 - a figure must never kill the stage
             log.warning("skipping figure %s: %s", name, exc)
 
     if runs:
@@ -550,6 +576,10 @@ def cmd_figures(args: argparse.Namespace) -> int:
         safe("corr_map.pdf", lambda: plot_corr_map(corr))
     if curves:
         safe("masking_heads.pdf", lambda: plot_masking_curve(curves))
+        # F1/EM score against the whole needle while the question asks for a
+        # sub-span, so the confounded series is not the only one shipped: the LCS
+        # recall is plotted beside it.
+        safe("masking_recall.pdf", lambda: plot_masking_curve(curves, metric="recall"))
     # QA/CoT are per-model figures; the old code plotted only the first run and
     # silently dropped the rest.  With one run the filenames stay as documented;
     # with several each gets a label suffix.
@@ -594,6 +624,10 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--pairing", default="next_step", choices=["next_step", "same_step"])
         p.add_argument("--no-chat-template", action="store_true")
         p.add_argument("--thinking", action="store_true", help="leave the model's thinking mode on")
+        p.add_argument("--system-prompt", default=None,
+                       help="system message for the chat template; it must be the same "
+                            "for detect and every ablation, or they measure different "
+                            "prompts (detect records it in scores.meta['config'])")
         p.add_argument("--dtype", default=None, choices=["float32", "bfloat16"],
                        help="override the registry dtype (bfloat16 on GPU)")
         # Also accepted per-subcommand (not just before it): job drivers build
@@ -617,9 +651,6 @@ def build_parser() -> argparse.ArgumentParser:
                    choices=["output_attentions", "patch"],
                    help="patch (default) keys captured maps by layer_idx and cannot "
                         "be confused by attention-map ordering")
-    p.add_argument("--system-prompt", default=None,
-                   help="system message used by the chat template (keep it identical "
-                        "between detect and the ablations)")
     p.add_argument("--argmax-domain", default="prompt", choices=["prompt", "full"],
                    help="positions the attention argmax may choose from; 'prompt' is "
                         "the paper's input-token criterion, 'full' also allows the "

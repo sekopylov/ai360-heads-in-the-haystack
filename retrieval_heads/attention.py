@@ -82,7 +82,9 @@ class AttentionRecorder:
 
     model: nn.Module
     info: ModelInfo
-    method: str = "output_attentions"
+    #: "patch" is the production default (keyed by layer_idx); "output_attentions"
+    #: remains available and is what the ordering tests exercise.
+    method: str = "patch"
 
     # -- public API ---------------------------------------------------------
     @contextmanager
