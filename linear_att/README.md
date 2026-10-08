@@ -103,6 +103,35 @@ python plot_results.py --head_score head_score/mamba2-2.7b-hf.json \
 * `figs/mask_..._heatmaps.png`: NIAH-тепловые карты (длина × глубина), как в статье: без
   маски, top-K и random-K.
 
+## Логи и мониторинг
+
+Каждый скрипт пишет лог одновременно в консоль и в файл `logs/<script>_<дата_время>.log`.
+Ссылка `logs/<script>_latest.log` всегда указывает на последний запуск. Смотреть процесс:
+
+```bash
+tail -f logs/detect_retrieval_heads_latest.log
+tail -f logs/mask_heads_niah_latest.log
+# или запуск в фоне:
+nohup python detect_retrieval_heads.py ... > /dev/null 2>&1 &
+```
+
+Что попадает в лог:
+* аргументы, версии torch/transformers, GPU, наличие ядер `mamba_ssm`/`causal_conv1d`,
+  время загрузки модели, число параметров;
+* **детекция**: на каждый прогон NIAH строка вида
+  `[detect 37/120 30.8% | 0:12:03 elapsed | ETA 0:27:05] USED len=1500 (1312 tok) depth=40% rouge=100.0 | gen 1.2s score 3.4s | cuda:0 6.1/9.8G | answer: '...'`.
+  Затем топ голов этого прогона, текущий средний топ голов и текущие числа по корзинам
+  (<0.1 / 0.1–0.4 / ≥0.4);
+* **маскирование**: прогресс внутри конфигурации и общий ETA по всем конфигурациям,
+  текущая точность, итоговая строка `==> top-50: NIAH = ...`, в конце сводная таблица;
+* `--log_level DEBUG`: время и максимальный score на каждый слой, сгенерированный ответ,
+  список маскируемых голов.
+
+Промежуточные результаты сохраняются после каждого использованного прогона
+(`head_score/*.json`) и каждой конфигурации маскирования (`results/*.json`). Поэтому
+графики можно строить и во время работы, а `mask_heads_niah.py` после остановки
+продолжит с места, где закончил.
+
 Если модель редко решает NIAH (меньше ~10 успешных прогонов), уменьшите `--lengths` или
 добавьте `--accumulate_all`.
 
@@ -110,6 +139,7 @@ python plot_results.py --head_score head_score/mamba2-2.7b-hf.json \
 * `mamba2_implicit_attention.py`: неявное внимание Mamba-2, подсчёт hard/soft retrieval
   score через hooks (работает и с torch-путём, и с CUDA-ядрами), маскирование голов,
   жадное декодирование.
+* `log_utils.py`: логирование (консоль + файл, прогресс, ETA, память GPU).
 * `niah_utils.py`: построение NIAH-промптов (портировано из кода авторов), ROUGE.
 * `detect_retrieval_heads.py`, `mask_heads_niah.py`, `plot_results.py`,
   `verify_implicit_attention.py`: скрипты.

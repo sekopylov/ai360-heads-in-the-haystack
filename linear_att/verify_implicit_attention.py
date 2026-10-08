@@ -13,6 +13,7 @@ import argparse
 
 import torch
 
+from log_utils import add_logging_args, load_model_logged, setup_logging
 from mamba2_implicit_attention import (get_backbone, get_mixers, mamba2_implicit_attention,
                                        mamba2_ssm_inputs, mask_heads)
 
@@ -23,12 +24,11 @@ def main():
     ap.add_argument("--dtype", default="float32", choices=["float32", "bfloat16", "float16"])
     ap.add_argument("--seq_len", type=int, default=300)
     ap.add_argument("--layers", type=int, nargs="*", default=None)
+    add_logging_args(ap)
     args = ap.parse_args()
+    log = setup_logging("verify_implicit_attention", args)
 
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    tok = AutoTokenizer.from_pretrained(args.model)
-    model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=getattr(torch, args.dtype),
-                                                 device_map="auto").eval()
+    tok, model = load_model_logged(args.model, args.dtype)
     mixers = get_mixers(model)
     layers = args.layers if args.layers else sorted({0, len(mixers) // 2, len(mixers) - 1})
 
@@ -36,6 +36,7 @@ def main():
             "The secret number is 4823. Remember it. " + "Paul Graham writes essays. " * 20)
     ids = tok(text, return_tensors="pt").input_ids[0, : args.seq_len]
     T = ids.numel()
+    log.info(f"checking layers {layers} on a {T}-token sequence")
 
     store = {}
     hooks = []
@@ -56,7 +57,7 @@ def main():
     ok = True
     for li in layers:
         if ("y", li) not in store:
-            print(f"layer {li}: mixer.norm hook did not fire (fused kernel path?) - cannot compare")
+            log.info(f"layer {li}: mixer.norm hook did not fire (fused kernel path?) - cannot compare")
             ok = False
             continue
         m = mixers[li]
@@ -66,7 +67,7 @@ def main():
         y_true = store[("y", li)][0].float().reshape(T, m.num_heads, m.head_dim)
         rel = (y_rec - y_true).norm() / y_true.norm()
         per_head = ((y_rec - y_true).norm(dim=(0, 2)) / y_true.norm(dim=(0, 2)).clamp_min(1e-9))
-        print(f"layer {li:3d}: relative error {rel.item():.2e}   (worst head {per_head.max().item():.2e})")
+        log.info(f"layer {li:3d}: relative error {rel.item():.2e}   (worst head {per_head.max().item():.2e})")
         ok &= rel.item() < (1e-3 if args.dtype == "float32" else 5e-2)
 
     # masking check
@@ -84,9 +85,12 @@ def main():
     hk.remove()
     y = store["y"][0].float().reshape(T, m.num_heads, m.head_dim)[:, hh]
     skip = m.D.float()[hh] * x[:, hh]
-    print(f"masked head ({li},{hh}): max dt = {dt[:, hh].max().item():.2e}, "
+    log.info(f"masked head ({li},{hh}): max dt = {dt[:, hh].max().item():.2e}, "
           f"|y - D x| / |y| = {((y - skip).norm() / y.norm()).item():.2e}  (should be ~0)")
-    print("OK" if ok else "CHECK FAILED")
+    if ok:
+        log.info("OK: implicit attention reproduces the SSM output")
+    else:
+        log.error("CHECK FAILED")
 
 
 if __name__ == "__main__":

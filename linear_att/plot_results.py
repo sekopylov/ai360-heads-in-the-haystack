@@ -12,6 +12,8 @@ import os
 
 import matplotlib
 
+from log_utils import add_logging_args, get_logger, setup_logging
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
@@ -76,10 +78,10 @@ def plot_counts(M, n_runs, title, out):
     fig.tight_layout()
     fig.savefig(out, dpi=150)
     plt.close(fig)
-    print(f"saved {out}:  " + ", ".join(f"{b[0]}: {c}" for b, c in zip(BINS, counts)))
+    get_logger().info(f"saved {out}:  " + ", ".join(f"{b[0]}: {c}" for b, c in zip(BINS, counts)))
     top = np.argsort(-s)[:20]
-    print("top-20 heads (layer-head:score):",
-          ", ".join(f"{i // M.shape[1]}-{i % M.shape[1]}:{s[i]:.3f}" for i in top))
+    get_logger().info("top-20 heads (layer-head:score): " +
+                      ", ".join(f"{i // M.shape[1]}-{i % M.shape[1]}:{s[i]:.3f}" for i in top))
 
 
 def niah_matrix(runs):
@@ -121,9 +123,9 @@ def plot_masking(res, title, out):
     fig.tight_layout()
     fig.savefig(out, dpi=150)
     plt.close(fig)
-    print(f"saved {out}")
+    get_logger().info(f"saved {out}")
     for k, m, s in zip(rks, rnd_mean, rnd_std):
-        print(f"  K={k:4d}: top={top[k]:6.2f}   random={m:6.2f}±{s:.2f}")
+        get_logger().info(f"  K={k:4d}: top={top[k]:6.2f}   random={m:6.2f}±{s:.2f}")
 
     # NIAH heatmaps: no mask / top-Kmax / random-Kmax (paper-style)
     kmax = max(k for k in ks)
@@ -148,7 +150,7 @@ def plot_masking(res, title, out):
     out2 = out.replace(".png", "_heatmaps.png")
     fig.savefig(out2, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(f"saved {out2}")
+    get_logger().info(f"saved {out2}")
 
 
 def main():
@@ -157,7 +159,9 @@ def main():
     ap.add_argument("--mask_results", nargs="*", default=[])
     ap.add_argument("--title", default=None)
     ap.add_argument("--out_dir", default="figs")
+    add_logging_args(ap)
     args = ap.parse_args()
+    setup_logging("plot_results", args)
     os.makedirs(args.out_dir, exist_ok=True)
 
     if args.head_score:

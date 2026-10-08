@@ -27,10 +27,14 @@ mistralai/Mamba-Codestral-7B-v0.1). B, C, x, dt are recomputed from the
 mixer input inside a forward-pre-hook, so it is independent of whether the
 model internally runs the torch path or the CUDA kernels.
 """
+import logging
+import time
 from contextlib import contextmanager
 
 import torch
 import torch.nn.functional as F
+
+logger = logging.getLogger("rh")
 
 
 def get_mixers(model):
@@ -168,6 +172,7 @@ class Mamba2RetrievalScorer:
     def _layer_score(self, li, mixer, hs):
         c = self._ctx
         dev = hs.device
+        t_layer = time.time()
         x, B, C, dt, A = mamba2_ssm_inputs(mixer, hs)
         ids = c["full_ids"].to(dev)
         q_all = c["query_idx"].to(dev)
@@ -204,6 +209,13 @@ class Mamba2RetrievalScorer:
         n = float(ne - ns)
         c["hard"][li] = (hard / n).cpu()
         c["soft"][li] = (soft / n).cpu()
+        if logger.isEnabledFor(logging.DEBUG):
+            if dev.type == "cuda":
+                torch.cuda.synchronize(dev)
+            best = int(c["hard"][li].argmax())
+            logger.debug(f"    layer {li:3d}: {time.time() - t_layer:.3f}s | T={T} Q={q_all.numel()} | "
+                         f"max hard={c['hard'][li].max():.3f} (head {best}) | max soft={c['soft'][li].max():.3f} "
+                         f"| heads with hard>=0.1: {int((c['hard'][li] >= 0.1).sum())}")
 
     @torch.no_grad()
     def score(self, full_ids, query_idx, gen_tokens, needle_start, needle_end):
@@ -211,10 +223,14 @@ class Mamba2RetrievalScorer:
                          needle_start=needle_start, needle_end=needle_end,
                          hard=torch.zeros(self.L, self.H), soft=torch.zeros(self.L, self.H))
         try:
+            t0 = time.time()
             backbone = get_backbone(self.model)
             first_dev = next(self.model.parameters()).device
             backbone(input_ids=full_ids[None].to(first_dev), use_cache=False)
-            return self._ctx["hard"], self._ctx["soft"]
+            hard, soft = self._ctx["hard"], self._ctx["soft"]
+            logger.debug(f"  teacher-forced scoring pass: {time.time() - t0:.1f}s, T={full_ids.numel()}, "
+                         f"steps={query_idx.numel()}, needle=[{needle_start},{needle_end})")
+            return hard, soft
         finally:
             self._ctx = None
 
@@ -235,7 +251,10 @@ def mask_heads(model, heads, mode="dt"):
     mode="out" : zero the head's columns of out_proj (removes the whole head output).
     """
     mixers = get_mixers(model)
+    heads = list(heads)
     saved = []
+    if heads:
+        logger.debug(f"masking {len(heads)} heads (mode={mode}): {heads[:20]}{' ...' if len(heads) > 20 else ''}")
     try:
         with torch.no_grad():
             for (l, h) in heads:
@@ -278,6 +297,7 @@ def greedy_answer(model, tokenizer, input_ids, max_new_tokens=50):
     prompt + answer reproduces the generation exactly."""
     dev = next(model.parameters()).device
     ids = input_ids[None].to(dev)
+    t0 = time.time()
     out = model.generate(ids, attention_mask=torch.ones_like(ids), max_new_tokens=max_new_tokens,
                          do_sample=False, use_cache=True,
                          pad_token_id=tokenizer.pad_token_id if tokenizer.pad_token_id is not None
@@ -292,4 +312,6 @@ def greedy_answer(model, tokenizer, input_ids, max_new_tokens=50):
             break
         res.append(t)
         has_content = has_content or bool(piece.strip())
+    logger.debug(f"  generate: prompt {ids.shape[1]} tok, {len(gen)} new tok ({len(res)} kept) in "
+                 f"{time.time() - t0:.1f}s: {tokenizer.decode(res)!r}")
     return res
