@@ -44,7 +44,7 @@ def samples_from_grid(args, enc):
     for ni, needle in enumerate(haystack.load_needles(args.haystack_dir)):
         if args.needle is not None and ni != args.needle:
             continue
-        text = haystack.read_haystack(needle["haystack_dir"], max(context_lengths))
+        text = haystack.read_haystack(needle["haystack_dir"], max(context_lengths), sort=not args.legacy)
         tokens = enc.encode(text)
         for context_length in context_lengths:
             for depth in depths:

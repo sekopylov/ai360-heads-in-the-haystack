@@ -19,10 +19,14 @@ def load_needles(haystack_dir):
     return needles
 
 
-def read_haystack(haystack_dir, max_context_length):
+def read_haystack(haystack_dir, max_context_length, sort=False):
+    """sort=False: the order of the file system, as in the authors' code; sort=True: as in rh.tasks."""
+    files = glob.glob(f"{haystack_dir}/*.txt")
+    if sort:
+        files = sorted(files)
     context = ""
     while len(context.split()) < max_context_length:
-        for file in glob.glob(f"{haystack_dir}/*.txt"):
+        for file in files:
             with open(file, 'r') as f:
                 context += f.read()
     return context
