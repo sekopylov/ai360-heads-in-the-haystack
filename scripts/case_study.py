@@ -15,7 +15,6 @@ import json
 import sys
 from pathlib import Path
 
-import numpy as np
 import torch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -29,21 +28,28 @@ from retrieval_heads.scoring import (  # noqa: E402
     credits_from_trace,
     decode_with_attention,
 )
+from retrieval_heads.provenance import add_provenance  # noqa: E402
 from retrieval_heads.utils import HeadRef, save_json  # noqa: E402
 
 
 def top_heads(credits, info, k=5):
-    denom = max(len(credits), 1)
     ranked = sorted(info.scoreable_heads, key=lambda h: -len(credits[h]))
     return ranked[:k]
 
 
 def find_copy_step(trace, sample, head: HeadRef, pairing: str):
-    """First decoding step at which ``head`` pastes a needle token."""
+    """First decoding step at which ``head`` pastes a needle token.
+
+    Steps are filtered by ``applies_to`` exactly as the scorer does: the captured
+    prefill row belongs to ``next_step`` only, so using it for ``same_step`` would
+    draw a panel the scorer does not credit.
+    """
     needle_set = set(sample.needle_ids)
     start, end = sample.needle_span
     prompt = sample.input_ids[0]
     for step in trace.steps:
+        if step.applies_to is not None and pairing not in step.applies_to:
+            continue
         token = step.fed_token if pairing == "same_step" else step.predicted_token
         if token not in needle_set:
             continue
@@ -79,6 +85,10 @@ def main() -> int:
 
     trace, generated = decode_with_attention(
         model, info, sample.input_ids, max_new_tokens=args.max_new_tokens, tokenizer=tokenizer,
+        # This script needs the real attention distribution for its figure, so it
+        # opts into storing the rows; everything else keeps argmax only.  The
+        # chunked prefill avoids the one-shot fp32 path that OOM'd at 16K.
+        prefill_chunk=4096, store_rows=True,
     )
     credits, _, considered = credits_from_trace(trace, sample, info, pairing=args.pairing)
     print("generated:", repr(tokenizer.decode(generated, skip_special_tokens=True)[:220]), "\n")
@@ -91,25 +101,36 @@ def main() -> int:
               f"tokens={sorted(credits[head])}")
 
     strong = ranked[0]
-    weak = next((h for h in reversed(info.scoreable_heads) if not credits[h]), ranked[-1])
     step_s, token_s, pos_s = find_copy_step(trace, sample, strong, args.pairing)
-    step_w, _, _ = find_copy_step(trace, sample, weak, args.pairing) if credits[weak] else (None, None, None)
-    step_w = step_w or step_s
     if step_s is None:
         print("no copy step found -- try a longer context or more new tokens")
         return 1
 
+    # Fig. 1 compares two heads *at the same step*.  Pick a non-retrieval head that
+    # actually has a row in this step; never fall back to the strong head's row
+    # under the weak head's label (that drew the same panel twice).
+    weak = next(
+        (h for h in reversed(info.scoreable_heads)
+         if not credits[h] and h.layer in step_s.attn
+         and h.head < step_s.attn[h.layer].shape[0]),
+        None,
+    )
     distributions = {
-        f"{strong} copying token {token_s!r} (input position {pos_s})": 
+        f"{strong} copying token {token_s!r} (input position {pos_s})":
             (step_s.attn[strong.layer][strong.head].numpy(), sample.needle_span),
-        f"{weak} (score {len(credits[weak]) / denom:.2f}) at the same step": 
-            (step_w.attn[weak.layer][weak.head].numpy(), sample.needle_span),
     }
+    if weak is None:
+        print("no non-retrieval head has an attention row at this step; "
+              "plotting the strong head only")
+    else:
+        distributions[f"{weak} (score {len(credits[weak]) / denom:.2f}) at the same step"] = (
+            step_s.attn[weak.layer][weak.head].numpy(), sample.needle_span,
+        )
     fig_dir = Path(args.out) / "figures"
     save_fig(plot_attention_distribution(distributions), fig_dir / "retrieval_attention_dist.pdf")
 
     save_json(
-        {
+        add_provenance({
             "model": info.name,
             "pairing": args.pairing,
             "prompt_tokens": sample.length,
@@ -126,7 +147,7 @@ def main() -> int:
                 "step": step_s.step,
                 "argmax_attention": float(step_s.attn[strong.layer][strong.head].max()),
             },
-        },
+        }),
         Path(args.out) / "case_study.json",
     )
     return 0

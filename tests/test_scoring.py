@@ -107,15 +107,58 @@ def test_same_step_credits_the_fed_token():
 
 
 def test_wrong_token_at_needle_position_is_not_credited():
-    """Criterion (2) needs *both* the right position and the same token."""
+    """Criterion (2) needs *both* the right position and the same token.
+
+    The prediction (8) *is* a needle token, so criterion (1) passes; head 0's
+    argmax sits inside the needle but on the other needle token (7), so only the
+    same-token half of criterion (2) can reject it.  (The earlier version of this
+    test predicted a token outside the needle, so criterion (1) short-circuited
+    and the equality check was never exercised.)
+    """
     sample = FakeSample([11, 7, 8, 12, 13], (1, 3))
-    info = make_info()
-    # head points inside the needle, but the input token there (7) != prediction (9)
+    info = make_info(num_layers=1, heads=2)
     trace = DecodeTrace(prompt_len=5, steps=[
-        StepTrace(step=0, fed_token=1, predicted_token=9, attn={0: spike(2, 5, {0: 1, 1: 1})}),
+        StepTrace(step=0, fed_token=1, predicted_token=8,
+                  attn={0: spike(2, 5, {0: 1, 1: 2})}),
     ])
     credits, _, _ = credits_from_trace(trace, sample, info, pairing="next_step")
-    assert credits[HeadRef(0, 0)] == set()
+    assert credits[HeadRef(0, 0)] == set()   # inside the needle, but points at 7, not 8
+    assert credits[HeadRef(0, 1)] == {8}     # points at 8 and predicts 8
+
+
+def test_prefill_row_is_scoped_to_next_step():
+    """The row that produces the first token must not leak into same_step.
+
+    ``decode_with_attention`` captures the last prompt row under
+    ``applies_to=("next_step",)``.  Without that scope the two pairings would
+    score different token streams (next_step used to be unable to credit the
+    first generated token at all).
+    """
+    sample = FakeSample([11, 7, 8, 12, 13], (1, 3))   # needle [7, 8]
+    info = make_info(num_layers=1, heads=2)
+    trace = DecodeTrace(prompt_len=5, steps=[
+        # prefill row: predicts 7; head 0 points at position 1 (== 7)
+        StepTrace(step=-1, fed_token=13, predicted_token=7,
+                  attn={0: spike(2, 5, {0: 1, 1: 2})}, applies_to=("next_step",)),
+        # first decode step: fed 7, predicts 8; head 0 points at 7, head 1 at 8
+        StepTrace(step=0, fed_token=7, predicted_token=8,
+                  attn={0: spike(2, 6, {0: 1, 1: 2})}),
+    ])
+
+    nxt, _, _ = credits_from_trace(trace, sample, info, pairing="next_step")
+    assert nxt[HeadRef(0, 0)] == {7}         # prefill row credits the first token
+    assert nxt[HeadRef(0, 1)] == {8}         # decode step credits the second
+
+    same, _, _ = credits_from_trace(trace, sample, info, pairing="same_step")
+    assert same[HeadRef(0, 0)] == {7}        # the prefill row is not scored here
+    assert same[HeadRef(0, 1)] == set()      # this row points at 8, fed token is 7
+
+    # The strict variant filters the same way, so its stream positions stay aligned.
+    strict_next = credits_aligned(trace, sample, info, pairing="next_step")
+    assert strict_next[HeadRef(0, 0)] == {7}
+    assert strict_next[HeadRef(0, 1)] == {8}
+    strict_same = credits_aligned(trace, sample, info, pairing="same_step")
+    assert strict_same[HeadRef(0, 0)] == {7}
 
 
 def test_denominator_is_unique_needle_tokens():
@@ -144,6 +187,19 @@ def test_aligned_matching_rejects_out_of_order_tokens():
     strict = credits_aligned(trace, sample, info, pairing="next_step")
     # in-order walk matches only the "7" at the very end (needle[0] == 7)
     assert strict[HeadRef(0, 0)] == {7}
+
+
+def test_credits_ignore_layers_the_model_does_not_score():
+    """The `patch` capture can report a module this model has no head count for."""
+    sample = FakeSample([11, 7, 8, 12, 13], (1, 3))
+    info = make_info(num_layers=1, heads=2)
+    trace = DecodeTrace(prompt_len=5, steps=[
+        StepTrace(step=0, fed_token=1, predicted_token=7,
+                  argmax={0: torch.tensor([1, 3]), 99: torch.tensor([1])}),
+    ])
+    credits, _, _ = credits_from_trace(trace, sample, info, pairing="next_step")
+    assert credits[HeadRef(0, 0)] == {7}
+    assert HeadRef(99, 0) not in credits
 
 
 def test_needle_recall_is_case_insensitive():

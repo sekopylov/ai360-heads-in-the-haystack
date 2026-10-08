@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-import torch
 
 from retrieval_heads.downstream import accuracy, final_answer, word_f1
 from retrieval_heads.masking import normalized_contains, token_f1

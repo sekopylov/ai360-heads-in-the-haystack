@@ -1,0 +1,59 @@
+name: tests
+
+on: [push, pull_request]
+
+jobs:
+  fast:
+    # The fast suite needs no weights: tests that load checkpoints are marked
+    # `integration` and deselected.  Python 3.10 matches the DataSphere job image;
+    # 3.12 is the newest the pinned wheels support cleanly.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          # transformers is pinned to the version the DataSphere lock uses (5.18.0):
+          # the code depends on its internals, so an unpinned major bump can change
+          # behaviour without any test noticing.
+          python -m pip install "transformers==5.18.0" numpy matplotlib tqdm
+          # test dependencies, pinned in pyproject's [dev] extra: pyyaml and
+          # packaging are imported directly by the DataSphere config tests.
+          python -m pip install pytest pyyaml packaging
+
+      # Tokenizer-only files (~7 MB, no weights), verified against the sha256 pins
+      # in configs/models.json.  Without them ten tokenizer-dependent tests --
+      # needle-span recovery, insertion depth, prompt rendering, realized context
+      # length -- would skip silently.
+      - name: Fetch and verify tokenizer files
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, urllib.request
+
+          entry = json.load(open("configs/models.json", encoding="utf-8"))["models"]["qwen3-0.6b"]
+          dest = "models/Qwen3-0.6B"
+          os.makedirs(dest, exist_ok=True)
+          for name, want in (entry.get("files") or {}).items():
+              url = f"https://huggingface.co/{entry['repo']}/resolve/main/{name}"
+              with urllib.request.urlopen(url, timeout=60) as response:  # noqa: S310
+                  data = response.read()
+              got = hashlib.sha256(data).hexdigest()
+              if got != want:
+                  raise SystemExit(f"{name}: sha256 {got} != pinned {want}")
+              with open(os.path.join(dest, name), "wb") as fh:
+                  fh.write(data)
+          print("tokenizer files verified against the registry pins")
+          PY
+
+      - name: Fast test suite
+        run: python -m pytest -m "not integration"

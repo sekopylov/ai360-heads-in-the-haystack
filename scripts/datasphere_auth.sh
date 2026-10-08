@@ -22,28 +22,36 @@
 #   .venv-datasphere/bin/datasphere project get --id bt1u5v72b71eesdhp9k5
 #
 # Переопределяемое: DATASPHERE_TOKEN_CACHE, DATASPHERE_PROJECT_ID (пусто = не
-# проверять токен), DATASPHERE_TOKEN_MAX_AGE_MIN, YC_BIN.
+# проверять токен), DATASPHERE_TOKEN_MAX_AGE_MIN, YC_BIN.  Внутренние переменные
+# префиксованы `_rh_`, чтобы скрипт не затирал одноимённые переменные
+# вызывающего шелла (раньше он делал `unset YC_BIN`).
 
 _repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-CACHE="${DATASPHERE_TOKEN_CACHE:-$_repo_root/.cache/datasphere/iam-token}"
-PROJECT_ID="${DATASPHERE_PROJECT_ID-bt1u5v72b71eesdhp9k5}"
-YC_BIN="${YC_BIN:-$(command -v yc || echo "$HOME/yandex-cloud/bin/yc")}"
-MAX_AGE_MIN="${DATASPHERE_TOKEN_MAX_AGE_MIN:-660}"   # ~11 часов из 12
+_rh_cache="${DATASPHERE_TOKEN_CACHE:-$_repo_root/.cache/datasphere/iam-token}"
+_rh_project="${DATASPHERE_PROJECT_ID-bt1u5v72b71eesdhp9k5}"
+_rh_yc="${YC_BIN:-$(command -v yc || echo "$HOME/yandex-cloud/bin/yc")}"
+_rh_max_age="${DATASPHERE_TOKEN_MAX_AGE_MIN:-660}"   # ~11 часов из 12
 
-# Проверка токена дешёвым запросом к DataSphere API (пустой PROJECT_ID отключает).
+# Проверка токена дешёвым запросом к DataSphere API (пустой PROJECT_ID отключает
+# саму проверку, но не требование непустого токена).
+#
+# Токен передаётся curl через конфиг на stdin (`-K -`), а не аргументом, поэтому
+# он не виден в `ps` и /proc/*/cmdline.
 _token_is_valid() {
-  [ -z "$PROJECT_ID" ] && return 0
   [ -n "$1" ] || return 1
-  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 \
-        -H "Authorization: Bearer $1" \
-        "https://datasphere.api.cloud.yandex.net/datasphere/v2/projects/$PROJECT_ID")" = "200" ]
+  [ -z "$_rh_project" ] && return 0
+  local _rh_code
+  _rh_code=$(printf 'header = "Authorization: Bearer %s"\nurl = "%s"\n' \
+      "$1" "https://datasphere.api.cloud.yandex.net/datasphere/v2/projects/$_rh_project" \
+    | curl -s -o /dev/null -w '%{http_code}' --max-time 15 -K -)
+  [ "$_rh_code" = "200" ]
 }
 
 _token=""
 
 # 1. Собственный кэш: файл свежее MAX_AGE_MIN минут и токен ещё рабочий.
-if [ -s "$CACHE" ] && [ -z "$(find "$CACHE" -mmin +"$MAX_AGE_MIN" 2>/dev/null)" ]; then
-  _cached=$(cat "$CACHE")
+if [ -s "$_rh_cache" ] && [ -z "$(find "$_rh_cache" -mmin +"$_rh_max_age" 2>/dev/null)" ]; then
+  _cached=$(cat "$_rh_cache")
   if _token_is_valid "$_cached"; then
     _token="$_cached"
   else
@@ -54,7 +62,7 @@ fi
 # 2. Иначе — `yc` (при истёкшей федеративной сессии он откроет вкладку).
 if [ -z "$_token" ]; then
   echo "datasphere_auth: запрашиваю токен через yc (если сессия истекла — откроется вкладка консоли)" >&2
-  _candidate=$(YC_NO_BROWSER=1 "$YC_BIN" iam create-token 2>/dev/null | tail -1)
+  _candidate=$(YC_NO_BROWSER=1 "$_rh_yc" iam create-token 2>/dev/null | tail -1)
   if _token_is_valid "$_candidate"; then
     _token="$_candidate"
   else
@@ -64,13 +72,15 @@ fi
 
 if [ -z "$_token" ]; then
   echo "datasphere_auth: не удалось получить токен (проверь 'yc init' и сеть)" >&2
-  unset _cached _candidate CACHE PROJECT_ID YC_BIN MAX_AGE_MIN
+  unset _cached _candidate _token _rh_cache _rh_project _rh_yc _rh_max_age _repo_root
   return 1 2>/dev/null || exit 1
 fi
 
-mkdir -p "$(dirname "$CACHE")"
-printf '%s' "$_token" > "$CACHE"
-chmod 600 "$CACHE"
+mkdir -p "$(dirname "$_rh_cache")"
+# umask 077 in a subshell: the secret must never exist with the default 0644
+# permissions, and a sourced script must not change the caller's umask.
+( umask 077; printf '%s' "$_token" > "$_rh_cache" )
+chmod 600 "$_rh_cache"   # covers a cache file left by an earlier version
 export YC_IAM_TOKEN="$_token"
-echo "datasphere_auth: YC_IAM_TOKEN готов (${#_token} символов, кэш: $CACHE)" >&2
-unset _cached _candidate _token CACHE PROJECT_ID YC_BIN MAX_AGE_MIN _repo_root
+echo "datasphere_auth: YC_IAM_TOKEN готов (${#_token} символов, кэш: $_rh_cache)" >&2
+unset _cached _candidate _token _rh_cache _rh_project _rh_yc _rh_max_age _repo_root

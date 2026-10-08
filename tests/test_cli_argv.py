@@ -3,13 +3,15 @@
 ``scripts/datasphere_job.py`` builds ``retrieval_heads.cli`` argument vectors and
 runs them inside a DataSphere job.  A mismatch between the two (a flag the CLI does
 not accept, or a global option placed after the subcommand) is only discovered
-after a full job round trip -- ~9 minutes of environment build before the entry
-point even starts.  That already happened once, so the contract is pinned here.
+after a full job round trip -- tens of seconds with the cached venv, minutes when
+the platform builds the environment -- before the entry point even starts.  That
+already happened once, so the contract is pinned here.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -85,6 +87,18 @@ def test_scales_use_fraction_not_absolute_k(driver):
             assert "--k" not in flags, f"{profile}/{stage} must not pin absolute K"
 
 
+def test_shell_scripts_use_fraction_not_absolute_k():
+    """The reproduce scripts must follow the same rule as the driver's SCALES."""
+    scripts = sorted((REPO_ROOT / "scripts").glob("reproduce_*.sh"))
+    assert scripts, "no reproduce scripts found"
+    for path in scripts:
+        text = path.read_text(encoding="utf-8")
+        assert not re.search(r"(?<![\w-])--k(?![\w-])", text), (
+            f"{path.name}: absolute --k is not comparable across models; use --k-frac"
+        )
+        assert "--k-frac" in text, f"{path.name}: expected --k-frac"
+
+
 def test_strip_flag_removes_both_spellings(driver):
     """The re-exec must not forward --use-venv again, or it would loop forever."""
     assert driver.strip_flag(["--use-venv", "/p", "--weights", "/w"], "--use-venv") == \
@@ -94,15 +108,17 @@ def test_strip_flag_removes_both_spellings(driver):
     assert driver.strip_flag(["--weights", "/w"], "--use-venv") == ["--weights", "/w"]
 
 
-def test_bootstrap_needs_no_weights_but_a_normal_run_does(driver):
+def test_bootstrap_needs_no_weights_but_a_normal_run_does(driver, capsys):
     ok = driver.parse_args(["--bootstrap-venv", "/disk/rh-venv"])
     assert ok.bootstrap_venv == "/disk/rh-venv"
 
     cached = driver.parse_args(["--use-venv", "/disk/rh-venv", "--weights", "/w"])
     assert cached.use_venv == "/disk/rh-venv"
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit) as excinfo:
         driver.parse_args(["--models", "qwen3-0.6b"])   # neither weights nor bootstrap
+    assert excinfo.value.code == 2, "argparse usage errors exit with code 2"
+    assert "--weights" in capsys.readouterr().err
 
 
 def test_driver_has_exactly_one_main_and_it_runs_the_stages():
@@ -126,5 +142,8 @@ def test_driver_has_exactly_one_main_and_it_runs_the_stages():
     assert "reexec_into_venv" in called, "main() must honour --use-venv"
     assert "prepare_models" in called, "main() must link the checkpoints"
 
-    top_level = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
-    assert len(top_level) == len([n for n in tree.body if isinstance(n, ast.FunctionDef)])
+    # The old assertion compared a set's size to the list's size, which is a
+    # tautology; the thing worth guarding is duplicate function names.
+    names = [node.name for node in tree.body if isinstance(node, ast.FunctionDef)]
+    duplicates = sorted({n for n in names if names.count(n) > 1})
+    assert not duplicates, f"duplicate top-level function names: {duplicates}"

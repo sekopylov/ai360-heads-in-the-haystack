@@ -7,14 +7,21 @@ requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 dependencies = [
     "torch>=2.4",
-    "transformers>=4.57",
+    # Upper bound because the code reaches into transformers internals that v5
+    # exposes (`_attn_implementation`, patching module-level
+    # `eager_attention_forward`, the `dtype=` kwarg, `_can_record_outputs` order).
+    # A major bump can change those; the DataSphere lock pins 5.18.0.
+    "transformers>=5.18,<5.19",
     "numpy>=1.24",
     "matplotlib>=3.7",
     "tqdm>=4.60",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+# pyyaml and packaging are imported directly by tests/test_datasphere_configs.py;
+# relying on them arriving transitively (accelerate -> pyyaml, pip -> packaging)
+# makes the test suite fragile on a lean install.
+dev = ["pytest>=8.0", "pyyaml>=6.0", "packaging>=23.0"]
 
 [project.scripts]
 retrieval-heads = "retrieval_heads.cli:main"

@@ -1,3 +1,13 @@
-pytorch==2.0.1
-transformers==4.37.2
-flash-attn==2.5.6
+# Runtime dependencies -- mirrors [project].dependencies in pyproject.toml.
+#
+# This is NOT the DataSphere job lock. That file is
+# scripts/requirements-datasphere.txt, and it must stay comment-free because the
+# CLI runs packaging.Requirement() over every line (docs/datasphere-findings.md
+# section 4). The previous contents here (pytorch==2.0.1, transformers==4.37.2,
+# flash-attn) were leftovers from another project and could not load Qwen3.5,
+# whose model_type qwen3_5 requires transformers>=5.18,<5.19.
+torch>=2.4
+transformers>=5.18,<5.19
+numpy>=1.24
+matplotlib>=3.7
+tqdm>=4.60

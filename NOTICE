@@ -1,0 +1,23 @@
+retrieval-heads
+Copyright 2026 the retrieval-heads contributors
+
+This project (the `retrieval_heads/` package, `scripts/`, `configs/`, `tests/`,
+`docs/` and `README.md`) is licensed under the Apache License, Version 2.0; see
+LICENSE. It is an independent re-implementation of the method in
+
+    Wu, Wang, Xiao, Peng, Fu.
+    "Retrieval Head Mechanistically Explains Long-Context Factuality", 2024.
+
+Third-party material bundled in this repository is NOT covered by that license
+and remains under its own authors' terms:
+
+  * `source/` -- the original authors' reference code for the paper above
+    (`retrieval_head_detection.py`, `faiss_attn/`, `viz/`, `head_score/`, ...).
+    Vendored for comparison only. The `retrieval_heads/` package was written
+    without reading or reusing it; see HANDOFF.md section 7.
+  * `source/PaulGrahamEssays/` -- a text corpus of Paul Graham essays, used only
+    as an optional Needle-in-a-Haystack haystack.
+  * `tex-src/` -- the LaTeX sources of the paper above.
+
+Model checkpoints (Qwen3.5-0.8B, Qwen3-0.6B) are downloaded, not distributed
+here, and carry their own licenses from their publishers.

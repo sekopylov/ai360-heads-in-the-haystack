@@ -49,22 +49,25 @@ numbers can be read against a normal transformer.
 # torch (CPU wheel; drop the index-url for a CUDA build)
 uv venv .venv
 uv pip install --python .venv/bin/python torch --index-url https://download.pytorch.org/whl/cpu
-uv pip install --python .venv/bin/python transformers accelerate numpy matplotlib tqdm
+uv pip install --python .venv/bin/python 'transformers>=5.18,<5.19' numpy matplotlib tqdm
 uv pip install --python .venv/bin/python pytest          # for the test suite
 
 # ~1.7 GB + ~1.5 GB of weights, checksum-verified
 ./scripts/download_models.sh
 ```
 
-Requires `transformers >= 4.57` — Qwen3.5 (`model_type: qwen3_5`) is not in older
-releases.
+Requires `transformers >= 5.18,<5.19` — Qwen3.5 (`model_type: qwen3_5`) is not in
+older releases, and the code reaches into v5 internals (patched
+`eager_attention_forward`, `_attn_implementation`, the `dtype=` kwarg), so a
+major bump is not assumed to work. The DataSphere lock pins `5.18.0`.
 
 > **Note on the weight filenames.** Qwen3.5-0.8B's index points at a single shard
 > literally named `model.safetensors-00001-of-00001.safetensors`; there is no
 > `model.safetensors`. Fetching the obvious name returns a 15-byte
 > `Entry not found` body that loads as a corrupt checkpoint. `download_models.sh`
-> reads the real name out of `model.safetensors.index.json`, and both files are
-> pinned by SHA-256.
+> takes the real shard names from the `shards` block of `configs/models.json` (the
+> registry is the single source of truth; the index file is not parsed), and every
+> file is pinned by SHA-256.
 
 ---
 
@@ -72,8 +75,8 @@ releases.
 
 ```bash
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
-.venv/bin/python -m retrieval_heads.cli detect   --model qwen3.5-0.8b --profile laptop
-.venv/bin/python -m retrieval_heads.cli mask     --model qwen3.5-0.8b --k 1 2 4 8 16
+.venv/bin/python -m retrieval_heads.cli detect   --model qwen3.5-0.8b --profile laptop  # writes the .npz
+.venv/bin/python -m retrieval_heads.cli mask     --model qwen3.5-0.8b --k-frac 0.02 0.04 0.08 0.17 0.33
 .venv/bin/python -m retrieval_heads.cli figures  --runs results/qwen3.5-0.8b
 ```
 
@@ -85,6 +88,12 @@ Or the whole thing:
 pytest -m "not integration"                # fast unit suite
 pytest                                     # + real-checkpoint tests
 ```
+
+**CI coverage.** `.github/workflows/tests.yml` runs only the fast suite: the
+`integration` tests load 3.2 GB of checkpoints, which is not viable on every push.
+They are the ones that actually exercise architecture discovery, attention
+capture (both paths), chunked-prefill equivalence and the head-mask identity, so
+run `pytest` locally after touching `models.py`, `attention.py` or `scoring.py`.
 
 ### On a Yandex DataSphere GPU job
 
@@ -137,8 +146,11 @@ repeated token. We use the number of **unique** needle tokens — the only
 self-consistent reading.
 
 **Which attention row.** “The attention scores of a head” at the step where `w`
-is generated can be paired with `w` in two ways. Both are computed from a single
-decoding pass (no extra forward passes):
+is generated can be paired with `w` in two ways. Both come out of the same greedy
+decoding pass, so the choice is a reporting decision rather than a compute
+decision. (`next_step` does need one extra single-token forward: the row that
+*produces* the first generated token belongs to the prefill, not to a decode
+step.)
 
 | `pairing` | the row | mechanism |
 |---|---|---|
@@ -151,6 +163,17 @@ Qwen3.5-0.8B a single instance already ranks different heads top (see Results),
 so both are stored in every run and the choice is a reporting decision, never
 silently baked in.
 
+Both pairings cover **exactly the generated token stream, first token included**.
+That needs one extra forward pass: the last prompt token is fed on its own under
+the capture kernel, because its attention row is the one that *produces* the first
+generated token, and `next_step` used to be unable to credit that token while
+`same_step` always could.  That row is stored with `applies_to=("next_step",)` so
+it cannot leak into `same_step`, and it costs `(heads, kv_len)` like any decode
+step.  Symmetrically, when decoding stops on `max_new_tokens` the final row
+predicted a token that was never emitted, so it is scoped to `same_step` and
+`next_step` cannot credit a hypothetical token
+(`retrieval_heads/scoring.py`).
+
 ### Detection grid
 
 The paper's full recipe is 3 needle sets × 20 lengths in 1K–50K × 10 insertion
@@ -160,8 +183,12 @@ named profiles:
 | profile | grid | use |
 |---|---|---|
 | `smoke` | 1 × 1 × 1 | CI / sanity |
-| `laptop` | 2 × 3 (1K, 2K, 4K) × 3 = 18 | this repo's runs |
+| `laptop` | 2 × 3 (1K, 2K, 4K) × 3 = 18 | `scripts/reproduce_laptop.sh` (CPU) |
 | `paper` | 3 × 7 × 10 | GPU |
+
+The masking and downstream grids used for the reported run are somewhat wider than
+the profile table (`t4` in `scripts/datasphere_job.py`: 3 × 5 × 5 = 75 detection
+instances per model).
 
 Filler text is generated from a seeded word list (offline, deterministic);
 `--corpus FILE` swaps in a real corpus such as the Paul Graham essays.
@@ -174,7 +201,7 @@ Filler text is generated from a seeded word list (offline, deterministic);
 |---|---|---|
 | `retrieval_heads/models.py` | — | **architecture-aware head discovery**: separates softmax attention from linear/recurrent mixers |
 | `retrieval_heads/haystack.py` | 3 | needle insertion at a given depth; token span recovered from character offsets |
-| `retrieval_heads/attention.py` | 3, 4.1 | attention capture (public `output_attentions` **or** a monkeypatch fallback) and head / token-mixer ablation hooks |
+| `retrieval_heads/attention.py` | 3, 4.1 | attention capture (`patch` by default, keyed by `layer_idx`; public `output_attentions` as the alternative) and head / token-mixer ablation hooks |
 | `retrieval_heads/scoring.py` | 3 | the retrieval score: two criteria, both pairings, dense layer × head matrices |
 | `retrieval_heads/detection.py` | 3 | the detection driver and its configurable grid |
 | `retrieval_heads/properties.py` | 4 | sparsity buckets, activation-frequency gap, Pearson correlation, head-set overlap |
@@ -203,6 +230,14 @@ Filler text is generated from a seeded word list (offline, deterministic);
 
 ## Results
 
+**Scope.** What is tested here is the *mechanism* (which heads matter, and what
+happens when they are removed), not the paper's quantitative replication: the grid
+is 75 instances per model (3 needles x 5 depths x 5 lengths) against ~600, the
+models are 0.6B/0.8B against 6-34B across four families, the context is up to 16K
+against 1K-50K, and the downstream stage uses 8 hand-written QA items and 8
+arithmetic items against MMLU/MuSiQue/GSM8K.  Read the tables as "the mechanism
+reproduces", not "the numbers reproduce".
+
 The numbers below come from one GPU run
 ([job `bt1hqv1b91ht36s2egdp`](https://datasphere.yandex.cloud/communities/bt1dv4jmd0u81i806t74/projects/bt1u5v72b71eesdhp9k5/job/bt1hqv1b91ht36s2egdp),
 NVIDIA L4, ~39 min) over **75 instances per model** — 3 needles x 5 depths x 5
@@ -213,12 +248,21 @@ time with
 .venv/bin/python scripts/summarize_results.py ds-results
 ```
 
-**A caveat on the length axis of that run.**  It used the pre-fix filler sizing, so
-requested lengths 1K-16K came out as **1.6K-26K** (realized values are recorded per
-instance in `instances_*.jsonl`).  The grid is still five geometrically spaced
-contexts, so the conclusions hold, but the labels in the tables below are the
-*realized* ones.  The committed code lands within a couple of percent of what it is
-asked for.
+**Two caveats on these tables.**
+
+1. **They predate the current code.**  The committed `ds-results/` was produced by
+   an earlier version of the pipeline and was not regenerated after the masking,
+   pairing and length corrections.  In particular the retrieval arm used to
+   saturate at the number of heads above the 0.1 threshold, which is why
+   Qwen3-0.6B shows an identical 56.8 F1 at K=36, 76 and 148.  Treat these
+   numbers as historical, not as what the code now produces.
+2. **The length axis was over budget.**  That run used the pre-fix filler sizing,
+   so requested lengths 1K-16K came out as **1.6K-26K** (realized values are
+   recorded per instance in `instances_*.jsonl`).  The grid is still five
+   geometrically spaced contexts, so the conclusions hold, but the labels in the
+   tables below are the *realized* ones.  The committed code now renders the whole
+   prompt, measures it and re-budgets the filler, landing within **~2%** of the
+   request (measured as low as 0.5% at the detection grid's own depths).
 
 ### Detection
 
@@ -227,16 +271,28 @@ asked for.
 | Qwen3-0.6B (dense) | 73/75 | 0.96 | `L16H14` | 0.86 | 22/448 (**4.9%**) | 5/448 (1.1%) |
 | Qwen3.5-0.8B (hybrid) | 53/75 | 0.70 | `L11H1` | 0.74 | 30/48 (**62.5%**) | 8/48 (16.7%) |
 
-**The dense control reproduces the paper's sparsity claim; the hybrid does not.**
+**The dense head clears the paper's headline bucket; the rest of the distribution
+does not match Fig. 2, and the hybrid does not either.**
 4.9% of Qwen3-0.6B's heads clear the 0.1 threshold, inside the paper's quoted 3-6%,
-and 1.1% clear 0.5, consistent with "less than 5%".  Qwen3.5-0.8B has 62.5% of its 48
-scoreable heads above 0.1.  Two readings, both worth stating:
+and 1.1% clear 0.5, consistent with "less than 5%".  But the paper's Fig. 2 shows
+45-73% of heads *zeroed* and 25-52% "weak"; this run has 29.5% zeroed and 65.6%
+weak, so only the top bucket lines up.  Qwen3.5-0.8B has 62.5% of its 48 scoreable
+heads above 0.1.  Note also that the 62.5% is an *unconditional* share: 22 of the 75
+hybrid instances are failures where no head could earn credit, so
+`summary_*.json`'s `sparsity_recited` (recited-only) is the tighter number, and the
+paper's own grid is manually validated the same way.  Two readings, both worth
+stating:
 
 * over the heads that *can* retrieve (its 6 full-attention layers), retrieval in
   this architecture is not sparse at all;
-* over *all* its token-mixer heads (48 attention + 288 Gated DeltaNet = 336), the 8
-  strongly-retrieving heads are 2.4% — back inside the paper's range, but only by
-  counting objects the retrieval score is not defined for.
+* the grid's extreme depths (needle first / needle last) are included, and with
+  only 3-5 depths they carry 40-67% of the weight -- against the paper's 10 interior
+  points.  `iter_depths` is endpoints-inclusive by design, so depth-robustness and
+  this weighting should not be confused;
+* over *all* its token-mixer heads (48 attention + 288 Gated DeltaNet = 336 — the
+  count is `ModelInfo.n_all_heads`, read from the mixer modules, not typed into
+  prose), the 8 strongly-retrieving heads are 2.4% — back inside the paper's
+  range, but only by counting objects the retrieval score is not defined for.
 
 The honest statement: the paper's "a few percent" is a property of a dense stack in
 which most layers do no retrieval, and it does not transfer to a hybrid stack where
@@ -273,12 +329,29 @@ Needle-in-a-Haystack, exact match, retrieval heads vs random heads:
 | Qwen3-0.6B | 95.5 f1 / 100% exact | 66.5 / **0%** at K=9 (2% of heads) | 95.5 / 100% |
 | Qwen3.5-0.8B | 86.7 f1 / 100% exact | 45.1 / **0%** at K=4 (8% of heads) | 69.5 / 67% |
 
-Removing ~2-8% of heads *by retrieval score* destroys the exact answer, while
-removing the same number at random leaves it intact.  At large K everything
+At the large-K end of the curve the "retrieval" arm necessarily reaches below the
+0.1 threshold (there are only 22 such heads on the dense model while the curve goes
+to K=148), so points there are "top-K by score", not "retrieval heads"; the artifact
+records `k_effective` and the per-trial overlap so the transition is auditable.
+
+Removing ~2-8% of heads *by retrieval score* destroys the exact answer.  On the
+dense model the matched random arm barely moves it; on the hybrid the random arm
+degrades too (69.5 F1 / 67% exact against an 86.7 / 100% baseline), so the honest
+reading is a *larger* drop for retrieval heads, not an untouched control.  At large
+K everything
 collapses (both models fall to ~0), which is expected and is why the curve is
 reported rather than a single point.
 
-### Downstream: CoT depends on retrieval heads, extractive QA mostly does
+**How the two arms are matched (current code).**  The retrieval arm is the top K
+heads *by score* — not "every head above the 0.1 threshold, capped at K", which
+made K unrepresentative above the threshold count.  The random arm is drawn from
+`non_retrieval_pool`, i.e. heads at or below the threshold; drawing from all
+scoreable heads would put retrieval heads in the control most of the time on the
+hybrid (30 of its 48 heads clear 0.1).  Both arms therefore remove exactly the
+same number of heads at every point, and the realized counts are stored in
+`masking_curve.json` (`k_effective`, `retrieval_masked`, `random_masked_mean`).
+
+### Downstream: CoT vs extractive QA under masking
 
 Chain-of-thought, 8 items, after recalibration (baseline off the floor):
 
@@ -316,10 +389,11 @@ meaningful within a family.
 
 ## Limitations
 
-* **Scope.** The grid here is deliberately small (18 instances/model) so it fits
-  on a laptop; it is enough to locate retrieval heads and to show the masking
-  effect, but the paper's per-head numbers come from ~600 instances and are
-  smoother than what you get here. Raise `--profile paper` on a GPU.
+* **Scope.** The reported run is 75 instances/model on a GPU (`t4` grid; the CPU
+  `laptop` profile is 18 instances/model). Either is enough to locate retrieval
+  heads and to show the masking effect, but the paper's per-head numbers come from
+  ~600 instances and are smoother than what you get here. Raise `--profile paper`
+  on a GPU for that grid.
 * **Hybrid models, one number short.** For Qwen3.5 the linear layers *cannot* be
   scored. Masking experiments (`token_mixer_ablation`) do cover them, so their
   contribution is measurable at layer granularity — just not as "retrieval
@@ -338,3 +412,15 @@ meaningful within a family.
 * **Timings.** Qwen3.5's Gated DeltaNet layers fall back to pure-PyTorch kernels
   without `flash-linear-attention` / `causal-conv1d`, which dominates runtime on
   CPU. That affects speed only, not correctness.
+* **The committed artifacts predate the code.**  `ds-results/`, `results/` and
+  `docs/results-gpu.md` were produced by earlier versions of the pipeline and were
+  not regenerated, so they do not reflect what the code now computes.  One
+  `t4-cached.yaml` job refreshes them.
+* **`activation_freq` is `P(score > 0)`.**  A head's activation frequency is the
+  fraction of instances in which it copied *any* needle token — i.e. a thresholded
+  version of the same score.  The Fig. 3 "gap" therefore compares a mean with a
+  positive rate, not two independent measurements.
+* **`--k` vs `--k-frac`.**  Both default to unset; the command's default fractions
+  apply only when neither is given, and passing both unions them.  Absolute K is
+  still not comparable across a 48-head and a 448-head model — use `--k-frac` for
+  cross-model statements.

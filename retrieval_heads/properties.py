@@ -14,7 +14,7 @@ import numpy as np
 import torch
 
 from retrieval_heads.scoring import RetrievalScores
-from retrieval_heads.utils import HeadRef, get_logger
+from retrieval_heads.utils import get_logger
 
 log = get_logger("properties")
 
@@ -25,31 +25,45 @@ def category_fractions(scores: RetrievalScores, threshold: float = 0.1) -> dict[
 
     Quoted from Sec. 4.1: 45-73% of heads score 0, 25-52% land in (0, 0.1], and
     only about 3-6% exceed 0.1.
+
+    Non-finite scores are dropped rather than counted: a single NaN used to make
+    the three fractions sum to more than the number of usable heads and silently
+    renormalise the ring chart.
     """
-    values = np.array([scores.head_score(h) for h in scores.info.scoreable_heads])
+    values = np.array([scores.head_score(h) for h in scores.info.scoreable_heads], dtype=float)
+    finite = values[np.isfinite(values)]
+    n_non_finite = int(values.size - finite.size)
+    values = finite
     total = len(values)
     if total == 0:
-        return {"n_heads": 0}
+        # Keep the shape: callers (plot_score_pie) read the buckets unconditionally.
+        empty = {"n": 0, "frac": 0.0}
+        return {"n_heads": 0, "n_non_finite": n_non_finite, "threshold": threshold,
+                "zero": dict(empty), "low": dict(empty), "retrieval": dict(empty),
+                "max_score": 0.0, "mean_score": 0.0}
     zero = int(np.sum(values <= 0.0))
     low = int(np.sum((values > 0.0) & (values <= threshold)))
     retrieval = int(np.sum(values > threshold))
     return {
         "n_heads": total,
+        "n_non_finite": n_non_finite,
         "threshold": threshold,
         "zero": {"n": zero, "frac": zero / total},
         "low": {"n": low, "frac": low / total},
         "retrieval": {"n": retrieval, "frac": retrieval / total},
-        "max_score": float(values.max()) if total else 0.0,
-        "mean_score": float(values.mean()) if total else 0.0,
+        "max_score": float(values.max()),
+        "mean_score": float(values.mean()),
     }
 
 
 def score_histogram(scores: RetrievalScores, bins: Sequence[float] | int = 20) -> dict[str, Any]:
     """Histogram of retrieval scores over all scoreable heads."""
-    values = np.array([scores.head_score(h) for h in scores.info.scoreable_heads])
-    counts, edges = np.histogram(values, bins=bins, range=(0.0, 1.0))
+    values = np.array([scores.head_score(h) for h in scores.info.scoreable_heads], dtype=float)
+    finite = values[np.isfinite(values)]
+    counts, edges = np.histogram(finite, bins=bins, range=(0.0, 1.0))
     return {"counts": counts.tolist(), "edges": edges.tolist(),
-            "total": int(len(values)), "model": scores.info.name}
+            "total": int(finite.size), "n_non_finite": int(values.size - finite.size),
+            "model": scores.info.name}
 
 
 def activation_gap(scores: RetrievalScores, top_k: int = 40) -> dict[str, Any]:
@@ -71,7 +85,8 @@ def activation_gap(scores: RetrievalScores, top_k: int = 40) -> dict[str, Any]:
 
 def pie_data(scores: RetrievalScores, thresholds: Sequence[float] = (0.0, 0.1, 0.5)) -> dict[str, Any]:
     """Ring/pie breakdown per threshold, the data behind ``ring_graph.pdf``."""
-    values = np.array([scores.head_score(h) for h in scores.info.scoreable_heads])
+    values = np.array([scores.head_score(h) for h in scores.info.scoreable_heads], dtype=float)
+    values = values[np.isfinite(values)]
     total = max(len(values), 1)
     slices = {}
     for t in thresholds:
@@ -81,6 +96,21 @@ def pie_data(scores: RetrievalScores, thresholds: Sequence[float] = (0.0, 0.1, 0
 
 
 # --------------------------------------------------------------------------- correlation
+def layouts_match(scores_a: RetrievalScores, scores_b: RetrievalScores) -> bool:
+    """Whether two runs address the same layer x head grid.
+
+    ``mode="grid"`` compares positions, which only means something when both runs
+    share this layout; otherwise the smaller grid is nearest-neighbour stretched
+    and duplicated rows count as independent observations.
+    """
+    def key(scores: RetrievalScores):
+        info = scores.info
+        return (info.num_layers, tuple(sorted(info.scoreable_layers)),
+                tuple(sorted(info.num_heads.items())))
+
+    return key(scores_a) == key(scores_b)
+
+
 def _resample(matrix: torch.Tensor, shape: tuple[int, int]) -> np.ndarray:
     """Nearest-neighbour resample a layer x head matrix onto a common grid.
 
@@ -130,6 +160,15 @@ def correlate(
         return pearson(va[:n], vb[:n])
     if mode != "grid":
         raise ValueError(f"unknown correlation mode: {mode!r}")
+    if not layouts_match(scores_a, scores_b):
+        # Returning a number here invited reading a resampled (duplicated-row)
+        # correlation as a real one; NaN is the honest answer.
+        log.warning(
+            "grid correlation between %s and %s uses different layer/head layouts; "
+            "returning NaN (use mode='sorted' for a cross-family comparison)",
+            scores_a.info.name, scores_b.info.name,
+        )
+        return float("nan")
     if a.shape != b.shape:
         # pad the smaller grid so both cover the full depth of the network
         cols = max(a.shape[1], b.shape[1])
@@ -147,8 +186,8 @@ class CorrelationMatrix:
     def as_dict(self) -> dict[str, Any]:
         return {"labels": self.labels, "values": self.values, "mode": self.mode}
 
-    def same_family_hint(self, threshold: float = 0.5) -> list[tuple[str, str, float]]:
-        """Pairs whose correlation clears ``threshold`` -- the paper's ``> 0.8`` claim."""
+    def same_family_hint(self, threshold: float = 0.8) -> list[tuple[str, str, float]]:
+        """Pairs whose correlation clears ``threshold`` (the paper's ``> 0.8`` bar)."""
         out = []
         for i, li in enumerate(self.labels):
             for j, lj in enumerate(self.labels):
@@ -193,12 +232,17 @@ class HeadOverlap:
     only_a: list[str] = field(default_factory=list)
     only_b: list[str] = field(default_factory=list)
     score_correlation: float = float("nan")
+    #: False when the two runs do not share a layer x head layout: ``jaccard`` is
+    #: then NaN and the shared/only lists are empty, because comparing "L12H3"
+    #: across layouts is meaningless.
+    comparable: bool = True
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "model_a": self.model_a, "model_b": self.model_b, "threshold": self.threshold,
             "n_a": self.n_a, "n_b": self.n_b, "n_shared": self.n_shared,
             "jaccard": self.jaccard, "score_correlation": self.score_correlation,
+            "comparable": self.comparable,
             "shared": self.shared, "only_a": self.only_a, "only_b": self.only_b,
         }
 
@@ -214,9 +258,30 @@ def head_overlap(
 
     This is the sharpest form of the paper's *intrinsic* claim: a base model and
     its long-context / chat derivative should select the same heads.
+
+    The head *names* (``L12H3``) are only comparable when the two runs share a
+    layer x head layout.  When they do not -- exactly the cross-family case
+    ``mode="sorted"`` exists for -- ``comparable`` is False, ``jaccard`` is NaN and
+    the shared lists are empty, rather than reporting an overlap between unrelated
+    indices.
     """
+    comparable = layouts_match(scores_a, scores_b)
+    if not comparable:
+        log.warning(
+            "head-overlap between %s and %s compares head names across different "
+            "layer/head layouts; reporting comparable=False and no jaccard (the "
+            "correlation is still reported, in mode=%r)",
+            scores_a.info.name, scores_b.info.name, mode,
+        )
     set_a = {str(h) for h in scores_a.heads_above(threshold)}
     set_b = {str(h) for h in scores_b.heads_above(threshold)}
+    if not comparable:
+        return HeadOverlap(
+            model_a=scores_a.info.name, model_b=scores_b.info.name, threshold=threshold,
+            n_a=len(set_a), n_b=len(set_b), n_shared=0, jaccard=float("nan"),
+            comparable=False,
+            score_correlation=correlate(scores_a, scores_b, mode=mode),
+        )
     shared = sorted(set_a & set_b)
     union = set_a | set_b
     return HeadOverlap(

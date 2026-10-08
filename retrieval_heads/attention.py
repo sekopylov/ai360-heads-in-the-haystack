@@ -44,24 +44,32 @@ def _collect_configs(model: nn.Module) -> list[Any]:
     return configs
 
 
-def set_attn_implementation(model: nn.Module, impl: str) -> str | None:
+def set_attn_implementation(model: nn.Module, impl: str) -> dict[int, str]:
     """Force every config shared by the model's modules onto ``impl``.
 
-    Returns the implementation that was in place before the call, so callers can
-    restore it.  Attention modules read ``self.config._attn_implementation`` at
-    call time, so flipping this between the prefill and the decode is safe.
+    Returns ``{id(config): previous_impl}`` so :func:`restore_attn_implementation`
+    can put each config back to *its own* value.  (Returning a single value for all
+    of them pinned every config to the first one's implementation on restore.)
     """
-    previous = None
+    previous: dict[int, str] = {}
     for cfg in _collect_configs(model):
         if hasattr(cfg, "_attn_implementation"):
-            if previous is None:
-                previous = cfg._attn_implementation
+            previous[id(cfg)] = cfg._attn_implementation
             cfg._attn_implementation = impl
     return previous
 
 
+def restore_attn_implementation(model: nn.Module, previous: dict[int, str]) -> None:
+    """Put each config back to the implementation it had before the set call."""
+    for cfg in _collect_configs(model):
+        # `previous` may legitimately hold None ("not set"); `get(...) is not None`
+        # skipped those and left the forced implementation in place for good.
+        if id(cfg) in previous:
+            cfg._attn_implementation = previous[id(cfg)]
+
+
 # --------------------------------------------------------------------------- capture
-@dataclass
+@dataclass(eq=False, repr=False)
 class AttentionRecorder:
     """Captures per-layer attention probabilities for scoreable layers.
 
@@ -94,7 +102,6 @@ class AttentionRecorder:
         input_ids: torch.Tensor,
         past_key_values: Any = None,
         use_cache: bool = True,
-        attention_mask: torch.Tensor | None = None,
     ) -> tuple[Any, dict[int, torch.Tensor]]:
         """One decode-step forward; returns ``(outputs, {layer: attn_probs})``.
 
@@ -108,7 +115,6 @@ class AttentionRecorder:
                 input_ids=input_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                attention_mask=attention_mask,
                 output_attentions=self.method == "output_attentions",
             )
             if self.method == "output_attentions":
@@ -125,8 +131,25 @@ class AttentionRecorder:
                         f"{layers}, got {len(attn)}"
                     )
                 for layer, tensor in zip(layers, attn):
+                    expected = self.info.num_heads.get(layer)
+                    if expected is not None and tensor.shape[1] != expected:
+                        raise RuntimeError(
+                            f"attention map #{layer} has {tensor.shape[1]} heads but the "
+                            f"model reports {expected} for that layer; the returned maps "
+                            f"are probably ordered differently from scoreable_layers. Use "
+                            f"capture_method='patch' (keyed by layer_idx) to be sure."
+                        )
                     store[layer] = tensor
             # method="patch" fills `store` from inside the wrapper instead.
+        if self.method == "patch":
+            missing = [layer for layer in self.info.scoreable_layers if layer not in store]
+            if missing:
+                raise RuntimeError(
+                    f"the eager_attention_forward patch captured nothing for layers "
+                    f"{missing}; the model is probably running a non-eager kernel, so "
+                    f"every retrieval score would silently be 0. Set capture_impl='eager' "
+                    f"or use method='output_attentions'."
+                )
         return out, store
 
     # -- patch fallback -----------------------------------------------------
@@ -138,6 +161,10 @@ class AttentionRecorder:
         global at call time, so patching that global is enough -- and it is
         restored exactly, once per modelling module, even on an exception.
         """
+        # Only the modules this model actually scores may write into `store`: a
+        # foreign attention block (vision tower, second attention class) can share
+        # a `layer_idx` and would otherwise overwrite a scored layer's row.
+        known_modules = {id(module) for module in self.info.attention_modules.values()}
         patched: dict[int, tuple[Any, Any]] = {}  # id(module) -> (module, original)
         for module in self.info.attention_modules.values():
             modeling = sys.modules.get(type(module).__module__)
@@ -149,10 +176,10 @@ class AttentionRecorder:
             patched[id(modeling)] = (modeling, original)
 
             def wrapper(module_, query, key, value, attention_mask, scaling,
-                        dropout=0.0, _orig=original, **kwargs):
+                        dropout=0.0, _orig=original, _known=known_modules, **kwargs):
                 out, weights = _orig(module_, query, key, value, attention_mask,
                                      scaling, dropout, **kwargs)
-                if weights is not None:
+                if weights is not None and id(module_) in _known:
                     store[int(getattr(module_, "layer_idx", -1))] = weights.detach()
                 return out, weights
 
@@ -199,42 +226,97 @@ class HeadMasker(_HookGroup):
     """
 
     def __init__(self, model: nn.Module, info: ModelInfo, heads: Sequence[HeadRef]) -> None:
+        # `model` is accepted for symmetry with TokenMixerMasker but not needed: the
+        # hooks go on the modules held by `info`.
         super().__init__()
-        self.model = model
         self.info = info
         self.heads = list(heads)
+        # `info` can come from `ModelInfo.from_dict`, i.e. from a different model
+        # instance; masking the wrong modules would silently do nothing useful.
+        self._model_module_ids = ({id(m) for m in model.modules()}
+                                  if isinstance(model, nn.Module) else None)
         self._install()
 
     def _install(self) -> None:
         by_layer: dict[int, list[int]] = {}
         for head in self.heads:
+            n_heads = self.info.num_heads.get(head.layer)
+            if n_heads is not None and head.head >= n_heads:
+                raise KeyError(
+                    f"head {head} is out of range: layer {head.layer} has {n_heads} heads"
+                )
             module = self.info.attention_modules.get(head.layer)
             if module is None:
                 raise KeyError(
                     f"layer {head.layer} has no scoreable attention module "
                     f"(scoreable layers: {self.info.scoreable_layers})"
                 )
+            if self._model_module_ids is not None and id(module) not in self._model_module_ids:
+                raise KeyError(
+                    f"layer {head.layer}'s attention module does not belong to the model "
+                    f"passed to HeadMasker; the ModelInfo probably came from another "
+                    f"checkpoint"
+                )
             by_layer.setdefault(head.layer, []).append(head.head)
 
+        # Resolve head_dim for every layer *before* installing anything: `_head_dim`
+        # can raise on a gated/MLA block, and it used to run inside the registration
+        # loop, leaving the earlier layers' hooks live with no masker object left to
+        # remove them.
+        resolved: list[tuple[nn.Module, int, torch.Tensor, int | None]] = []
         for layer, head_ids in by_layer.items():
             module = self.info.attention_modules[layer]
             head_dim = _head_dim(module)
             index = torch.tensor(sorted(set(head_ids)), dtype=torch.long)
-            handle = module.o_proj.register_forward_pre_hook(self._make_hook(index, head_dim))
+            resolved.append((module, head_dim, index, self.info.num_heads.get(layer)))
+
+        for module, head_dim, index, num_heads in resolved:
+            handle = module.o_proj.register_forward_pre_hook(
+                self._make_hook(index, head_dim, num_heads), with_kwargs=True
+            )
             self.add(handle)
 
     @staticmethod
-    def _make_hook(head_index: torch.Tensor, head_dim: int):
-        def pre_hook(module: nn.Module, args: tuple[Any, ...]):
-            hidden = args[0]
+    def _make_hook(head_index: torch.Tensor, head_dim: int, num_heads: int | None = None):
+        def pre_hook(module: nn.Module, args: tuple[Any, ...], kwargs: dict[str, Any]):
+            # `o_proj` is normally called positionally, but a keyword call must not
+            # blow up with an IndexError on `args[0]`.
+            hidden = args[0] if args else kwargs.get("input", kwargs.get("hidden_states"))
+            if hidden is None:
+                raise RuntimeError(
+                    "HeadMasker could not find the o_proj input tensor; pass it "
+                    "positionally or as kwargs['input']"
+                )
             if hidden.shape[-1] % head_dim != 0:
                 raise RuntimeError(
                     f"o_proj input width {hidden.shape[-1]} is not a multiple of head_dim {head_dim}"
                 )
+            if num_heads is not None and hidden.shape[-1] != num_heads * head_dim:
+                raise RuntimeError(
+                    f"o_proj input width {hidden.shape[-1]} != num_heads {num_heads} x "
+                    f"head_dim {head_dim}; _head_dim's fallback is wrong for this "
+                    f"architecture (gated/MLA attention?), so masking would cut the "
+                    f"wrong slice"
+                )
             masked = hidden.clone()
-            view = masked.view(*masked.shape[:-1], -1, head_dim)
+            # `clone()` keeps strides, and `reshape` on a non-contiguous tensor
+            # returns a *copy*: the in-place zeroing below would then be discarded
+            # and the mask would silently do nothing.  Force contiguity and prove
+            # the view shares storage.
+            if masked.stride(-1) != 1:
+                masked = masked.contiguous()
+            view = masked.reshape(*masked.shape[:-1], -1, head_dim)
+            if view.data_ptr() != masked.data_ptr():
+                raise RuntimeError(
+                    "o_proj input could not be viewed as (..., heads, head_dim) without "
+                    "copying; masking would silently do nothing"
+                )
             view[..., head_index, :] = 0
-            return (masked,) + args[1:]
+            if args:
+                return (masked,) + args[1:], kwargs
+            new_kwargs = dict(kwargs)
+            new_kwargs["input" if "input" in kwargs else "hidden_states"] = masked
+            return args, new_kwargs
 
         return pre_hook
 
@@ -251,10 +333,24 @@ class TokenMixerMasker(_HookGroup):
         super().__init__()
         self.info = info
         self.layers = list(layers)
+        # Resolve *every* module before registering anything: the previous version
+        # registered as it went, so a missing layer left the earlier hooks live and
+        # every later forward pass ran with those layers silently zeroed.
+        model_module_ids = ({id(m) for m in model.modules()}
+                            if isinstance(model, nn.Module) else None)
+        resolved = []
         for layer in self.layers:
             module = info.attention_modules.get(layer) or info.linear_modules.get(layer)
             if module is None:
                 raise KeyError(f"no token mixer found for layer {layer}")
+            if model_module_ids is not None and id(module) not in model_module_ids:
+                raise KeyError(
+                    f"layer {layer}'s token-mixer module does not belong to the model "
+                    f"passed to TokenMixerMasker; the ModelInfo probably came from "
+                    f"another checkpoint"
+                )
+            resolved.append(module)
+        for module in resolved:
             self.add(module.register_forward_hook(self._zero()))
 
     @staticmethod

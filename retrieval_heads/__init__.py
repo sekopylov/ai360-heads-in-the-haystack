@@ -26,11 +26,17 @@ from retrieval_heads.attention import (
     AttentionRecorder,
     HeadMasker,
     TokenMixerMasker,
+    masked_heads,
+    masked_token_mixers,
 )
 from retrieval_heads.scoring import (
     RetrievalScores,
     score_instance,
     aggregate_scores,
+)
+from retrieval_heads.detection import (
+    DetectionConfig,
+    run_detection,
 )
 
 __all__ = [
@@ -44,9 +50,13 @@ __all__ = [
     "AttentionRecorder",
     "HeadMasker",
     "TokenMixerMasker",
+    "masked_heads",
+    "masked_token_mixers",
     "RetrievalScores",
     "score_instance",
     "aggregate_scores",
+    "DetectionConfig",
+    "run_detection",
 ]
 
 __version__ = "0.1.0"

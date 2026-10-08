@@ -1,17 +1,21 @@
 """Static validation of the DataSphere job configs.
 
-These files are only exercised by a real job, where a typo costs a full
-environment build (~9 min) before it surfaces.  Everything checkable offline is
-checked here instead.
+These files are only exercised by a real job, where a typo costs a job round trip
+-- about 40 s with the cached venv, several minutes when the platform has to build
+the environment -- before it surfaces.  Everything checkable offline is checked
+here instead, including the actual ``cmd`` string through the driver's own parser.
 """
 
 from __future__ import annotations
+
+import json
 
 import packaging.requirements
 import pytest
 import yaml
 
 from tests.conftest import REPO_ROOT
+from tests.test_cli_argv import load_job_driver
 
 CONFIG_DIR = REPO_ROOT / "configs" / "datasphere"
 CONFIGS = sorted(CONFIG_DIR.glob("*.yaml"))
@@ -55,6 +59,42 @@ def test_cmd_starts_with_python_and_targets_the_driver(configs):
         assert "scripts/datasphere_job.py" in cmd, (
             f"{name}: local-paths unpack the driver to /job/scripts/, so cmd must say "
             f"scripts/datasphere_job.py"
+        )
+
+
+def test_config_cmd_parses_with_the_driver(configs):
+    """Run the real ``cmd`` string through the driver's own argument parser.
+
+    Checking the first token and the driver path is not enough: a typo in
+    ``--profile``, an unknown ``--stages`` entry or a model key missing from the
+    registry would all pass the static checks and surface only after a job has
+    started.  ``${VAR}`` placeholders are stubbed with harmless paths.
+    """
+    driver = load_job_driver()
+    registry = json.loads(
+        (REPO_ROOT / "configs" / "models.json").read_text(encoding="utf-8")
+    )["models"]
+
+    for name, config in configs.items():
+        tokens = [
+            token.replace("${WEIGHTS}", "/w").replace("${DS_PROJECT_HOME}", "/disk")
+            for token in config["cmd"].split()
+        ]
+        assert tokens[0] in {"python3", "python"}, f"{name}: cmd must start with python"
+        assert tokens[1] == "scripts/datasphere_job.py", (
+            f"{name}: second token must be the driver path, got {tokens[1]!r}"
+        )
+
+        args = driver.parse_args(tokens[2:])
+        assert args.profile in driver.SCALES, (
+            f"{name}: --profile {args.profile!r} is not in SCALES {sorted(driver.SCALES)}"
+        )
+        stages = [s.strip() for s in args.stages.split(",") if s.strip()]
+        unknown_stages = [s for s in stages if s not in driver.STAGES]
+        assert not unknown_stages, f"{name}: unknown stages {unknown_stages}"
+        unknown_models = [m for m in args.models if m not in registry]
+        assert not unknown_models, (
+            f"{name}: models not in configs/models.json: {unknown_models}"
         )
 
 
@@ -108,13 +148,21 @@ def test_outputs_are_declared_where_results_are_written(configs):
             )
 
 
+#: Configs that must run on a GPU.  Listed explicitly: the previous condition
+#: tested the file *name* for "gt4", so `t4.yaml` was skipped by its own check.
+GPU_CONFIGS = {"t4.yaml", "t4-smoke.yaml", "t4-cached.yaml", "t4-bootstrap.yaml",
+               "paper.yaml"}
+
+
 def test_gpu_configs_request_a_gpu_shape(configs):
-    for name, config in configs.items():
+    present = GPU_CONFIGS & set(configs)
+    assert present == GPU_CONFIGS, f"missing GPU configs: {GPU_CONFIGS - set(configs)}"
+    for name in sorted(present):
+        config = configs[name]
         instances = config.get("cloud-instance-types") or config.get("cloud_instance_types") or []
-        if "gt4" not in name and name not in {"t4-cached.yaml", "t4-bootstrap.yaml"}:
-            continue
-        assert any(str(i).startswith("gt4") for i in instances), (
-            f"{name}: expected a gt4* (T4-class) instance type, got {instances}"
+        assert instances, f"{name}: no cloud-instance-types"
+        assert all(str(i).startswith("g") for i in instances), (
+            f"{name}: expected GPU instance types (gt4*/g2*/g1*), got {instances}"
         )
 
 

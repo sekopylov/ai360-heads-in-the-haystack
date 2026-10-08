@@ -20,8 +20,15 @@ logs/
 # scratch files must live here instead.
 .tmp/
 
-# Large binary result blobs; regenerate with the CLI
+# Large binary result blobs; regenerate with the CLI.  The pattern applies to both
+# trees: the `ds-results/` .npz files are already tracked (a tracked file is not
+# affected by .gitignore), and new matrices in either tree stay out of the index.
 results/**/*.npz
+ds-results/**/*.npz
+
+# Registry copy written by the job driver when it overrides the dtype; the
+# tracked configs/models.json is never modified.
+configs/models.runtime.json
 
 # Logs pulled back from DataSphere jobs (evidence, but noisy in a diff)
 ds-*-logs*/

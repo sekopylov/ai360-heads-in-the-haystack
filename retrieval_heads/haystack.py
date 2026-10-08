@@ -19,7 +19,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
 import torch
 
@@ -90,16 +90,29 @@ class HaystackBuilder:
         tokenised once per batch, so this stays fast at 50K tokens: tokenising
         after every single sentence would be quadratic and dominate a
         paper-scale run.  The batch size is recalibrated from the tokens actually
-        produced, which keeps the overshoot to a few percent instead of the 1.6x
-        a fixed guess produced.
+        produced and shrinks to a single sentence as the target approaches, which
+        keeps the overshoot to at most one sentence (~16 tokens) instead of the
+        1.6x a fixed guess produced.
         """
         parts: list[str] = []
         count = 0
         per_sentence = self.TOKENS_PER_SENTENCE
+        previous = -1
         while count < n_tokens:
-            batch = max(4, int((n_tokens - count) / per_sentence) + 1)
+            remaining = n_tokens - count
+            # The last batch is sized from what is left, never padded with a "+1",
+            # so the text stops as soon as it reaches the target.
+            batch = max(1, int(remaining / per_sentence))
             parts.extend(self.sentence() for _ in range(batch))
             count = len(tokenizer(" ".join(parts), add_special_tokens=False).input_ids)
+            if count <= previous:
+                # A tokenizer that returns nothing would otherwise grow `parts`
+                # forever and exhaust memory instead of failing.
+                raise RuntimeError(
+                    f"filler tokenization made no progress ({previous} -> {count} tokens "
+                    f"for {len(parts)} sentences); check the tokenizer"
+                )
+            previous = count
             per_sentence = max(1.0, count / len(parts))
         return " ".join(parts)
 
@@ -159,8 +172,24 @@ class NeedleSample:
     def n_unique_needle_tokens(self) -> int:
         return len(set(self.needle_ids))
 
+    @property
+    def needle_text_ids(self) -> list[int]:
+        """Tokenization of the needle *text* -- what the model can actually emit.
+
+        The prompt span can fuse the needle's last character with following filler
+        (`.\n` is one token), so the span ids differ from the text ids at the edge.
+        Scoring and F1 use the text ids: otherwise the metric's ceiling is below 1
+        and the emitted final token can never be credited.
+        """
+        return self.meta.get("needle_text_ids") or self.needle_ids
+
+    @property
+    def n_unique_needle_text_tokens(self) -> int:
+        return len(set(self.needle_text_ids))
+
     def as_dict(self) -> dict[str, Any]:
         return {
+            **self.meta,
             "needle_text": self.needle_text,
             "question": self.question,
             "depth": self.depth,
@@ -170,8 +199,29 @@ class NeedleSample:
             "prompt_tokens": self.length,
             "target_tokens": self.target_tokens,
             "seed": self.seed,
-            **self.meta,
         }
+
+
+def render_chat(tokenizer: Any, messages: list[dict[str, str]], *,
+                enable_thinking: bool | None = None) -> str:
+    """Apply a chat template, tolerating templates that know no `enable_thinking`.
+
+    Single implementation: `format_prompt` and `downstream._chat` used to carry
+    their own copy, which is how the decode-loop duplication started.
+    """
+    kwargs: dict[str, Any] = {"tokenize": False, "add_generation_prompt": True}
+    if enable_thinking is not None:
+        kwargs["enable_thinking"] = enable_thinking
+    try:
+        return tokenizer.apply_chat_template(messages, **kwargs)
+    except Exception:
+        # The template may reject `enable_thinking` with something other than a
+        # TypeError (a jinja UndefinedError, for instance).  Retry without it, but if
+        # that also fails let the original error surface.
+        if "enable_thinking" not in kwargs:
+            raise
+        kwargs.pop("enable_thinking")
+        return tokenizer.apply_chat_template(messages, **kwargs)
 
 
 def format_prompt(
@@ -192,15 +242,7 @@ def format_prompt(
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": context + tail})
-    kwargs: dict[str, Any] = {"tokenize": False, "add_generation_prompt": True}
-    if enable_thinking is not None:
-        kwargs["enable_thinking"] = enable_thinking
-    try:
-        return tokenizer.apply_chat_template(messages, **kwargs)
-    except TypeError:
-        # Template does not know `enable_thinking`; retry without it.
-        kwargs.pop("enable_thinking", None)
-        return tokenizer.apply_chat_template(messages, **kwargs)
+    return render_chat(tokenizer, messages, enable_thinking=enable_thinking)
 
 
 def build_needle_sample(
@@ -222,31 +264,71 @@ def build_needle_sample(
     ``depth`` is applied in *characters* of the filler text, matching the common
     "insert at x% of the document" convention; the paper samples depths
     uniformly from the start to the end of the haystack.
+
+    ``target_tokens`` is the **realized prompt length**, not just the filler:
+    :meth:`HaystackBuilder.text` sizes the filler alone, and the needle, question
+    and chat template are added on top.  That overhead is a fixed ~40 tokens, so
+    uncorrected it was +6% at 1K.  The prompt is therefore built, measured, and
+    the filler budget re-adjusted a few times.  Filler is appended a sentence at a
+    time, so convergence is limited by the last sentence (~16 tokens): the
+    tolerance is 2%, and a run that cannot reach it within four attempts says so.
     """
     builder = builder or HaystackBuilder(seed=seed)
-    filler = builder.text(target_tokens, tokenizer)
-    if needle.strip() in filler:  # pragma: no cover - improbable, but keep the guarantee
-        raise ValueError("needle already occurs in the filler; pick a more unique needle")
-
     depth = min(max(depth, 0.0), 1.0)
-    cut = int(len(filler) * depth)
-    # snap to the nearest whitespace so we never split a word
-    while cut < len(filler) and not filler[cut].isspace():
-        cut += 1
-    context = f"{filler[:cut]}\n{needle}\n{filler[cut:]}".strip()
+    tolerance = max(2, int(0.02 * target_tokens))
+    budget = target_tokens
+    filler = ""
+    for _ in range(4):
+        filler = builder.text(max(64, budget), tokenizer)
+        if needle.strip() in filler:  # pragma: no cover - improbable, but keep the guarantee
+            raise ValueError("needle already occurs in the filler; pick a more unique needle")
 
-    prompt = format_prompt(
-        tokenizer, context, question, chat_template=chat_template,
-        system_prompt=system_prompt, enable_thinking=enable_thinking, instruction=instruction,
-    )
+        cut = int(len(filler) * depth)
+        # snap to the nearest whitespace so we never split a word
+        while cut < len(filler) and not filler[cut].isspace():
+            cut += 1
+        context = f"{filler[:cut]}\n{needle}\n{filler[cut:]}".strip()
 
-    char_start = prompt.find(needle)
-    if char_start < 0:  # pragma: no cover - defensive
-        raise RuntimeError("needle text vanished from the rendered prompt")
-    char_end = char_start + len(needle)
+        prompt = format_prompt(
+            tokenizer, context, question, chat_template=chat_template,
+            system_prompt=system_prompt, enable_thinking=enable_thinking, instruction=instruction,
+        )
 
-    ids, offsets = _tokenize_with_offsets(tokenizer, prompt)
+        char_start = prompt.find(needle)
+        if char_start < 0:  # pragma: no cover - defensive
+            raise RuntimeError("needle text vanished from the rendered prompt")
+        char_end = char_start + len(needle)
+
+        ids, offsets = _tokenize_with_offsets(tokenizer, prompt)
+        realized = len(ids)
+        if abs(realized - target_tokens) <= tolerance:
+            break
+        budget -= realized - target_tokens  # overshoot -> shrink the filler budget
+    else:
+        log.warning("could not land %d tokens within %d after 4 attempts (realized %d)",
+                    target_tokens, tolerance, realized)
+
     span = _span_from_char_range(offsets, char_start, char_end)
+    # Interval-overlap span detection can swallow a token that starts in the filler
+    # and ends inside the needle (e.g. a merged "\nThe").  Verify the span really is
+    # the needle, and record whether either edge could be trimmed.
+    lo, hi = span
+    if needle not in prompt[offsets[lo][0]:offsets[hi - 1][1]]:
+        raise RuntimeError(
+            f"needle span {span} does not contain the needle text; the tokenizer's "
+            f"offset mapping straddles the needle"
+        )
+    tight = True
+    for s_lo, s_hi in ((lo + 1, hi), (lo, hi - 1)):
+        if s_lo < s_hi and needle in prompt[offsets[s_lo][0]:offsets[s_hi - 1][1]]:
+            tight = False
+            break
+    # A boundary token that only *partly* overlaps the needle is not caught by the
+    # tightness check above: `".\n"` contains the whole needle but also filler text,
+    # so the span is "tight" while the token is not the one the model emits.  Record
+    # it instead of silently treating it as pure needle.
+    straddles = offsets[lo][0] < char_start or offsets[hi - 1][1] > char_end
+    needle_text_ids = tokenizer(needle, add_special_tokens=False).input_ids
     input_ids = torch.tensor([ids], dtype=torch.long)
 
     sample = NeedleSample(
@@ -259,6 +341,8 @@ def build_needle_sample(
         target_tokens=target_tokens,
         haystack_tokens=len(ids),
         seed=seed,
+        meta={"span_tight": tight, "span_straddles_boundary": straddles,
+              "needle_text_ids": list(needle_text_ids)},
     )
     log.debug("built sample: %d tokens, needle %s (%d tok) at depth %.2f",
               len(ids), span, span[1] - span[0], depth)
@@ -266,7 +350,7 @@ def build_needle_sample(
 
 
 def iter_depths(n: int) -> list[float]:
-    """Uniform depths in ``(0, 1)`` -- ``n`` values, endpoints included."""
+    """Uniform depths in ``[0, 1]`` (both endpoints included) -- ``n`` values."""
     if n == 1:
         return [0.5]
     return [i / (n - 1) for i in range(n)]

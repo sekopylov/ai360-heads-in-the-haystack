@@ -5,7 +5,7 @@ writes a PDF/PNG pair.  Matplotlib runs headless (Agg), because these are batch
 artefacts, not interactive plots.
 
 Figure map (paper name -> function):
-    fig_retrieval_head              -> plot_masking_curve, plot_case_panel
+    fig_retrieval_head              -> plot_masking_curve
     fig_retrieval_attention_dist    -> plot_attention_distribution
     fig_score_pie / ring_graph      -> plot_score_pie
     fig_score_distribution          -> plot_score_distribution
@@ -13,6 +13,7 @@ Figure map (paper name -> function):
     fig_corr_map_masking_heads      -> plot_corr_map, plot_masking_curve
     fig_extractqa_head_case         -> plot_task_qa
     fig_task_cot / fig_case_cot     -> plot_task_cot
+    token-mixer ablation            -> plot_mixer_ablation
 """
 
 from __future__ import annotations
@@ -35,7 +36,6 @@ import matplotlib  # noqa: E402
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-from retrieval_heads.models import ModelInfo  # noqa: E402
 from retrieval_heads.properties import (  # noqa: E402
     CorrelationMatrix,
     activation_gap,
@@ -90,37 +90,54 @@ def save_fig(fig: plt.Figure, path: str | Path, *, formats: Sequence[str] = ("pd
 
 # --------------------------------------------------------------------------- Fig. 2 / ring
 def plot_score_pie(scores_by_model: Mapping[str, RetrievalScores],
-                   *, threshold: float = 0.1) -> plt.Figure:
-    """Fraction of retrieval heads per model -- the paper's ring graph."""
+                   *, threshold: float | None = None) -> plt.Figure:
+    """Fraction of retrieval heads per model -- the paper's ring graph.
+
+    ``threshold=None`` (the default) uses each run's own ``scores.threshold``, so
+    Fig. 2 agrees with the masking/QA experiments instead of hard-coding 0.1.
+    """
     names = list(scores_by_model)
     n = len(names)
+    if n == 0:
+        raise ValueError("plot_score_pie needs at least one model")
     cols = min(n, 4)
     rows = int(np.ceil(n / cols))
+    thr_label = ("the run's own" if threshold is None else f"{threshold:g}")
     fig, axes = plt.subplots(rows, cols, figsize=(2.5 * cols, 2.7 * rows), squeeze=False)
     for ax, name in zip(axes.ravel(), names):
         scores = scores_by_model[name]
-        frac = category_fractions(scores, threshold)
+        thr = scores.threshold if threshold is None else threshold
+        frac = category_fractions(scores, thr)
         values = [
             frac["retrieval"]["frac"],
             frac["low"]["frac"],
             frac["zero"]["frac"],
         ]
         labels = [
-            f"retrieval >{threshold}\n{frac['retrieval']['n']} ({values[0] * 100:.1f}%)",
-            f"weak (0, {threshold}]\n{frac['low']['n']} ({values[1] * 100:.1f}%)",
+            f"retrieval >{thr}\n{frac['retrieval']['n']} ({values[0] * 100:.1f}%)",
+            f"weak (0, {thr}]\n{frac['low']['n']} ({values[1] * 100:.1f}%)",
             f"zero\n{frac['zero']['n']} ({values[2] * 100:.1f}%)",
         ]
-        ax.pie(values, labels=labels, colors=(PALETTE[3], PALETTE[1], PALETTE[0]),
-               startangle=90, counterclock=False,
-               wedgeprops={"width": 0.42, "edgecolor": "white", "linewidth": 1.2},
-               textprops={"fontsize": 7})
+        if sum(values) <= 0:
+            # matplotlib rejects an all-zero pie; say so instead of raising.
+            ax.pie([1.0], labels=["no finite scores"], colors=[PALETTE[0]],
+                   startangle=90, counterclock=False,
+                   wedgeprops={"width": 0.42, "edgecolor": "white", "linewidth": 1.2},
+                   textprops={"fontsize": 7})
+        else:
+            ax.pie(values, labels=labels, colors=(PALETTE[3], PALETTE[1], PALETTE[0]),
+                   startangle=90, counterclock=False,
+                   wedgeprops={"width": 0.42, "edgecolor": "white", "linewidth": 1.2},
+                   textprops={"fontsize": 7})
         title = f"{name}\n{scores.info.n_scoreable_heads} scoreable heads"
         if scores.info.is_hybrid:
             title += f" / {len(scores.info.linear_layers)} linear layers"
         ax.set_title(title, fontsize=8)
     for ax in axes.ravel()[n:]:
         ax.axis("off")
-    return finish(fig, "Retrieval heads are universal and sparse")
+    # Descriptive: the hybrid run has 62.5% of its scoreable heads above 0.1, so
+    # "universal and sparse" is exactly the claim the data can contradict.
+    return finish(fig, f"Head score buckets per model (retrieval bucket >{thr_label})")
 
 
 # --------------------------------------------------------------------------- Fig. 3
@@ -128,6 +145,8 @@ def plot_score_distribution(scores_by_model: Mapping[str, RetrievalScores],
                             *, top_k: int = 40) -> plt.Figure:
     """Retrieval score vs activation frequency for the strongest heads."""
     names = list(scores_by_model)
+    if not names:
+        raise ValueError("plot_score_distribution needs at least one model")
     fig, axes = plt.subplots(1, len(names), figsize=(4.2 * len(names), 3.2), squeeze=False)
     for ax, name in zip(axes[0], names):
         gap = activation_gap(scores_by_model[name], top_k=top_k)
@@ -142,7 +161,9 @@ def plot_score_distribution(scores_by_model: Mapping[str, RetrievalScores],
         ax.set_ylabel("value")
         ax.set_ylim(-0.03, 1.03)
         ax.legend(loc="lower left")
-    return finish(fig, "Retrieval score (average tokens) vs activation frequency (fires at all)")
+    # Descriptive: activation frequency is a thresholded version of the same score,
+    # so the two curves are not independent measurements.
+    return finish(fig, "Score vs activation frequency (same score, thresholded at 0)")
 
 
 # --------------------------------------------------------------------------- Fig. 5 heat map
@@ -188,7 +209,7 @@ def plot_layer_profile(scores_by_model: Mapping[str, RetrievalScores]) -> plt.Fi
     ax.set_ylabel("mean retrieval score")
     ax.set_title("Retrieval mass by layer")
     ax.legend()
-    return fig
+    return finish(fig, "Retrieval mass by layer, per model")
 
 
 # --------------------------------------------------------------------------- Fig. 5 corr map
@@ -197,7 +218,16 @@ def plot_corr_map(corr: CorrelationMatrix | Mapping[str, Any]) -> plt.Figure:
     if isinstance(corr, CorrelationMatrix):
         labels, values, mode = corr.labels, np.array(corr.values), corr.mode
     else:
-        labels, values, mode = corr["labels"], np.array(corr["values"]), corr.get("mode", "grid")
+        # dtype=float: a JSON artifact writes non-finite entries as `null`, which
+        # numpy otherwise reads as an object array and isfinite() then rejects.
+        labels = corr["labels"]
+        values = np.array(corr["values"], dtype=float)
+        mode = corr.get("mode", "grid")
+    if not labels:
+        raise ValueError("plot_corr_map needs at least one label")
+    if not np.any(np.isfinite(values)):
+        log.warning("plot_corr_map: every correlation is non-finite; the figure will be "
+                    "blank (too few shared finite entries, or constant scores)")
     fig, ax = plt.subplots(figsize=(1.1 + 0.85 * len(labels), 1.1 + 0.75 * len(labels)))
     im = ax.imshow(values, cmap="RdBu_r", vmin=-1, vmax=1)
     ax.set_xticks(range(len(labels)), labels, rotation=45, ha="right", fontsize=7)
@@ -210,22 +240,58 @@ def plot_corr_map(corr: CorrelationMatrix | Mapping[str, Any]) -> plt.Figure:
                         color="white" if abs(value) > 0.55 else "black")
     ax.set_title(f"Retrieval-score correlation ({mode})", fontsize=9)
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03)
-    return fig
+    return finish(fig, "Retrieval-score correlation between models")
 
 
 # --------------------------------------------------------------------------- Fig. 1 masking
 def plot_masking_curve(curves: Mapping[str, Any],
                        *, metric: str = "f1") -> plt.Figure:
-    """Needle-in-a-Haystack score as top-K retrieval heads / K random heads go away."""
+    """Needle-in-a-Haystack score as top-K retrieval heads / K random heads go away.
+
+    ``metric`` picks which series is drawn: ``"f1"`` (the default) or
+    ``"exact_match"``.  It used to change only the axis label while always
+    plotting f1.
+    """
+    if metric not in {"f1", "exact_match"}:
+        raise ValueError(f"metric must be 'f1' or 'exact_match', got {metric!r}")
+    capped: list[str] = []
     fig, axes = plt.subplots(1, max(len(curves), 1),
                              figsize=(4.4 * max(len(curves), 1), 3.2), squeeze=False)
     for ax, (name, curve) in zip(axes[0], curves.items()):
         data = curve.as_dict() if hasattr(curve, "as_dict") else curve
-        k = data["k_values"]
-        ax.plot(k, data["retrieval"], "-o", color=PALETTE[3], label="top-K retrieval heads")
-        ax.errorbar(k, data["random_mean"], yerr=data["random_std"], fmt="-s",
-                    color=PALETTE[0], capsize=3, label="K random heads")
-        ax.axhline(data.get("baseline", 0.0), ls=":", color="grey", lw=1, label="no masking")
+        # Plot against the K that was actually masked when the artifact records it;
+        # otherwise a capped K would be drawn at its requested position.
+        k = data.get("k_effective") or data["k_values"]
+        if metric == "exact_match":
+            top = data.get("retrieval_exact_match")
+            rand = data.get("random_exact_match_mean")
+            if not top or not rand:
+                # `or data["retrieval"]` used to fall back to the F1 series while the
+                # axis still said "exact_match".
+                raise ValueError(
+                    f"{name}: this artifact has no exact-match series; it predates the "
+                    f"column, or the run was made before the metric was split. "
+                    f"Re-run `mask` or plot metric='f1'."
+                )
+            baseline = data.get("baseline_exact_match", data.get("baseline", 0.0))
+            top_yerr = data.get("retrieval_exact_std")
+            rand_yerr = None  # no per-trial exact-match std is stored
+        else:
+            top, rand = data["retrieval"], data["random_mean"]
+            baseline = data.get("baseline", 0.0)
+            top_yerr = data.get("retrieval_std")
+            rand_yerr = data.get("random_std")
+        # The two error bars are different quantities: retrieval is the spread
+        # across evaluation samples, random is the spread across random trials.
+        ax.errorbar(k, top, yerr=top_yerr, fmt="-o", color=PALETTE[3], capsize=3,
+                    label="top-K retrieval heads (bar: across eval samples)")
+        ax.errorbar(k, rand, yerr=rand_yerr, fmt="-s",
+                    color=PALETTE[0], capsize=3,
+                    label="K random heads (bar: across random trials)")
+        ax.axhline(baseline, ls=":", color="grey", lw=1, label="no masking")
+        requested = data.get("k_values") or []
+        if requested and list(requested) != list(k):
+            capped.append(f"{name}: requested K={list(requested)} -> masked K_eff={list(k)}")
         ax.set_xscale("symlog", linthresh=1)
         ax.set_xlabel("heads masked (K)")
         ax.set_ylabel(f"NIAH {metric} (%)")
@@ -235,12 +301,27 @@ def plot_masking_curve(curves: Mapping[str, Any],
     # Descriptive, not a claim: on the dense model the random arm also collapses
     # once K approaches the whole head budget, so a stronger title would
     # contradict the panel next to it.
+    if capped:
+        # The figure hid the K cap: a requested K=64 masked as 18 looked identical
+        # to a real K=18 run.
+        fig.text(0.01, 0.005, " | ".join(capped), fontsize=6, color="grey")
+
     return finish(fig, "Needle-in-a-Haystack after masking top-K retrieval heads "
                         "vs K random heads")
 
 
 def plot_mixer_ablation(ablations: Mapping[str, Any]) -> plt.Figure:
-    """Full-attention layers vs linear-attention layers silenced (hybrid models)."""
+    """Full-attention layers vs linear-attention layers silenced (hybrid models).
+
+    Draws the last point of each sweep, and says which K that is: taking ``[-1]``
+    without a label let two models be compared at different K values silently.
+    """
+    k_sets = {tuple(a.get("k_values") or []) for a in ablations.values()}
+    if len(k_sets) > 1:
+        raise ValueError(f"ablations were run at different K values: {sorted(k_sets)}")
+    k_values = next(iter(k_sets), ())
+    k = k_values[-1] if k_values else None
+
     fig, ax = plt.subplots(figsize=(5.2, 3.2))
     names = list(ablations)
     width = 0.35
@@ -250,15 +331,31 @@ def plot_mixer_ablation(ablations: Mapping[str, Any]) -> plt.Figure:
     linear = [ablations[n]["linear_attention"][-1] if ablations[n]["linear_attention"] else np.nan
               for n in names]
     base = [ablations[n]["baseline"] for n in names]
-    ax.bar(x - width / 2, base, width, label="baseline", color=PALETTE[0])
-    ax.bar(x + width / 2, full, width, label="full-attention layers masked", color=PALETTE[3])
+    full_err = [ablations[n].get("full_attention_std") or [] for n in names]
+    linear_err = [ablations[n].get("linear_attention_std") or [] for n in names]
+    full_yerr = [err[-1] if err else 0.0 for err in full_err]
+    linear_yerr = [err[-1] if err else 0.0 for err in linear_err]
+    # Bars centred on the tick: the previous offsets put the label off the group.
+    ax.bar(x - width, base, width, label="baseline", color=PALETTE[0])
+    ax.bar(x, full, width, yerr=full_yerr, capsize=3,
+           label="full-attention layers masked", color=PALETTE[3])
     if any(np.isfinite(linear)):
-        ax.bar(x + 1.5 * width, linear, width, label="linear layers masked", color=PALETTE[2])
-    ax.set_xticks(x + width / 2, names, fontsize=7)
+        ax.bar(x + width, linear, width, yerr=linear_yerr, capsize=3,
+               label="linear layers masked", color=PALETTE[2])
+    labels_with_counts = []
+    for i, name in enumerate(names):
+        full_n = (ablations[name].get("full_attention_masked") or [None])[-1]
+        linear_n = (ablations[name].get("linear_attention_masked") or [None])[-1]
+        if linear_n is not None:
+            labels_with_counts.append(f"{name}\n({full_n} full / {linear_n} linear masked)")
+        else:
+            labels_with_counts.append(f"{name}\n({full_n} full masked)")
+    ax.set_xticks(x, labels_with_counts, fontsize=7)
     ax.set_ylabel("NIAH F1 (%)")
-    ax.set_title("Is full attention what retrieval needs?")
+    ax.set_title(f"Whole token-mixer layers silenced (K={k})" if k is not None
+                 else "Whole token-mixer layers silenced")
     ax.legend()
-    return fig
+    return finish(fig, "Does retrieval need full attention? (maximum masked K per run)")
 
 
 # --------------------------------------------------------------------------- Fig. 1 attention
@@ -275,7 +372,10 @@ def plot_attention_distribution(
     """
     fig, axes = plt.subplots(len(distributions), 1,
                              figsize=(7.0, 1.7 * len(distributions)), squeeze=False)
-    for ax, (label, (row, span)) in zip(axes[0], distributions.items()):
+    # `axes` is (n, 1) with squeeze=False, so the panels are `axes[:, 0]`.
+    # Iterating `axes[0]` (the first *row*) drew only the first panel and left the
+    # rest of Fig. 1 blank.
+    for ax, (label, (row, span)) in zip(axes[:, 0], distributions.items()):
         row = np.asarray(row, dtype=float)
         ax.fill_between(np.arange(len(row)), row, color=PALETTE[0], alpha=0.75, lw=0)
         ax.axvspan(span[0], span[1] - 1, color=PALETTE[3], alpha=0.18,
@@ -284,7 +384,6 @@ def plot_attention_distribution(
         ax.set_ylabel("attn")
         ax.set_title(label, fontsize=8, loc="left")
         ax.legend(loc="upper left", fontsize=7)
-    axes[0][0].set_title(list(distributions)[0], fontsize=8, loc="left")
     return finish(fig, "A retrieval head puts its mass on the needle token it is copying")
 
 
@@ -299,15 +398,20 @@ def plot_task_qa(result: Mapping[str, Any]) -> plt.Figure:
     ax.bar(x - width / 2, [by_k[k]["retrieval_f1"] for k in ks], width,
            label="retrieval heads masked", color=PALETTE[3])
     ax.bar(x + width / 2, [by_k[k]["random_f1_mean"] for k in ks], width,
-           yerr=[by_k[k]["random_f1_std"] for k in ks], capsize=3,
+           yerr=[by_k[k].get("random_f1_std", 0.0) for k in ks], capsize=3,
            label="random heads masked", color=PALETTE[0])
     ax.axhline(result["baseline_f1"], ls=":", color="grey", lw=1, label="no masking")
-    ax.set_xticks(x, [f"K={k}" for k in ks])
+    # Label the heads actually masked: a capped K would otherwise be shown at its
+    # requested value (e.g. "K=64" when only 18 heads were removed).
+    ax.set_xticks(x, [f"K={k}" if by_k[k].get("k_effective", k) == int(k)
+                      else f"K={k}→{by_k[k]['k_effective']}" for k in ks])
     ax.set_ylabel("Extractive QA F1 (%)")
     ax.set_ylim(0, 103)
-    ax.set_title("Extractive QA depends on retrieval heads")
+    # The README says the 8-sample measurement cannot separate the arms cleanly, so
+    # the title must not assert the conclusion.
+    ax.set_title("Extractive QA F1 with and without masking")
     ax.legend()
-    return fig
+    return finish(fig, "Extractive QA: retrieval-masked vs random-masked arms")
 
 
 def plot_task_cot(result: Mapping[str, Any]) -> plt.Figure:
@@ -326,6 +430,8 @@ def plot_task_cot(result: Mapping[str, Any]) -> plt.Figure:
     ax.set_xticks(x, [v.replace("_", " ") for v in variants])
     ax.set_ylabel("accuracy (%)")
     ax.set_ylim(0, 103)
-    ax.set_title("Chain-of-thought reasoning needs retrieval heads")
+    # Symmetric with plot_task_qa: the README says the answer-only half also drops,
+    # so the title must not assert the conclusion.
+    ax.set_title("Chain-of-thought vs answer-only under masking")
     ax.legend()
-    return fig
+    return finish(fig, "Chain-of-thought vs answer-only with retrieval heads masked")

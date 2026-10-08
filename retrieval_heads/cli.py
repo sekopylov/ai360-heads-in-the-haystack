@@ -13,16 +13,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Sequence
 
+from retrieval_heads.provenance import add_provenance, warn_if_stale
 from retrieval_heads.utils import ensure_dir, get_logger, load_json, save_json, set_seed
 
 log = get_logger("cli")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_REGISTRY = REPO_ROOT / "configs" / "models.json"
+#: Set by the job driver when it needs a modified registry (e.g. a dtype
+#: override).  Keeps `configs/models.json`, which is tracked, untouched.
+REGISTRY_ENV = "RETRIEVAL_HEADS_MODELS_JSON"
 
 #: Named grids, so a laptop run and a GPU run differ by one flag.
 PROFILES: dict[str, dict[str, Any]] = {
@@ -32,55 +38,207 @@ PROFILES: dict[str, dict[str, Any]] = {
               "needles": 3, "max_new_tokens": 48},
 }
 
+#: Per-command default when neither ``--k`` nor ``--k-frac`` is given.  These are
+#: applied by :func:`resolve_k`, *not* as argparse defaults: an argparse default
+#: is indistinguishable from a value the user typed, so ``mask --k 1 2 4 8 16``
+#: used to be silently unioned with the default fractions (10 K values instead of
+#: 5 on a 448-head model).  Keeping the fallback here means an explicit ``--k``
+#: selects exactly the requested K.
+DEFAULT_K_FRACS: dict[str, tuple[float, ...]] = {
+    "mask": (0.02, 0.04, 0.08, 0.17, 0.33),
+    "qa": (0.04, 0.08, 0.17),
+    "cot": (0.08,),
+}
+
+
+def normalize_prefill_chunk(value: int | None) -> int | None:
+    """Translate the CLI's ``0 = one shot`` convention into ``None``.
+
+    :func:`retrieval_heads.scoring.decode_with_attention` treats a non-positive
+    ``prefill_chunk`` as a programming error and raises; the CLI is the layer that
+    promises users ``0`` means "no chunking", so it converts here.
+    """
+    if value is None:
+        return None
+    return int(value) if int(value) > 0 else None
+
+
+def require_matching_scores(scores, info) -> None:
+    """Fail when the ablation's head indices come from a different model.
+
+    ``mask``/``qa``/``cot`` load saved scores from ``--out`` and then load the
+    model named by ``--model``; nothing tied the two together.  A typo in either
+    (``--model qwen3-0.6b --out results/qwen3.5-0.8b``) silently masked heads that
+    were chosen for another architecture.  The check is structural -- layer count,
+    scoreable layers, head counts -- because names legitimately differ between a
+    registry key and a raw path.
+    """
+    saved = scores.info
+    problems: list[str] = []
+    if saved.num_layers != info.num_layers:
+        problems.append(f"layers {saved.num_layers} != {info.num_layers}")
+    if saved.head_dim != info.head_dim:
+        # Same layers/heads but a different o_proj geometry would slice the wrong
+        # positions; a plain typo in --model reaches here.
+        problems.append(f"head_dim {saved.head_dim} != {info.head_dim}")
+    if sorted(saved.scoreable_layers) != sorted(info.scoreable_layers):
+        problems.append(
+            f"scoreable layers {saved.scoreable_layers} != {info.scoreable_layers}"
+        )
+    if saved.num_heads != info.num_heads:
+        problems.append(f"heads per layer {saved.num_heads} != {info.num_heads}")
+    if problems:
+        raise SystemExit(
+            f"the saved scores in --out are from {saved.name!r}, not {info.name!r} "
+            f"({'; '.join(problems)}). Re-run `detect` for this model, or point --out at "
+            f"its own results directory."
+        )
+
+
+def default_out_dir(model_arg: str, out: str | None) -> Path:
+    """Where a command writes when ``--out`` is omitted.
+
+    ``resolve_model`` accepts a filesystem path, and ``REPO_ROOT / "results" /
+    "/abs/path"`` collapses to the absolute path -- artifacts ended up inside the
+    checkpoint directory.  Path-like arguments contribute only their basename.
+    """
+    if out:
+        return Path(out)
+    path_like = os.sep in model_arg or "/" in model_arg
+    return REPO_ROOT / "results" / (Path(model_arg).name if path_like else model_arg)
+
+
+def within_context_limit(lengths, info) -> tuple[list[int], list[int]]:
+    """Split lengths into ``(kept, dropped)`` by the model's context window.
+
+    Positions past the trained range are extrapolation, not a measurement, and
+    the paper profile asks for 49152 from Qwen3-0.6B, which was trained to 40960.
+    The dropped list is returned so the artifact can show the requested grid.
+    """
+    limit = getattr(info, "max_position_embeddings", None)
+    if not limit:
+        return list(lengths), []
+    kept = [length for length in lengths if length <= limit]
+    dropped = [length for length in lengths if length > limit]
+    if dropped:
+        log.warning("%s: dropping lengths %s above max_position_embeddings=%d",
+                    info.name, dropped, limit)
+    return kept, dropped
+
+
+def load_runs(paths, pairing: str):
+    """``{label: RetrievalScores}`` with collisions disambiguated by directory.
+
+    The label used to be ``scores.info.name`` alone, so ``--runs a/qwen3-0.6b
+    b/qwen3-0.6b`` collapsed to one entry and the correlation silently described
+    a single model.
+    """
+    from retrieval_heads.scoring import RetrievalScores
+
+    runs = {}
+    for run in paths:
+        path = Path(run)
+        scores = RetrievalScores.load(path / f"scores_{pairing}")
+        label = scores.info.name
+        if label in runs:
+            label = f"{label} ({path.parent})"
+            log.warning("two runs share the model name %r; labelling %s as %r",
+                        scores.info.name, path, label)
+        while label in runs:
+            label += " "
+        runs[label] = scores
+    return runs
+
 
 def load_registry(path: str | Path | None = None) -> dict[str, Any]:
-    return load_json(path or DEFAULT_REGISTRY)["models"]
+    path = path or os.environ.get(REGISTRY_ENV) or DEFAULT_REGISTRY
+    return load_json(path)["models"]
 
 
 def resolve_model(name: str | Path, registry: dict[str, Any] | None = None) -> tuple[str, dict[str, Any]]:
-    """Accept a registry key or a raw path; return ``(path, settings)``."""
+    """Accept a registry key or a raw path; return ``(path, settings)``.
+
+    Registry paths are relative to the repository, not to the caller's working
+    directory, so the installed ``retrieval-heads`` console script and any run
+    from outside the repo root still find the checkpoints.
+    """
     registry = registry if registry is not None else load_registry()
     if name in registry:
-        return registry[name]["path"], registry[name]
+        settings = dict(registry[name])
+        path = Path(settings["path"])
+        if not path.is_absolute() and not path.exists():
+            rooted = REPO_ROOT / path
+            if rooted.exists():
+                path = rooted
+        if not path.exists():
+            raise SystemExit(
+                f"checkpoint for {name!r} is not on disk at {path} "
+                f"(registry path {settings['path']!r}); run scripts/download_models.sh "
+                f"or pass --model <existing path>"
+            )
+        settings["path"] = str(path)
+        return str(path), settings
     candidate = Path(name)
     if candidate.exists():
         return str(candidate), {"path": str(candidate), "dtype": "float32"}
     raise SystemExit(f"unknown model {name!r}; known: {sorted(registry)} (or pass an existing path)")
 
 
-def resolve_k(args: argparse.Namespace, info) -> list[int]:
+def resolve_k(args: argparse.Namespace, info, *, default_fracs: Sequence[float] = ()) -> list[int]:
     """Turn ``--k`` (absolute) and ``--k-frac`` (fraction of heads) into one list.
 
     Absolute K is meaningless across models: K=8 is 17% of Qwen3.5-0.8B's 48
     scoreable heads but only 1.8% of Qwen3-0.6B's 448.  Fractions make the two
     directly comparable, which is what the paper's "about 5% of heads" framing
     actually requires.
+
+    Precedence, in order:
+
+    * ``--k`` and ``--k-frac`` are **both** given explicitly -> their union (the
+      user asked for both).
+    * only one of them -> exactly that one.
+    * neither -> ``default_fracs`` for the command.
+
+    This replaces the earlier behaviour where ``--k-frac`` carried a non-empty
+    argparse default, so an explicit ``--k`` was always unioned with it.
     """
-    values: set[int] = set()
-    for k in getattr(args, "k", None) or []:
-        if k > 0:
-            values.add(int(k))
-    for frac in getattr(args, "k_frac", None) or []:
-        if frac > 0:
-            values.add(max(1, round(frac * info.n_scoreable_heads)))
+    raw_k = getattr(args, "k", None)
+    raw_frac = getattr(args, "k_frac", None)
+    if raw_k is not None and not any(int(k) > 0 for k in raw_k):
+        raise SystemExit("--k must contain at least one positive value")
+    if raw_frac is not None and not any(float(f) > 0 for f in raw_frac):
+        raise SystemExit("--k-frac must contain at least one positive value")
+    ks = [int(k) for k in (raw_k or []) if k > 0]
+    fracs = [float(f) for f in (raw_frac or []) if f > 0]
+    if not ks and not fracs:
+        fracs = [float(f) for f in default_fracs]
+
+    values: set[int] = set(ks)
+    for frac in fracs:
+        if frac > 1.0:
+            log.warning("--k-frac %g exceeds 1.0 (all scoreable heads); clamping to 1.0", frac)
+            frac = 1.0
+        # int(x + 0.5), not round(): round() is banker's rounding, so 0.5 heads
+        # rounded down to the even neighbour.
+        values.add(max(1, int(frac * info.n_scoreable_heads + 0.5)))
     if not values:
-        values = {max(1, round(0.05 * info.n_scoreable_heads))}
+        values = {max(1, int(0.05 * info.n_scoreable_heads + 0.5))}
     return sorted(values)
 
 
-def _load(name: str, *, attn_implementation: str = "eager"):
+def _load(name: str, *, attn_implementation: str = "eager", dtype: str | None = None):
     import torch
 
     from retrieval_heads.models import describe_model, load_model
 
     path, settings = resolve_model(name)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     model, tokenizer, info = load_model(
-        path, dtype=settings.get("dtype", "float32"),
-        attn_implementation=attn_implementation,
+        path, dtype=dtype or settings.get("dtype", "float32"),
+        attn_implementation=attn_implementation, device=device,
     )
-    if torch.cuda.is_available():
-        model.to("cuda")  # pragma: no cover - GPU path
-        log.info("moved model to CUDA")
+    if device == "cuda":  # pragma: no cover - GPU path
+        log.info("loaded model on CUDA")
     print(describe_model(info))
     print()
     return model, tokenizer, info
@@ -88,36 +246,56 @@ def _load(name: str, *, attn_implementation: str = "eager"):
 
 # --------------------------------------------------------------------------- commands
 def cmd_describe(args: argparse.Namespace) -> int:
-    _, _, info = _load(args.model)
+    _, _, info = _load(args.model, dtype=args.dtype)
     if args.out:
-        save_json(info.as_dict(), Path(args.out) / "model_info.json")
+        save_json(add_provenance(info.as_dict(), dtype=info.dtype),
+                  Path(args.out) / "model_info.json")
     return 0
 
 
 def cmd_detect(args: argparse.Namespace) -> int:
-    from retrieval_heads.detection import DEFAULT_NEEDLES, DetectionConfig, run_detection
+    from retrieval_heads.detection import DETECTION_NEEDLES, DetectionConfig, run_detection
 
     profile = PROFILES.get(args.profile, {}) if args.profile else {}
-    lengths = args.lengths or profile.get("lengths", [1024, 2048, 4096])
-    depths = args.depths or profile.get("depths", 3)
-    needles = args.needles or profile.get("needles", len(DEFAULT_NEEDLES))
-    out_dir = Path(args.out or (REPO_ROOT / "results" / args.model))
+    # `is None`, not `or`: a user-supplied 0 or [] must be an error, not a silent
+    # fallback to the profile (which is what `--depths 0` used to do).
+    lengths = args.lengths if args.lengths is not None else profile.get(
+        "lengths", [1024, 2048, 4096])
+    depths = args.depths if args.depths is not None else profile.get("depths", 3)
+    needles = args.needles if args.needles is not None else profile.get(
+        "needles", len(DETECTION_NEEDLES))
+    max_new_tokens = args.max_new_tokens if args.max_new_tokens is not None else profile.get(
+        "max_new_tokens", 32)
+    if not lengths or int(depths) < 1 or int(needles) < 1:
+        raise SystemExit(
+            f"empty detection grid: lengths={list(lengths)}, depths={depths}, "
+            f"needles={needles}; each must be non-empty/positive"
+        )
+    out_dir = default_out_dir(args.model, args.out)
 
-    model, tokenizer, info = _load(args.model)
+    model, tokenizer, info = _load(args.model, dtype=args.dtype)
+    lengths, dropped_lengths = within_context_limit(lengths, info)
+    if not lengths:
+        raise SystemExit(
+            f"every requested length exceeds {info.name}'s max_position_embeddings="
+            f"{info.max_position_embeddings}; nothing to measure"
+        )
     cfg = DetectionConfig(
         lengths=list(lengths),
         depths_per_length=int(depths),
-        needles=list(DEFAULT_NEEDLES[: int(needles)]),
-        max_new_tokens=args.max_new_tokens or profile.get("max_new_tokens", 32),
+        needles=list(DETECTION_NEEDLES[: int(needles)]),
+        max_new_tokens=int(max_new_tokens),
         threshold=args.threshold,
         pairing=args.pairing,
         chat_template=not args.no_chat_template,
         enable_thinking=None if args.thinking else False,
         capture_method=args.capture_method,
+        capture_impl=args.capture_impl,
         prefill_impl=args.prefill_impl,
-        prefill_chunk=args.prefill_chunk,
+        prefill_chunk=normalize_prefill_chunk(args.prefill_chunk),
         seed=args.seed,
         limit=args.limit,
+        dropped_lengths=dropped_lengths,
     )
     if args.corpus:
         from retrieval_heads.haystack import load_corpus
@@ -132,27 +310,37 @@ def cmd_detect(args: argparse.Namespace) -> int:
 def cmd_mask(args: argparse.Namespace) -> int:
     import torch
 
-    from retrieval_heads.detection import DEFAULT_NEEDLES
+    from retrieval_heads.detection import EVAL_NEEDLES
     from retrieval_heads.masking import (
         make_eval_samples, masking_curve, token_mixer_ablation,
     )
     from retrieval_heads.scoring import RetrievalScores
 
-    out_dir = Path(args.out or (REPO_ROOT / "results" / args.model))
-    scores = RetrievalScores.load(out_dir / f"scores_{args.pairing}")
-    model, tokenizer, info = _load(args.model)
+    from retrieval_heads.haystack import load_corpus
 
-    needle, question = DEFAULT_NEEDLES[0]
+    out_dir = default_out_dir(args.model, args.out)
+    scores = RetrievalScores.load(out_dir / f"scores_{args.pairing}")
+    model, tokenizer, info = _load(args.model, dtype=args.dtype)
+    require_matching_scores(scores, info)
+    corpus = load_corpus(args.corpus) if args.corpus else None
+
+    # The eval needle is held out of detection: selecting heads on the same text
+    # they are then scored on inflates the retrieval arm (paper: "additional set").
+    needle, question = EVAL_NEEDLES[0]
     # Ablations re-run the *prefill* for every masking configuration, so context
-    # length dominates their cost.  One length x two depths keeps the laptop run
+    # length dominates their cost.  One length x three depths keeps the laptop run
     # honest without turning it into an overnight job.
+    # Five depths (not three): the curve is noisy at three samples, and the extra
+    # points are what make the per-K spread meaningful.  A properly powered run is
+    # still the paper-scale grid.
     samples = make_eval_samples(
-        tokenizer, lengths=args.lengths or (1024,), depths=(0.2, 0.5, 0.8),
+        tokenizer, lengths=args.lengths or (1024,), depths=(0.1, 0.3, 0.5, 0.7, 0.9),
         needle=needle, question=question, seed=args.seed + 7,
         chat_template=not args.no_chat_template,
         enable_thinking=None if args.thinking else False,
+        corpus=corpus,
     )
-    k_values = resolve_k(args, info)
+    k_values = resolve_k(args, info, default_fracs=DEFAULT_K_FRACS["mask"])
     log.info("masking K values %s (%.1f%%-%.1f%% of %d scoreable heads)",
              k_values, 100 * k_values[0] / info.n_scoreable_heads,
              100 * k_values[-1] / info.n_scoreable_heads, info.n_scoreable_heads)
@@ -160,16 +348,31 @@ def cmd_mask(args: argparse.Namespace) -> int:
         model, tokenizer, info, scores, samples,
         k_values=k_values, n_random_trials=args.random_trials,
         max_new_tokens=args.max_new_tokens, seed=args.seed,
-        prefill_chunk=args.prefill_chunk or None,
+        prefill_chunk=normalize_prefill_chunk(args.prefill_chunk),
     )
-    curve.save(out_dir / "masking_curve.json")
+    curve.meta["corpus"] = "custom" if corpus else "synthetic"
+    curve.meta["needle"] = needle
+    curve.meta["question"] = question
+    curve.meta["needle_source"] = "eval"       # never in DETECTION_NEEDLES
+    curve.meta["seed"] = args.seed
+    save_json(add_provenance(curve.as_dict(), dtype=info.dtype),
+              out_dir / "masking_curve.json")
 
     if info.linear_layers:
+        mixer_k = tuple(k for k in k_values if k <= 4) or (1, 2)
+        if mixer_k != tuple(k_values):
+            log.info("token-mixer ablation uses K=%s (the masking K set is reduced to K<=4 "
+                     "because it re-runs the prefill per layer)", list(mixer_k))
         ablation = token_mixer_ablation(model, tokenizer, info, samples,
-                                        k_values=tuple(k for k in k_values if k <= 4) or (1, 2),
+                                        k_values=mixer_k,
                                         max_new_tokens=args.max_new_tokens,
-                                        prefill_chunk=args.prefill_chunk or None)
-        save_json(ablation.as_dict(), out_dir / "mixer_ablation.json")
+                                        prefill_chunk=normalize_prefill_chunk(args.prefill_chunk),
+                                        n_trials=args.mixer_trials, seed=args.seed)
+        payload = ablation.as_dict()
+        payload.update({"needle": needle, "question": question,
+                        "needle_source": "eval", "seed": args.seed})
+        save_json(add_provenance(payload, dtype=info.dtype),
+                  out_dir / "mixer_ablation.json")
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     return 0
@@ -179,15 +382,20 @@ def cmd_qa(args: argparse.Namespace) -> int:
     from retrieval_heads.downstream import builtin_qa_samples, load_qa_jsonl, qa_ablation
     from retrieval_heads.scoring import RetrievalScores
 
-    out_dir = Path(args.out or (REPO_ROOT / "results" / args.model))
+    out_dir = default_out_dir(args.model, args.out)
     scores = RetrievalScores.load(out_dir / f"scores_{args.pairing}")
-    model, tokenizer, info = _load(args.model)
+    model, tokenizer, info = _load(args.model, dtype=args.dtype)
+    require_matching_scores(scores, info)
 
     samples = load_qa_jsonl(args.data) if args.data else builtin_qa_samples()
     result = qa_ablation(model, tokenizer, info, scores, samples,
-                         k_values=resolve_k(args, info), n_random_trials=args.random_trials,
-                         seed=args.seed, max_new_tokens=args.max_new_tokens)
-    save_json(result, out_dir / "task_qa.json")
+                         k_values=resolve_k(args, info, default_fracs=DEFAULT_K_FRACS["qa"]),
+                         n_random_trials=args.random_trials,
+                         seed=args.seed, max_new_tokens=args.max_new_tokens,
+                         prefill_chunk=normalize_prefill_chunk(args.prefill_chunk),
+                         enable_thinking=None if args.thinking else False,
+                         chat_template=not args.no_chat_template)
+    save_json(add_provenance(result, dtype=info.dtype), out_dir / "task_qa.json")
     return 0
 
 
@@ -197,35 +405,52 @@ def cmd_cot(args: argparse.Namespace) -> int:
     )
     from retrieval_heads.scoring import RetrievalScores
 
-    out_dir = Path(args.out or (REPO_ROOT / "results" / args.model))
+    out_dir = default_out_dir(args.model, args.out)
     scores = RetrievalScores.load(out_dir / f"scores_{args.pairing}")
-    model, tokenizer, info = _load(args.model)
+    model, tokenizer, info = _load(args.model, dtype=args.dtype)
+    require_matching_scores(scores, info)
 
     samples = load_reasoning_jsonl(args.data) if args.data else builtin_reasoning_samples()
+    ks = resolve_k(args, info, default_fracs=DEFAULT_K_FRACS["cot"])
+    if len(ks) > 1:
+        log.warning("cot evaluates a single K per run; using %d and ignoring %s",
+                    ks[0], ks[1:])
     result = cot_ablation(model, tokenizer, info, scores, samples,
-                          k=resolve_k(args, info)[0], n_random_trials=args.random_trials,
-                          seed=args.seed, max_new_tokens=args.max_new_tokens)
-    save_json(result, out_dir / "task_cot.json")
+                          k=ks[0],
+                          n_random_trials=args.random_trials,
+                          seed=args.seed, max_new_tokens=args.max_new_tokens,
+                          prefill_chunk=normalize_prefill_chunk(args.prefill_chunk),
+                          enable_thinking=None if args.thinking else False,
+                          chat_template=not args.no_chat_template)
+    save_json(add_provenance(result, dtype=info.dtype), out_dir / "task_cot.json")
     return 0
 
 
 def cmd_compare(args: argparse.Namespace) -> int:
     from retrieval_heads.properties import correlation_matrix, head_overlap
-    from retrieval_heads.scoring import RetrievalScores
 
-    runs = {}
-    for run in args.runs:
-        path = Path(run)
-        scores = RetrievalScores.load(path / f"scores_{args.pairing}")
-        runs[scores.info.name] = scores
+    runs = load_runs(args.runs, args.pairing)
     names = list(runs)
-    mode = args.mode or ("sorted" if _different_shapes(runs) else "grid")
+    auto = args.mode is None
+    mode = args.mode or ("grid" if _same_layout(runs) else "sorted")
+    if auto and mode == "sorted":
+        log.warning("layouts differ, so `sorted` mode is used: it correlates *ranked* "
+                    "score vectors and is high by construction for any two heavy-tailed "
+                    "distributions.  It does NOT mean the models use the same heads.")
+    caveat = ("mode='sorted' correlates sorted score vectors, not head positions; a high "
+              "value does not mean the models use the same heads") if mode == "sorted" else None
     corr = correlation_matrix([runs[n] for n in names], mode=mode, labels=names)
-    save_json(corr.as_dict(), Path(args.out or REPO_ROOT / "results") / "correlation.json")
-    print(json.dumps(corr.as_dict(), indent=2))
+    corr_payload = corr.as_dict()
+    if caveat:
+        corr_payload["caveat"] = caveat
+    save_json(add_provenance(corr_payload), Path(args.out or REPO_ROOT / "results") / "correlation.json")
+    print(json.dumps(corr_payload, indent=2))
     if len(names) == 2:
         overlap = head_overlap(runs[names[0]], runs[names[1]], threshold=args.threshold, mode=mode)
-        save_json(overlap.as_dict(), Path(args.out or REPO_ROOT / "results") / "overlap.json")
+        overlap_payload = overlap.as_dict()
+        if caveat:
+            overlap_payload["caveat"] = caveat
+        save_json(add_provenance(overlap_payload), Path(args.out or REPO_ROOT / "results") / "overlap.json")
         print(json.dumps(overlap.as_dict(), indent=2))
     return 0
 
@@ -237,44 +462,68 @@ def cmd_figures(args: argparse.Namespace) -> int:
         plot_task_qa, save_fig,
     )
     from retrieval_heads.properties import correlation_matrix
-    from retrieval_heads.scoring import RetrievalScores
 
     fig_dir = ensure_dir(args.out or REPO_ROOT / "results" / "figures")
-    runs, curves, qa, cot, mixers = {}, {}, {}, {}, {}
-    for run in args.runs:
-        path = Path(run)
-        scores = RetrievalScores.load(path / f"scores_{args.pairing}")
-        runs[scores.info.name] = scores
+    runs = load_runs(args.runs, args.pairing)
+    labels = list(runs)
+    pairs = list(zip((Path(run) for run in args.runs), labels))
+    curves, qa, cot, mixers = {}, {}, {}, {}
+    for path, label in pairs:
         for name, store in (("masking_curve.json", curves), ("task_qa.json", qa),
                             ("task_cot.json", cot), ("mixer_ablation.json", mixers)):
             candidate = path / name
             if candidate.exists():
-                store[scores.info.name] = json.loads(candidate.read_text(encoding="utf-8"))
+                payload = json.loads(candidate.read_text(encoding="utf-8"))
+                warn_if_stale(payload, str(candidate), log=log)
+                store[label] = payload
+
+    def safe(name: str, factory) -> None:
+        # One unplottable figure (e.g. mixer sweeps with different K sets) must not
+        # abort the stage after half the PDFs were already written.
+        try:
+            save_fig(factory(), fig_dir / name)
+        except ValueError as exc:
+            log.warning("skipping figure %s: %s", name, exc)
 
     if runs:
-        save_fig(plot_score_pie(runs), fig_dir / "ring_graph.pdf")
-        save_fig(plot_score_distribution(runs), fig_dir / "score_distribution.pdf")
-        save_fig(plot_heat_map(runs), fig_dir / "heat_map.pdf")
-        save_fig(plot_layer_profile(runs), fig_dir / "layer_profile.pdf")
-        mode = "sorted" if _different_shapes(runs) else "grid"
+        safe("ring_graph.pdf", lambda: plot_score_pie(runs))
+        safe("score_distribution.pdf", lambda: plot_score_distribution(runs))
+        safe("heat_map.pdf", lambda: plot_heat_map(runs))
+        safe("layer_profile.pdf", lambda: plot_layer_profile(runs))
+        mode = "grid" if _same_layout(runs) else "sorted"
         corr = correlation_matrix(list(runs.values()), mode=mode, labels=list(runs))
-        save_fig(plot_corr_map(corr), fig_dir / "corr_map.pdf")
+        safe("corr_map.pdf", lambda: plot_corr_map(corr))
     if curves:
-        save_fig(plot_masking_curve(curves), fig_dir / "masking_heads.pdf")
-    if qa:
-        first = next(iter(qa))
-        save_fig(plot_task_qa(qa[first]), fig_dir / "task_qa.pdf")
-    if cot:
-        first = next(iter(cot))
-        save_fig(plot_task_cot(cot[first]), fig_dir / "task_cot.pdf")
+        safe("masking_heads.pdf", lambda: plot_masking_curve(curves))
+    # QA/CoT are per-model figures; the old code plotted only the first run and
+    # silently dropped the rest.  With one run the filenames stay as documented;
+    # with several each gets a label suffix.
+    for label, result in qa.items():
+        name = "task_qa.pdf" if len(qa) == 1 else f"task_qa_{_slug(label)}.pdf"
+        safe(name, lambda result=result: plot_task_qa(result))
+    for label, result in cot.items():
+        name = "task_cot.pdf" if len(cot) == 1 else f"task_cot_{_slug(label)}.pdf"
+        safe(name, lambda result=result: plot_task_cot(result))
     if mixers:
-        save_fig(plot_mixer_ablation(mixers), fig_dir / "mixer_ablation.pdf")
+        safe("mixer_ablation.pdf", lambda: plot_mixer_ablation(mixers))
     return 0
 
+def _same_layout(runs: dict[str, Any]) -> bool:
+    """True when every run addresses the same layer x head grid.
 
-def _different_shapes(runs: dict[str, Any]) -> bool:
-    shapes = {run.score.shape for run in runs.values()}
-    return len(shapes) > 1
+    The mode used to be chosen by matrix *shape*: two hybrids with the same
+    ``(num_layers, max_heads)`` but different attention layers took the ``grid``
+    path and compared unrelated positions.
+    """
+    from retrieval_heads.properties import layouts_match
+
+    items = list(runs.values())
+    return all(layouts_match(items[0], other) for other in items[1:])
+
+
+def _slug(text: str) -> str:
+    """Filesystem-safe figure suffix for a run label."""
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", text).strip("-") or "run"
 
 
 # --------------------------------------------------------------------------- parser
@@ -290,6 +539,8 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--pairing", default="next_step", choices=["next_step", "same_step"])
         p.add_argument("--no-chat-template", action="store_true")
         p.add_argument("--thinking", action="store_true", help="leave the model's thinking mode on")
+        p.add_argument("--dtype", default=None, choices=["float32", "bfloat16"],
+                       help="override the registry dtype (bfloat16 on GPU)")
         # Also accepted per-subcommand (not just before it): job drivers build
         # argv as `detect --model ... --seed 0 ...`, and argparse only allows a
         # parent-parser option *before* the subcommand.
@@ -307,8 +558,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--needles", type=int)
     p.add_argument("--max-new-tokens", type=int)
     p.add_argument("--threshold", type=float, default=0.1)
-    p.add_argument("--capture-method", default="output_attentions",
-                   choices=["output_attentions", "patch"])
+    p.add_argument("--capture-method", default="patch",
+                   choices=["output_attentions", "patch"],
+                   help="patch (default) keys captured maps by layer_idx and cannot "
+                        "be confused by attention-map ordering")
+    p.add_argument("--capture-impl", default="eager",
+                   help="attention kernel used while capturing (eager required)")
     p.add_argument("--prefill-impl", default="sdpa")
     p.add_argument("--prefill-chunk", type=int, default=4096,
                    help="feed the prefill in chunks of this size (0 = one shot); bounds "
@@ -320,12 +575,20 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("mask", help="mask top-K retrieval heads vs K random heads")
     add_common(p)
     p.add_argument("--k", type=int, nargs="+", default=None,
-                   help="absolute numbers of heads to mask")
-    p.add_argument("--k-frac", type=float, nargs="+", default=[0.02, 0.04, 0.08, 0.17, 0.33],
-                   help="K as a fraction of scoreable heads -- comparable across models")
+                   help="absolute numbers of heads to mask (overrides the default "
+                        "--k-frac; give both to union them)")
+    p.add_argument("--k-frac", type=float, nargs="+", default=None,
+                   help="K as a fraction of scoreable heads -- comparable across models "
+                        f"(default: {' '.join(map(str, DEFAULT_K_FRACS['mask']))})")
     p.add_argument("--lengths", type=int, nargs="*", default=None)
-    p.add_argument("--random-trials", type=int, default=2)
+    p.add_argument("--random-trials", type=int, default=3)
     p.add_argument("--max-new-tokens", type=int, default=32)
+    p.add_argument("--corpus", default=None,
+                   help="text file of filler sentences; keep it the same as the detect "
+                        "run, or the causal experiment uses different filler")
+    p.add_argument("--mixer-trials", type=int, default=3,
+                   help="random layer subsets per K for the token-mixer ablation "
+                        "(averaged; 1 restores the old deterministic first-K choice)")
     p.add_argument("--prefill-chunk", type=int, default=4096)
     p.set_defaults(func=cmd_mask)
 
@@ -333,18 +596,28 @@ def build_parser() -> argparse.ArgumentParser:
     add_common(p)
     p.add_argument("--data", default=None, help="JSONL with context/question/answer")
     p.add_argument("--k", type=int, nargs="+", default=None)
-    p.add_argument("--k-frac", type=float, nargs="+", default=[0.04, 0.08, 0.17])
-    p.add_argument("--random-trials", type=int, default=2)
+    p.add_argument("--k-frac", type=float, nargs="+", default=None,
+                   help="K as a fraction of scoreable heads "
+                        f"(default: {' '.join(map(str, DEFAULT_K_FRACS['qa']))})")
+    p.add_argument("--random-trials", type=int, default=3)
     p.add_argument("--max-new-tokens", type=int, default=24)
+    p.add_argument("--prefill-chunk", type=int, default=4096,
+                   help="feed the prefill in chunks of this size (0 = one shot); bounds "
+                        "memory on long --data documents")
     p.set_defaults(func=cmd_qa)
 
     p = sub.add_parser("cot", help="chain-of-thought ablation")
     add_common(p)
     p.add_argument("--data", default=None, help="JSONL with question/answer")
     p.add_argument("--k", type=int, nargs="+", default=None)
-    p.add_argument("--k-frac", type=float, nargs="+", default=[0.08])
-    p.add_argument("--random-trials", type=int, default=1)
+    p.add_argument("--k-frac", type=float, nargs="+", default=None,
+                   help="K as a fraction of scoreable heads "
+                        f"(default: {' '.join(map(str, DEFAULT_K_FRACS['cot']))})")
+    p.add_argument("--random-trials", type=int, default=2)
     p.add_argument("--max-new-tokens", type=int, default=192)
+    p.add_argument("--prefill-chunk", type=int, default=4096,
+                   help="feed the prefill in chunks of this size (0 = one shot); bounds "
+                        "memory on long --data documents")
     p.set_defaults(func=cmd_cot)
 
     p = sub.add_parser("compare", help="correlate / overlap models")

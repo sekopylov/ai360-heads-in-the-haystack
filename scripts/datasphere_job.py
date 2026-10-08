@@ -59,8 +59,9 @@ SCALES: dict[str, dict[str, list[str]]] = {
         "cot": ["--k-frac", "0.08", "--random-trials", "2", "--max-new-tokens", "256"],
     },
     "paper": {
-        # `--profile paper` is the 3x7x10 grid; reproduce_gpu.sh widens it to the
-        # paper's exact 20 lengths, so the job does the same.
+        # The paper's full recipe is 3 needles x 20 lengths in 1K-50K x 10 depths
+        # (~600 instances).  Here 9 geometric lengths cover the same span in a
+        # fraction of the time; `--profile paper` alone would use 7.
         "detect": ["--profile", "paper",
                    "--lengths", "1024", "2048", "4096", "8192", "16384",
                    "24576", "32768", "40960", "49152"],
@@ -384,37 +385,87 @@ def report_environment() -> None:
         print("[entry] GPU: none -- stages will run on CPU")
 
 
+def verify_weights(root: Path, registry: Path, keys: list[str] | None = None) -> None:
+    """Every file the registry pins must exist under ``root``.
+
+    Cheap on purpose -- it checks presence, not sha256 (hashing 3.2 GB on every job
+    start would cost GPU time).  A half-downloaded tree must not be mistaken for a
+    ready one: the previous code printed "already present, leaving it alone" and
+    carried on.
+    """
+    data = json.loads(registry.read_text(encoding="utf-8"))["models"]
+    if keys is not None:
+        unknown = [k for k in keys if k not in data]
+        if unknown:
+            raise SystemExit(f"[entry] --models {unknown} are not in {registry}")
+        data = {k: data[k] for k in keys}
+    missing: list[str] = []
+    for key, entry in data.items():
+        leaf = root / Path(entry["path"]).name
+        pinned = {**(entry.get("files") or {}), **(entry.get("shards") or {})}
+        for name in pinned:
+            target = leaf / name
+            if not target.exists() or target.stat().st_size == 0:
+                missing.append(f"{key}/{name}")
+    if missing:
+        raise SystemExit(
+            f"[entry] the checkpoint tree under {root} is incomplete: {len(missing)} "
+            f"pinned file(s) missing or empty, e.g. {missing[:3]}. Refusing to start a "
+            f"job on a partial download -- run scripts/download_models.sh, or fix --weights."
+        )
+    print(f"[entry] checkpoints verified: every pinned file is present under {root}")
+
+
 def prepare_models(args: argparse.Namespace) -> None:
     """Make the checkpoints visible as ``./models``, which the registry paths expect."""
+    registry = Path(os.environ.get("RETRIEVAL_HEADS_MODELS_JSON", "configs/models.json"))
     root = Path("models").absolute()
+    if root.is_symlink() and not root.exists():
+        # `exists()` follows the link, so a dangling one looked "already present"
+        # and verify_weights then failed instead of the link being recreated.
+        print(f"[entry] removing a dangling {root} symlink")
+        root.unlink()
     if root.is_symlink() or root.exists():
         print(f"[entry] {root} already present, leaving it alone")
+        verify_weights(root, registry, args.models)
         return
     if args.download_weights:
         print("[entry] downloading checkpoints into ./models (this takes a few minutes)")
         env = {**os.environ, "MODELS_DIR": "models"}
         subprocess.run(["bash", "scripts/download_models.sh"], check=True, env=env)
+        verify_weights(root, registry, args.models)
         return
     source = Path(args.weights).absolute()
     if not source.is_dir():
         raise SystemExit(f"[entry] --weights {source} is not a directory")
     os.symlink(source, root, target_is_directory=True)
     print(f"[entry] linked {root} -> {source}: {sorted(p.name for p in source.iterdir())}")
+    verify_weights(root, registry, args.models)
 
 
 def override_dtype(models: list[str], dtype: str) -> None:
-    """Rewrite the registry so the models load in the requested precision."""
-    registry = Path("configs/models.json")
-    data = json.loads(registry.read_text(encoding="utf-8"))
+    """Point the stages at a runtime registry with the requested precision.
+
+    The tracked ``configs/models.json`` is an *input* and is left untouched; a
+    copy is written next to it and exported through
+    ``RETRIEVAL_HEADS_MODELS_JSON``, which the CLI prefers.  (Rewriting the
+    tracked file left a stray modification in the working tree and mutated job
+    input rather than output.)
+    """
+    source = Path("configs/models.json")
+    runtime = Path("configs/models.runtime.json")
+    data = json.loads(source.read_text(encoding="utf-8"))
     changed = []
     for key in models:
         if key not in data["models"]:
-            raise SystemExit(f"[entry] {key!r} is not in {registry}: {sorted(data['models'])}")
+            raise SystemExit(f"[entry] {key!r} is not in {source}: {sorted(data['models'])}")
         if data["models"][key].get("dtype") != dtype:
             data["models"][key]["dtype"] = dtype
             changed.append(key)
-    registry.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"[entry] dtype={dtype} for {changed or 'nobody (already correct)'}")
+    runtime.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.environ["RETRIEVAL_HEADS_MODELS_JSON"] = str(runtime)
+    print(f"[entry] dtype={dtype} for {changed or 'nobody (already correct)'} "
+          f"(runtime registry {runtime})")
 
 
 def run(stage: str, argv: list[str]) -> None:
@@ -435,8 +486,9 @@ def stage_argv(
     """Build the ``retrieval_heads.cli`` argument lists for one stage.
 
     Kept as a pure function so the CLI/driver contract can be tested without a
-    job: a mismatch here costs a full ~9-minute DataSphere round trip (env build)
-    before it surfaces, and that already happened once with ``--seed``.
+    job: a mismatch here otherwise costs a DataSphere round trip (tens of seconds
+    with the cached venv, minutes when the environment is built) before it
+    surfaces, and that already happened once with ``--seed``.
     """
     runs = {key: prefix / key for key in models}
     scales = SCALES[profile]

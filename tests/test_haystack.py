@@ -15,16 +15,38 @@ NEEDLE = "The best thing to do in San Francisco is to eat a sandwich in Dolores 
 QUESTION = "What is the best thing to do in San Francisco?"
 
 
-def test_needle_span_is_exact(tokenizer):
-    """The recorded token span must decode back to the needle, character for character."""
+@pytest.mark.parametrize("depth", [0.0, 0.5, 1.0])
+@pytest.mark.parametrize("index", [0, 1, 2, "eval"])
+def test_needle_span_is_exact(tokenizer, depth, index):
+    """The recorded span must be exactly the needle: no fewer, no more tokens.
+
+    Parametrised over every shipped needle (including the held-out eval one) and the
+    endpoint depths: the cut is snapped to whitespace, so 0.0/1.0 take a different
+    path, and the span test used to cover a single needle at a single depth.
+    """
+    from retrieval_heads.detection import DETECTION_NEEDLES, EVAL_NEEDLES
+
+    if index == "eval":
+        needle, question = EVAL_NEEDLES[0]
+    else:
+        needle, question = DETECTION_NEEDLES[index]
     sample = build_needle_sample(
-        tokenizer, needle=NEEDLE, question=QUESTION, target_tokens=256, depth=0.5,
+        tokenizer, needle=needle, question=question, target_tokens=256, depth=depth,
         builder=HaystackBuilder(seed=1),
     )
-    decoded = tokenizer.decode(sample.input_ids[0, sample.needle_span[0]:sample.needle_span[1]])
-    assert NEEDLE in decoded
-    assert sample.n_needle_tokens == sample.needle_span[1] - sample.needle_span[0]
+    start, end = sample.needle_span
+    decoded = tokenizer.decode(sample.input_ids[0, start:end])
+    assert needle in decoded
+    assert sample.n_needle_tokens == end - start      # property, but cheap
     assert sample.n_needle_tokens > 5
+    # A span widened by one token in either direction still contains the needle
+    # text, so `needle in decoded` alone cannot catch it.  Neither trimmed span may
+    # still decode the whole needle.  (An over-wide span inflates |k| and depresses
+    # every head's score.)
+    assert needle not in tokenizer.decode(sample.input_ids[0, start + 1:end])
+    assert needle not in tokenizer.decode(sample.input_ids[0, start:end - 1])
+    # The builder computes the same invariant and records it.
+    assert sample.meta.get("span_tight") is True
 
 
 def test_prompt_contains_question_and_needle(tokenizer):
@@ -60,6 +82,15 @@ def test_haystack_grows_with_target(tokenizer):
     assert large.length > small.length
 
 
+def test_filler_tokenizer_that_returns_nothing_raises_instead_of_hanging():
+    class EmptyTok:
+        def __call__(self, text, **kwargs):
+            return type("Enc", (), {"input_ids": []})()
+
+    with pytest.raises(RuntimeError, match="no progress"):
+        HaystackBuilder(seed=0).text(64, EmptyTok())
+
+
 def test_filler_is_deterministic():
     a = HaystackBuilder(seed=11)
     b = HaystackBuilder(seed=11)
@@ -68,13 +99,23 @@ def test_filler_is_deterministic():
     assert a.text(200, _FakeTok()) != c.text(200, _FakeTok())
 
 
-def test_seed_does_not_change_the_needle(tokenizer):
-    a = build_needle_sample(tokenizer, needle=NEEDLE, question=QUESTION, target_tokens=256,
-                            depth=0.5, builder=HaystackBuilder(seed=1), seed=1)
-    b = build_needle_sample(tokenizer, needle=NEEDLE, question=QUESTION, target_tokens=256,
-                            depth=0.5, builder=HaystackBuilder(seed=1), seed=99)
-    assert a.needle_span == b.needle_span
-    assert a.needle_ids == b.needle_ids
+def test_seed_is_used_only_when_no_builder_is_given(tokenizer):
+    """With a builder, the per-call seed is ignored; without one, it drives the filler.
+
+    The previous version passed an explicit builder *and* different seeds and then
+    asserted nothing changed -- which could not fail, because `build_needle_sample`
+    only uses `seed` to construct a builder when none is supplied.
+    """
+    shared = [build_needle_sample(tokenizer, needle=NEEDLE, question=QUESTION,
+                                  target_tokens=256, depth=0.5,
+                                  builder=HaystackBuilder(seed=1), seed=s)
+              for s in (1, 99)]
+    assert shared[0].prompt_text == shared[1].prompt_text
+
+    from_seed = [build_needle_sample(tokenizer, needle=NEEDLE, question=QUESTION,
+                                     target_tokens=256, depth=0.5, seed=s)
+                 for s in (1, 2)]
+    assert from_seed[0].prompt_text != from_seed[1].prompt_text
 
 
 def test_duplicate_needle_is_rejected(tokenizer):
@@ -109,3 +150,28 @@ class _FakeTok:
         from types import SimpleNamespace
 
         return SimpleNamespace(input_ids=text.split())
+
+
+def test_needle_gold_tokens_come_from_the_needle_text(tokenizer):
+    """The prompt span can fuse the last character with filler (`.\\n`).
+
+    Scoring and F1 must use the tokenization of the needle *text*, otherwise the
+    metric's ceiling drops below 1 and the emitted final token is uncreditable.
+    """
+    from retrieval_heads.masking import token_f1
+
+    sample = build_needle_sample(
+        tokenizer, needle=NEEDLE, question=QUESTION, target_tokens=256, depth=0.5,
+        builder=HaystackBuilder(seed=1),
+    )
+    text_ids = tokenizer(NEEDLE, add_special_tokens=False).input_ids
+    assert sample.needle_text_ids == text_ids
+    assert sample.n_unique_needle_text_tokens == len(set(text_ids))
+    # A perfect answer must be able to score 1.0.
+    assert token_f1(text_ids, sample.needle_text_ids) == 1.0
+    # The span boundary may straddle the needle; it is recorded rather than silent.
+    assert "span_straddles_boundary" in sample.meta
+    if sample.meta["span_straddles_boundary"]:
+        assert sample.needle_ids[-1] != text_ids[-1]
+        # ... and the union used for scoring contains both versions.
+        assert text_ids[-1] in set(sample.needle_ids) | set(sample.needle_text_ids)

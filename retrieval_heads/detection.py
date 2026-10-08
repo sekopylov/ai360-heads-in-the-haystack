@@ -14,14 +14,17 @@ dense model and on a hybrid linear/full-attention model.
 from __future__ import annotations
 
 import json
+import zlib
+
+import numpy as np
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
 
-import torch
 
 from retrieval_heads.haystack import HaystackBuilder, build_needle_sample, iter_depths
 from retrieval_heads.models import ModelInfo
+from retrieval_heads.provenance import add_provenance
 from retrieval_heads.scoring import (
     PAIRINGS,
     InstanceResult,
@@ -29,7 +32,9 @@ from retrieval_heads.scoring import (
     aggregate_scores,
     score_instance,
 )
-from retrieval_heads.utils import ensure_dir, get_logger, save_json, set_seed
+from retrieval_heads.utils import (
+    ensure_dir, finite_json, get_logger, json_default, save_json, set_seed,
+)
 
 log = get_logger("detection")
 
@@ -59,6 +64,38 @@ DEFAULT_NEEDLES: tuple[tuple[str, str], ...] = (
     ),
 )
 
+#: The needles retrieval heads are *selected* on.  Never score a causal ablation on
+#: these: the heads were chosen because they copy exactly this text.
+DETECTION_NEEDLES: tuple[tuple[str, str], ...] = DEFAULT_NEEDLES
+
+#: Held out from detection (the paper's "additional set of needle tests that are
+#: different from the three sets used for retrieval head detection").  The masking
+#: curve uses this one, so the effect is not measured on the selection set.
+EVAL_NEEDLES: tuple[tuple[str, str], ...] = (
+    (
+        "The instrument that the lighthouse keeper of Cape Winterbourne polishes every "
+        "second Tuesday is a brass sextant engraved with the initials R. M.",
+        "What instrument does the lighthouse keeper of Cape Winterbourne polish?",
+    ),
+)
+
+
+def assert_needles_disjoint() -> None:
+    """Fail fast if a detection needle is also used for the causal ablation."""
+    detection = {needle for needle, _ in DETECTION_NEEDLES}
+    evaluation = {needle for needle, _ in EVAL_NEEDLES}
+    leaked = detection & evaluation
+    if leaked:
+        raise RuntimeError(
+            f"the eval needle set overlaps the detection needle set ({len(leaked)} shared); "
+            f"the causal ablation would be measured on the selection set"
+        )
+
+
+#: An instance counts as "recited" for the conditional matrices / summary at this
+#: recall (a NIAH answer is a span, so this is deliberately low).
+RECITED_RECALL = 0.3
+
 
 @dataclass
 class DetectionConfig:
@@ -67,7 +104,8 @@ class DetectionConfig:
     lengths: list[int] = field(default_factory=lambda: [1024, 2048, 4096])
     depths_per_length: int = 3
     max_new_tokens: int = 32
-    needles: list[tuple[str, str]] = field(default_factory=lambda: list(DEFAULT_NEEDLES))
+    #: Detection needles only -- `EVAL_NEEDLES` are held out for the ablation.
+    needles: list[tuple[str, str]] = field(default_factory=lambda: list(DETECTION_NEEDLES))
     threshold: float = 0.1
     pairing: str = "next_step"
     chat_template: bool = True
@@ -75,21 +113,37 @@ class DetectionConfig:
     system_prompt: str | None = None
     prefill_impl: str = "sdpa"
     capture_impl: str = "eager"
-    capture_method: str = "output_attentions"
+    capture_method: str = "patch"
     #: Feed the prompt to the prefill in chunks of this size (None = one shot).
     #: Bounds prefill memory on cards where float32 SDPA falls back to the math
     #: backend and materialises (heads, seq, seq).
     prefill_chunk: int | None = 4096
     seed: int = 0
-    #: cap on the total number of instances (None = the full grid)
+    #: Cap on the total number of instances (None = the full grid).  NOTE: the plan
+    #: is truncated in grid order, so a limit keeps the first needles and the shortest
+    #: lengths -- a biased subsample, not a random one.
     limit: int | None = None
+    #: Lengths the model's context window rejected, kept so the artifact shows the
+    #: requested grid rather than only the surviving one.
+    dropped_lengths: list[int] = field(default_factory=list)
 
     @property
     def grid_size(self) -> int:
         return len(self.needles) * len(self.lengths) * self.depths_per_length
 
     def plan(self) -> list[dict[str, Any]]:
-        """Deterministic list of instances; each entry is one NIAH test."""
+        """Deterministic list of instances; each entry is one NIAH test.
+
+        Cached: `as_dict()` (called from every `summary()`) used to rebuild the grid
+        and re-log the `--limit` warning each time.
+
+        Depths are the endpoints-inclusive ``iter_depths``, so 0.0 and 1.0 (needle
+        first/last) are in the grid; the paper samples 10 interior depths, so the
+        extreme endpoints carry more weight here than there.
+        """
+        cached = getattr(self, "_plan_cache", None)
+        if cached is not None:
+            return list(cached)
         items: list[dict[str, Any]] = []
         for n_idx, (needle, question) in enumerate(self.needles):
             for length in self.lengths:
@@ -101,16 +155,25 @@ class DetectionConfig:
                         "question": question,
                         "target_tokens": length,
                         "depth": depth,
-                        "seed": self.seed + 1000 * n_idx + 17 * d_idx + length,
+                        # crc32 of the tuple instead of an arithmetic mix: stable
+                        # across runs and collision-free for any future grid.
+                        "seed": self.seed + zlib.crc32(f"{n_idx}:{length}:{d_idx}".encode()),
                     })
         if self.limit is not None:
             items = items[: self.limit]
+            log.warning("--limit %d keeps the first %d instances in grid order (one needle, "
+                        "shortest lengths); treat this as a debugging sample, not an estimate",
+                        self.limit, len(items))
+        object.__setattr__(self, "_plan_cache", list(items))
         return items
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["needles"] = [{"needle": n, "question": q} for n, q in self.needles]
-        data["grid_size"] = self.grid_size
+        # `grid_size` is what will actually run (so it agrees with `n_planned`);
+        # the unbounded grid is kept separately instead of silently disagreeing.
+        data["grid_size"] = len(self.plan())
+        data["grid_size_unlimited"] = self.grid_size
         return data
 
 
@@ -123,35 +186,71 @@ class DetectionRun:
     config: DetectionConfig
     model_info: ModelInfo
     wall_time_s: float = 0.0
+    #: Instances the grid planned (``len(instances)`` unless a partial run).
+    n_planned: int = 0
+    #: Recited-only aggregates, keyed by pairing (they are *not* interchangeable:
+    #: a single shared value leaked next_step's numbers into the same_step summary).
+    conditional: dict[str, RetrievalScores] = field(default_factory=dict)
     #: The *other* pairing's aggregate, when it was computed.  Reported alongside
     #: the primary one because the two disagree on which heads are retrieval heads.
     secondary: RetrievalScores | None = None
 
-    def pairing_comparison(self, top_k: int = 10) -> dict[str, Any]:
-        """Top heads under each pairing, and how much the two rankings overlap."""
-        primary = [str(h) for h in self.scores.ranked_heads()[:top_k]]
+    def pairing_comparison(self, top_k: int = 10,
+                           scores: RetrievalScores | None = None) -> dict[str, Any]:
+        """Top heads under each pairing, and how much the two rankings overlap.
+
+        ``scores`` selects the primary pairing, so the `same_step` sidecar lists
+        `same_step` heads as primary rather than the `next_step` ones.
+        """
+        scores = scores or self.scores
+        primary = [str(h) for h in scores.ranked_heads()[:top_k]]
         if self.secondary is None:
-            return {"primary": {self.scores.pairing: primary}}
+            return {"primary": {scores.pairing: primary}}
         other = [str(h) for h in self.secondary.ranked_heads()[:top_k]]
         overlap = len(set(primary) & set(other))
         return {
-            "primary": {self.scores.pairing: primary},
+            "primary": {scores.pairing: primary},
             "secondary": {self.secondary.pairing: other},
             "top_k": top_k,
             "overlap": overlap,
             "jaccard": overlap / len(set(primary) | set(other)) if primary or other else float("nan"),
         }
 
-    def summary(self) -> dict[str, Any]:
+    def aligned_ranking(self, scores: RetrievalScores | None = None,
+                        top_k: int = 10) -> list[dict[str, Any]]:
+        """Mean strict-aligned score per head, best first.
+
+        The `aligned_scores` were written to the per-instance JSONL and read by
+        nothing; this surfaces the robustness check in the summary.
+        """
+        scores = scores or self.scores
+        pairing = scores.pairing
+        totals = {h: 0.0 for h in self.model_info.scoreable_heads}
+        n = 0
+        for instance in self.instances:
+            data = instance.aligned_scores.get(pairing)
+            if not data:
+                continue
+            n += 1
+            for head in self.model_info.scoreable_heads:
+                totals[head] += float(data.get(str(head), 0.0))
+        if n == 0:
+            return []
+        ranked = sorted(totals.items(), key=lambda kv: (-kv[1] / n, kv[0].layer, kv[0].head))
+        return [{"head": str(head), "aligned_score": value / n} for head, value in ranked[:top_k]]
+
+    def summary(self, scores: RetrievalScores | None = None) -> dict[str, Any]:
+        """Run-level summary; ``scores`` selects the pairing (default: primary)."""
+        scores = scores or self.scores
         # Two independent notions of "this instance actually tested retrieval":
         #  * the model recited a decent share of the needle (diagnostic), and
         #  * the scoring found at least one head copying a needle token (the
         #    method's own signal).  They can disagree, and that disagreement is
         #    itself informative, so both are reported.
-        recited = [i for i in self.instances if i.needle_recall >= 0.3]
+        recited = [i for i in self.instances if i.needle_recall >= RECITED_RECALL]
         copied = [
             i for i in self.instances
-            if any(v > 0.0 for v in i.scores[self.scores.pairing].values())
+            if any(v > 0.0 for v in i.scores[scores.pairing].values())
         ]
         n = len(self.instances)
         return {
@@ -159,28 +258,77 @@ class DetectionRun:
             "n_instances": n,
             "n_instances_recited": len(recited),
             "n_instances_with_copy": len(copied),
+            # The score is a recall over all unique needle tokens, so a generation
+            # cut off by max_new_tokens depresses every head.  Report how often
+            # that happened instead of leaving it only in the per-instance JSONL.
+            "n_instances_truncated": sum(
+                1 for i in self.instances
+                if i.meta.get("truncated", not i.meta.get("eos_reached", True))
+            ),
             "mean_needle_recall": (
                 sum(i.needle_recall for i in self.instances) / n if n else 0.0
             ),
+            # Attention-sink pressure: share of scored steps where a head's argmax
+            # fell on position 0.  Per-head values live in the JSONL; this is the
+            # run-level summary so the number is not write-only.
+            "mean_sink_rate": (
+                sum(i.sink_rate.get(scores.pairing, {}).get("__overall__", 0.0)
+                    for i in self.instances) / n if n else 0.0
+            ),
             "wall_time_s": round(self.wall_time_s, 1),
             "config": self.config.as_dict(),
-            "sparsity": self.scores.sparsity(),
+            # The run's own threshold, so a reader can tell the fixed 0.1/0.5
+            # buckets from the threshold this run actually used.
+            "score_threshold": scores.threshold,
+            # How much the unique-token denominator inflates the score relative to a
+            # per-token reading of the paper's formula.
+            "needle_stats": {
+                key: scores.meta[key] for key in
+                ("needle_tokens_mean", "unique_needle_tokens_mean", "denominator_inflation")
+                if key in scores.meta
+            },
+            "sparsity": scores.sparsity(),
+            "sparsity_recited": (self.conditional[scores.pairing].sparsity()
+                                 if scores.pairing in self.conditional else None),
+            "top_heads_recited": (
+                [{"head": str(h), "score": self.conditional[scores.pairing].head_score(h)}
+                 for h in self.conditional[scores.pairing].ranked_heads()[:10]]
+                if scores.pairing in self.conditional else []
+            ),
             "top_heads": [
-                {"head": str(h), "score": self.scores.head_score(h),
-                 "activation_freq": float(self.scores.activation_freq[h.layer, h.head])}
-                for h in self.scores.ranked_heads()[:20]
+                {"head": str(h), "score": scores.head_score(h),
+                 "activation_freq": float(scores.activation_freq[h.layer, h.head])}
+                for h in scores.ranked_heads()[:20]
             ],
-            "pairing_comparison": self.pairing_comparison(),
+            "pairing_comparison": self.pairing_comparison(scores=scores),
+            "aligned_top_heads": self.aligned_ranking(scores),
+            "n_planned": self.n_planned,
             "model_info": self.model_info.as_dict(),
         }
 
-    def save(self, out_dir: str | Path) -> Path:
+    def save(self, out_dir: str | Path, *, write_instances: bool = True) -> Path:
+        """Write the aggregates (and the JSONL unless it was already streamed)."""
         out = ensure_dir(out_dir)
         self.scores.save(out / f"scores_{self.scores.pairing}")
-        save_json(self.summary(), out / f"summary_{self.scores.pairing}.json")
-        with (out / f"instances_{self.scores.pairing}.jsonl").open("w", encoding="utf-8") as fh:
-            for inst in self.instances:
-                fh.write(json.dumps(inst.as_dict(), default=str, ensure_ascii=False) + "\n")
+        save_json(add_provenance(self.summary(), dtype=self.model_info.dtype),
+                  out / f"summary_{self.scores.pairing}.json")
+        if write_instances:
+            with (out / f"instances_{self.scores.pairing}.jsonl").open("w", encoding="utf-8") as fh:
+                for inst in self.instances:
+                    # Strict encoder: `default=str` turned any unexpected object into a
+                    # string and quietly changed the artifact's schema.
+                    fh.write(json.dumps(finite_json(inst.as_dict()), default=json_default,
+                                        ensure_ascii=False, allow_nan=False) + "\n")
+        # The secondary pairing comes from the same decoding pass, so its
+        # aggregate is written too: otherwise `same_step` only ever appeared as a
+        # top-10 list inside the primary summary and its per-head table was lost.
+        for pairing, agg in self.conditional.items():
+            agg.save(out / f"scores_{pairing}_recited")
+        if self.secondary is not None:
+            self.secondary.save(out / f"scores_{self.secondary.pairing}")
+            save_json(add_provenance(self.summary(self.secondary),
+                                     dtype=self.model_info.dtype),
+                      out / f"summary_{self.secondary.pairing}.json")
         log.info("detection run written to %s", out)
         return out
 
@@ -207,9 +355,15 @@ def run_detection(
         info.n_scoreable_heads,
     )
 
-    builder = HaystackBuilder(corpus, seed=config.seed)
+    assert_needles_disjoint()
     results: list[InstanceResult] = []
     started = time.time()
+    # Stream every instance to disk as it finishes: a paper-scale run is tens of
+    # minutes of GPU time, and buffering it all meant one timeout lost the lot.
+    stream = None
+    if out_dir is not None:
+        stream = (ensure_dir(out_dir) / f"instances_{config.pairing}.jsonl").open(
+            "w", encoding="utf-8")
     iterator = plan
     if progress:
         try:
@@ -219,62 +373,124 @@ def run_detection(
         except ImportError:  # pragma: no cover
             pass
 
-    for item in iterator:
-        sample = build_needle_sample(
-            tokenizer,
-            needle=item["needle"],
-            question=item["question"],
-            target_tokens=item["target_tokens"],
-            depth=item["depth"],
-            builder=builder,
-            chat_template=config.chat_template,
-            enable_thinking=config.enable_thinking,
-            system_prompt=config.system_prompt,
-            seed=item["seed"],
-        )
-        result = score_instance(
-            model, info, sample, tokenizer,
-            max_new_tokens=config.max_new_tokens,
-            pairing=config.pairing,
-            prefill_impl=config.prefill_impl,
-            capture_impl=config.capture_impl,
-            capture_method=config.capture_method,
-            prefill_chunk=config.prefill_chunk,
-        )
-        result.sample["needle_index"] = item["needle_index"]
-        results.append(result)
-        log.debug("instance %d/%d len=%d depth=%.2f recall=%.2f",
-                  item["index"] + 1, len(plan), sample.length, item["depth"], result.needle_recall)
+    try:
+        for item in iterator:
+            # A fresh builder per instance, seeded by the instance's own seed: the
+            # seed is recorded in every artifact, so it has to be the one that
+            # actually produced the filler (a single shared builder ignored it).
+            builder = HaystackBuilder(corpus, seed=item["seed"])
+            sample = build_needle_sample(
+                tokenizer,
+                needle=item["needle"],
+                question=item["question"],
+                target_tokens=item["target_tokens"],
+                depth=item["depth"],
+                builder=builder,
+                chat_template=config.chat_template,
+                enable_thinking=config.enable_thinking,
+                system_prompt=config.system_prompt,
+                seed=item["seed"],
+            )
+            result = score_instance(
+                model, info, sample, tokenizer,
+                max_new_tokens=config.max_new_tokens,
+                pairing=config.pairing,
+                prefill_impl=config.prefill_impl,
+                capture_impl=config.capture_impl,
+                capture_method=config.capture_method,
+                prefill_chunk=config.prefill_chunk,
+            )
+            result.sample["needle_index"] = item["needle_index"]
+            results.append(result)
+            if stream is not None:
+                stream.write(json.dumps(finite_json(result.as_dict()), default=json_default,
+                                        ensure_ascii=False, allow_nan=False) + "\n")
+                stream.flush()
+            log.debug("instance %d/%d len=%d depth=%.2f recall=%.2f",
+                      item["index"] + 1, len(plan), sample.length, item["depth"], result.needle_recall)
+
+    finally:
+        # A crash mid-run must still close the JSONL (and leave a clearly
+        # short file rather than a locked descriptor).
+        if stream is not None:
+            stream.close()
 
     scores = aggregate_scores(results, info, pairing=config.pairing, threshold=config.threshold)
-    scores.meta = {"config": config.as_dict(), "corpus": "custom" if corpus else "synthetic"}
+    needle_tokens = [r.sample.get("n_needle_tokens", 0) for r in results]
+    unique_tokens = [r.sample.get("n_unique_needle_tokens", 0) for r in results]
+    scores.meta = {
+        "config": config.as_dict(),
+        "corpus": "custom" if corpus else "synthetic",
+        # The score is averaged over *all* instances, including ones where the model
+        # never recited the needle; `conditional` below is the recited-only view, and
+        # the two needle counts expose how much the unique-token denominator inflates
+        # the score relative to a per-token reading.
+        "needle_tokens_mean": float(np.mean(needle_tokens)) if needle_tokens else 0.0,
+        "unique_needle_tokens_mean": float(np.mean(unique_tokens)) if unique_tokens else 0.0,
+        "denominator_inflation": (
+            float(np.mean(needle_tokens)) / float(np.mean(unique_tokens))
+            if unique_tokens and float(np.mean(unique_tokens)) else 1.0
+        ),
+    }
 
     secondary = None
     other = [p for p in PAIRINGS if p != config.pairing]
     if other:
         try:
             secondary = aggregate_scores(results, info, pairing=other[0],
-                                         threshold=config.threshold, keep_instances=False)
+                                         threshold=config.threshold)
             primary_top = {str(h) for h in scores.ranked_heads()[:10]}
             secondary_top = {str(h) for h in secondary.ranked_heads()[:10]}
             log.info("pairing check: top-10 overlap between %s and %s = %d/10",
                      config.pairing, other[0], len(primary_top & secondary_top))
         except KeyError:  # pragma: no cover - second pairing was not recorded
             secondary = None
+        else:
+            # Without this the `same_step` sidecar had no config/corpus, unlike the
+            # primary one.
+            secondary.meta = dict(scores.meta)
+
+    # Same matrices, restricted to instances the model actually solved: without this
+    # a model that fails NIAH more often looks "less sparse" for reasons unrelated to
+    # its heads.
+    recited = [r for r in results if r.needle_recall >= RECITED_RECALL]
+    # Only the pairings that actually produced a secondary aggregate: iterating
+    # `other[0]` unconditionally would re-raise the same KeyError the guard above
+    # just swallowed.
+    conditional_pairings = [config.pairing]
+    if secondary is not None:
+        conditional_pairings.append(secondary.pairing)
+    conditional: dict[str, RetrievalScores] = {}
+    for pairing in conditional_pairings:
+        if not recited:
+            continue
+        agg = aggregate_scores(recited, info, pairing=pairing, threshold=config.threshold)
+        agg.meta = {"corpus": scores.meta["corpus"], "recited_only": True,
+                    "recall_threshold": RECITED_RECALL, "n_instances": len(recited),
+                    "pairing": pairing}
+        conditional[pairing] = agg
 
     run = DetectionRun(
         scores=scores, instances=results, config=config, model_info=info,
-        wall_time_s=time.time() - started, secondary=secondary,
+        wall_time_s=time.time() - started, secondary=secondary, n_planned=len(plan),
+        conditional=conditional,
     )
+    # The flag lives in InstanceResult.meta (`sample` is the NIAH sample dict and has
+    # no such key), so reading `r.sample` made this warning unreachable.
+    truncated = sum(
+        1 for r in results
+        if r.meta.get("truncated", not r.meta.get("eos_reached", True))
+    )
+    if results and truncated / len(results) > 0.25:
+        log.warning(
+            "%d/%d instances hit max_new_tokens=%d before an EOS; the retrieval score "
+            "is a recall over that budget, so the numbers are budget-limited",
+            truncated, len(results), config.max_new_tokens,
+        )
     best = scores.ranked_heads()[0]
     log.info("detection finished in %.1fs; top head %s (%.2f), %d/%d instances recited the needle",
              run.wall_time_s, best, scores.head_score(best),
-             sum(1 for i in results if i.needle_recall >= 0.3), len(results))
+             sum(1 for i in results if i.needle_recall >= RECITED_RECALL), len(results))
     if out_dir is not None:
-        run.save(out_dir)
+        run.save(out_dir, write_instances=stream is None)
     return run
-
-
-def load_run(out_dir: str | Path, info: ModelInfo, pairing: str = "next_step") -> RetrievalScores:
-    """Reload a saved detection run (matrices + metadata only)."""
-    return RetrievalScores.load(Path(out_dir) / f"scores_{pairing}", info)

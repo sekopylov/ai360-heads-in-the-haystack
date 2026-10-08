@@ -6,29 +6,46 @@
 #   ./scripts/reproduce_gpu.sh qwen3.5-0.8b
 #
 # The paper's full recipe is 3 needle sets x 20 lengths in 1K-50K x 10 depths
-# (~600 instances per model).  `--profile paper` uses 3 x 7 x 10; raise
-# --lengths to hit the exact grid.
+# (~600 instances per model).  `--profile paper` uses 3 x 7 x 10; the explicit
+# --lengths below widens that to 9 geometric lengths over the same span.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 PY="${PY:-.venv/bin/python}"
 if [[ $# -gt 0 ]]; then MODELS=("$@"); else MODELS=(qwen3.5-0.8b qwen3-0.6b); fi
+RUNS=()
+for m in "${MODELS[@]}"; do RUNS+=("results/$m"); done
 
 # On a GPU, `flash-linear-attention` + `causal-conv1d` remove the pure-PyTorch
 # fallback that dominates Qwen3.5's runtime; the code path is identical.
 #   uv pip install flash-linear-attention causal-conv1d
 
+# bfloat16 matches what the DataSphere job configs (t4.yaml, t4-cached.yaml,
+# paper.yaml) use, so a local GPU run and a job run are the same experiment; the
+# artifact records the dtype, so a mixed comparison is visible.
+DTYPE=(--dtype bfloat16)
+
 for m in "${MODELS[@]}"; do
-  "$PY" -m retrieval_heads.cli detect --model "$m" --profile paper \
+  "$PY" -m retrieval_heads.cli detect --model "$m" --profile paper "${DTYPE[@]}" \
       --lengths 1024 2048 4096 8192 16384 24576 32768 40960 49152
 done
 
 for m in "${MODELS[@]}"; do
-  "$PY" -m retrieval_heads.cli mask --model "$m" --k 1 2 4 8 16 32 64 128 \
+  # Fractions, not absolute K: K=32 is 67% of Qwen3.5-0.8B's 48 scoreable heads
+  # but 7% of Qwen3-0.6B's 448, and on the hybrid every K above the non-retrieval
+  # pool collapses to the same point.  Mirrors SCALES["paper"] in the job driver.
+  "$PY" -m retrieval_heads.cli mask --model "$m" "${DTYPE[@]}" \
+      --k-frac 0.01 0.02 0.04 0.08 0.17 0.33 \
       --lengths 4096 8192 16384 --random-trials 5
-  "$PY" -m retrieval_heads.cli qa  --model "$m" --k 8 32 64 --random-trials 5
-  "$PY" -m retrieval_heads.cli cot --model "$m" --k 32 --random-trials 3
+  "$PY" -m retrieval_heads.cli qa  --model "$m" "${DTYPE[@]}" \
+      --k-frac 0.04 0.08 0.17 --random-trials 5
+  "$PY" -m retrieval_heads.cli cot --model "$m" "${DTYPE[@]}" \
+      --k-frac 0.08 --random-trials 3
 done
 
-"$PY" -m retrieval_heads.cli compare --runs results/qwen3.5-0.8b results/qwen3-0.6b --out results
-"$PY" -m retrieval_heads.cli figures --runs results/qwen3.5-0.8b results/qwen3-0.6b --out results/figures
+if [[ ${#MODELS[@]} -ge 2 ]]; then
+  "$PY" -m retrieval_heads.cli compare --runs "${RUNS[@]}" --out results
+else
+  echo "(skipped: compare needs at least two models)"
+fi
+"$PY" -m retrieval_heads.cli figures --runs "${RUNS[@]}" --out results/figures

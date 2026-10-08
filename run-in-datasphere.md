@@ -51,8 +51,10 @@ $CLI project job execute -p "$PROJECT" -c configs/datasphere/laptop.yaml
 
 * **`scripts/datasphere_job.py`** — единственная точка входа задания. Он:
   выставляет веса как `./models` (симлинк на входной каталог `${WEIGHTS}` либо
-  скачивание с HuggingFace), при необходимости меняет `dtype` в
-  `configs/models.json`, а затем последовательно запускает стадии
+  скачивание с HuggingFace), при `--dtype` пишет копию реестра
+  `configs/models.runtime.json` и выставляет `RETRIEVAL_HEADS_MODELS_JSON`
+  (трекнутый `configs/models.json` не меняется), а затем последовательно
+  запускает стадии
   `describe / detect / mask / qa / cot / compare / figures` через
   `python -m retrieval_heads.cli`. Масштаб стадий берётся из таблицы `SCALES`,
   которая повторяет `scripts/reproduce_laptop.sh` и `scripts/reproduce_gpu.sh`
@@ -182,7 +184,7 @@ DataSphere API отвечает на него `401`. Нужен именно IAM
 name: rh-smoke
 desc: retrieval-heads smoke run (describe + detect, qwen3-0.6b)
 
-cmd: python3 datasphere_job.py --weights ${WEIGHTS} --models qwen3-0.6b --profile smoke --stages describe,detect --out-prefix ds-results
+cmd: python3 scripts/datasphere_job.py --weights ${WEIGHTS} --models qwen3-0.6b --profile smoke --stages describe,detect --out-prefix ds-results
 
 inputs:
   - models:            # 3.2 ГБ; адрес каталога отдаётся переменной WEIGHTS
@@ -234,7 +236,7 @@ DataSphere кеширует входные данные в проекте, по�
 name: rh-laptop
 desc: full pipeline, laptop scale, CPU
 
-cmd: python3 datasphere_job.py --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile laptop --stages describe,detect,mask,qa,cot,compare,figures --out-prefix ds-results
+cmd: python3 scripts/datasphere_job.py --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile laptop --stages describe,detect,mask,qa,cot,compare,figures --out-prefix ds-results
 
 inputs:
   - models:
@@ -269,7 +271,7 @@ cloud-instance-types:
 name: rh-paper
 desc: paper-scale grid on GPU
 
-cmd: python3 datasphere_job.py --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile paper --dtype bfloat16 --stages describe,detect,mask,qa,cot,compare,figures --out-prefix ds-results
+cmd: python3 scripts/datasphere_job.py --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile paper --dtype bfloat16 --stages describe,detect,mask,qa,cot,compare,figures --out-prefix ds-results
 
 inputs:
   - models:
@@ -304,9 +306,11 @@ $CLI project job cancel --id <job_id> --graceful # остановить
 Полезные оговорки по GPU:
 
 * `float32` для Qwen3.5-0.8B — ~3.2 ГБ весов + активации; на V100 32 ГБ помещается,
-  но медленно. `--dtype bfloat16` перепишет `configs/models.json` внутри job.
-* Код сам переезжает на GPU: `retrieval_heads/cli.py` вызывает `model.to("cuda")`,
-  если `torch.cuda.is_available()`. Отдельных флагов для устройства нет.
+  но медленно. `--dtype bfloat16` пишет копию реестра
+  `configs/models.runtime.json` внутри job и выставляет
+  `RETRIEVAL_HEADS_MODELS_JSON`; трекнутый `configs/models.json` не меняется.
+* Код сам выбирает устройство: `retrieval_heads/cli.py` грузит модель сразу на
+  `cuda`, если `torch.cuda.is_available()`. Отдельного флага для устройства нет.
 * Ускорение Qwen3.5: слои Gated DeltaNet без `flash-linear-attention` /
   `causal-conv1d` работают на чистом PyTorch. Это только скорость; добавляй эти
   пакеты в requirements осознанно (нужно совпадение с версией torch/CUDA).

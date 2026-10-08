@@ -15,6 +15,10 @@ env:
     type: manual
     version: "3.10"
     requirements-file: scripts/requirements-datasphere.txt
+    # See docs/datasphere-findings.md section 3: pip 25.1.1 aborts on this
+    # dependency graph, so the exact lock is installed without resolving deps.
+    pip:
+      no-deps: 'true'
     local-paths:
       - retrieval_heads
       - configs

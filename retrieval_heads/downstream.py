@@ -19,15 +19,17 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
 import numpy as np
 import torch
 
-from retrieval_heads.attention import HeadMasker, set_attn_implementation
-from retrieval_heads.models import ModelInfo, model_device
+from retrieval_heads.attention import HeadMasker
+from retrieval_heads.generation import greedy_ids
+from retrieval_heads.masking import control_pool, matched_k
+from retrieval_heads.models import ModelInfo
 from retrieval_heads.scoring import RetrievalScores
-from retrieval_heads.utils import HeadRef, get_logger, save_json
+from retrieval_heads.utils import HeadRef, eos_ids, get_logger, squad_f1
 
 log = get_logger("downstream")
 
@@ -193,17 +195,7 @@ def _normalise(text: str) -> str:
 
 def word_f1(prediction: str, target: str) -> float:
     """SQuAD-style word-level F1, used for extractive QA."""
-    from collections import Counter
-
-    pred = _normalise(prediction).split()
-    gold = _normalise(target).split()
-    if not pred or not gold:
-        return 0.0
-    overlap = sum((Counter(pred) & Counter(gold)).values())
-    if overlap == 0:
-        return 0.0
-    precision, recall = overlap / len(pred), overlap / len(gold)
-    return 2 * precision * recall / (precision + recall)
+    return squad_f1(_normalise(prediction).split(), _normalise(target).split())
 
 
 def final_answer(text: str) -> str:
@@ -216,15 +208,27 @@ def final_answer(text: str) -> str:
 
 
 def accuracy(prediction: str, target: str) -> float:
-    """Normalised exact match, tolerant of trailing punctuation and units."""
+    """Normalised exact match, tolerant of trailing punctuation and units.
+
+    Containment is checked on **word boundaries**, not as a raw substring: a raw
+    ``t in p`` marked ``"163"`` correct for the target ``"63"`` and ``"19"``
+    correct for ``"9"``, which inflates accuracy on the short numeric answers the
+    built-in reasoning set uses.
+    """
     p, t = _normalise(prediction), _normalise(target)
     if p == t:
         return 1.0
-    # numeric answers: compare the first number found
+    # Numeric answers: compare the first number found.  Heuristic on purpose --
+    # "4.6 million crowns" counts as 4.6 -- and it only affects `cot`; extractive
+    # QA uses word F1.
     pn, tn = re.findall(r"-?\d+(?:\.\d+)?", p), re.findall(r"-?\d+(?:\.\d+)?", t)
     if pn and tn and pn[0] == tn[0]:
         return 1.0
-    return 1.0 if t and t in p else 0.0
+    if not t:
+        return 0.0
+    # Boundaries include '.' and '-': without them a decimal tail matched, so
+    # accuracy("1.63", "63") and accuracy("6.5", "6") were both credited.
+    return 1.0 if re.search(rf"(?<![\w.\-]){re.escape(t)}(?![\w.\-])", p) else 0.0
 
 
 # --------------------------------------------------------------------------- generation
@@ -236,66 +240,30 @@ def _generate_text(
     *,
     max_new_tokens: int,
     attn_impl: str = "sdpa",
+    prefill_chunk: int | None = None,
 ) -> str:
     ids = tokenizer(prompt, return_tensors="pt", add_special_tokens=False).input_ids
-    ids = ids.to(model_device(model))
-    restore = set_attn_implementation(model, attn_impl)
-    eos = set()
-    for source in (getattr(model, "config", None), getattr(model, "generation_config", None)):
-        value = getattr(source, "eos_token_id", None) if source is not None else None
-        if isinstance(value, int):
-            eos.add(value)
-        elif isinstance(value, (list, tuple, set)):
-            eos.update(int(v) for v in value)
-    if getattr(tokenizer, "eos_token_id", None) is not None:
-        eos.add(int(tokenizer.eos_token_id))
-    try:
-        out = model(input_ids=ids, use_cache=True)
-        cache = out.past_key_values
-        nxt = out.logits[:, -1, :].argmax(-1, keepdim=True)
-        generated: list[int] = []
-        for _ in range(max_new_tokens):
-            token = int(nxt[0, 0])
-            if token in eos:
-                break
-            generated.append(token)
-            out = model(input_ids=nxt, past_key_values=cache, use_cache=True)
-            nxt = out.logits[:, -1, :].argmax(-1, keepdim=True)
-    finally:
-        if restore is not None:
-            set_attn_implementation(model, restore)
+    # Shared loop with scoring/masking: chunked prefill (findings section 18) and
+    # one EOS policy live in retrieval_heads.generation.
+    generated = greedy_ids(
+        model, ids, max_new_tokens=max_new_tokens, eos=eos_ids(model, tokenizer),
+        tokenizer=tokenizer, attn_impl=attn_impl, prefill_chunk=prefill_chunk,
+    )
     return tokenizer.decode(generated, skip_special_tokens=True)
 
 
-def _chat(tokenizer: Any, user: str, *, enable_thinking: bool | None) -> str:
-    messages = [{"role": "user", "content": user}]
-    kwargs: dict[str, Any] = {"tokenize": False, "add_generation_prompt": True}
-    if enable_thinking is not None:
-        kwargs["enable_thinking"] = enable_thinking
-    try:
-        return tokenizer.apply_chat_template(messages, **kwargs)
-    except TypeError:
-        kwargs.pop("enable_thinking", None)
-        return tokenizer.apply_chat_template(messages, **kwargs)
+def _chat(tokenizer: Any, user: str, *, enable_thinking: bool | None,
+          chat_template: bool = True) -> str:
+    """`--no-chat-template` actually disables the template here, too."""
+    if not chat_template:
+        return user
+    from retrieval_heads.haystack import render_chat
+
+    return render_chat(tokenizer, [{"role": "user", "content": user}],
+                       enable_thinking=enable_thinking)
 
 
 # --------------------------------------------------------------------------- evaluators
-@dataclass
-class TaskResult:
-    task: str
-    variant: str
-    metric: str
-    value: float
-    n: int
-    masked_heads: list[str] = field(default_factory=list)
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "task": self.task, "variant": self.variant, "metric": self.metric,
-            "value": self.value, "n": self.n, "masked_heads": self.masked_heads,
-        }
-
-
 def evaluate_extractive_qa(
     model: Any,
     tokenizer: Any,
@@ -305,6 +273,8 @@ def evaluate_extractive_qa(
     masked_heads: Sequence[HeadRef] = (),
     max_new_tokens: int = 24,
     enable_thinking: bool | None = False,
+    prefill_chunk: int | None = None,
+    chat_template: bool = True,
 ) -> float:
     """Mean word-level F1 on extractive QA."""
     masker = HeadMasker(model, info, masked_heads) if masked_heads else None
@@ -314,9 +284,10 @@ def evaluate_extractive_qa(
             prompt = _chat(
                 tokenizer,
                 f"{sample.context}\n\nQuestion: {sample.question}\nAnswer with the shortest exact span from the document.",
-                enable_thinking=enable_thinking,
+                enable_thinking=enable_thinking, chat_template=chat_template,
             )
-            text = _generate_text(model, tokenizer, prompt, max_new_tokens=max_new_tokens)
+            text = _generate_text(model, tokenizer, prompt, max_new_tokens=max_new_tokens,
+                                  prefill_chunk=prefill_chunk)
             scores.append(100.0 * word_f1(text, sample.answer))
     finally:
         if masker is not None:
@@ -334,6 +305,8 @@ def evaluate_reasoning(
     masked_heads: Sequence[HeadRef] = (),
     max_new_tokens: int = 256,
     enable_thinking: bool | None = False,
+    prefill_chunk: int | None = None,
+    chat_template: bool = True,
 ) -> float:
     """Accuracy on reasoning tasks, with or without chain-of-thought."""
     instruction = (
@@ -346,8 +319,10 @@ def evaluate_reasoning(
     hits = []
     try:
         for sample in samples:
-            prompt = _chat(tokenizer, f"{sample.question}\n\n{instruction}", enable_thinking=enable_thinking)
-            text = _generate_text(model, tokenizer, prompt, max_new_tokens=max_new_tokens)
+            prompt = _chat(tokenizer, f"{sample.question}\n\n{instruction}",
+                           enable_thinking=enable_thinking, chat_template=chat_template)
+            text = _generate_text(model, tokenizer, prompt, max_new_tokens=max_new_tokens,
+                                  prefill_chunk=prefill_chunk)
             hits.append(accuracy(final_answer(text), sample.answer))
     finally:
         if masker is not None:
@@ -367,28 +342,65 @@ def qa_ablation(
     n_random_trials: int = 3,
     seed: int = 0,
     max_new_tokens: int = 24,
+    prefill_chunk: int | None = 4096,
+    enable_thinking: bool | None = False,
+    chat_template: bool = True,
 ) -> dict[str, Any]:
-    """Extractive QA: baseline, retrieval heads masked, random heads masked."""
-    baseline = evaluate_extractive_qa(model, tokenizer, info, samples, max_new_tokens=max_new_tokens)
+    """Extractive QA: baseline, retrieval heads masked, random heads masked.
+
+    The retrieval arm is the top K heads *by score*, and the random arm is drawn
+    from heads at or below the threshold, so both remove exactly the same number
+    of heads and the control contains no retrieval heads.
+    """
+    baseline = evaluate_extractive_qa(model, tokenizer, info, samples,
+                                      max_new_tokens=max_new_tokens,
+                                      prefill_chunk=prefill_chunk,
+                                      enable_thinking=enable_thinking,
+                                      chat_template=chat_template)
     log.info("QA baseline F1=%.1f", baseline)
     rng = np.random.default_rng(seed)
     out: dict[str, Any] = {"task": "extractive_qa", "baseline_f1": baseline,
-                           "n_samples": len(samples), "k_values": list(k_values), "by_k": {}}
-    retrieval_ranked = scores.heads_above()
-    pool = info.scoreable_heads
+                           "n_samples": len(samples), "k_values": list(k_values),
+                           "n_scoreable_heads": info.n_scoreable_heads,
+                           "enable_thinking": enable_thinking,
+                           "chat_template": chat_template, "by_k": {}}
+    retrieval_ranked = scores.ranked_heads()
+    pool, contaminated = control_pool(scores)
+    if contaminated:
+        log.warning("every scoreable head is above the %.2f threshold; the QA random "
+                    "arm is drawn from all heads and is contaminated", scores.threshold)
+    out["n_non_retrieval_heads"] = len(pool)
+    out["random_control_contaminated"] = contaminated
     for k in k_values:
-        top = retrieval_ranked[:k]
+        k_eff = matched_k(k, len(pool))
+        if k_eff <= 0:
+            continue
+        if k_eff < k:
+            log.warning("QA k=%d exceeds the %d non-retrieval heads available; using k=%d",
+                        k, len(pool), k_eff)
+        top = retrieval_ranked[:k_eff]
         f1_retrieval = evaluate_extractive_qa(model, tokenizer, info, samples,
-                                              masked_heads=top, max_new_tokens=max_new_tokens)
-        trials = []
+                                              masked_heads=top, max_new_tokens=max_new_tokens,
+                                              prefill_chunk=prefill_chunk,
+                                              enable_thinking=enable_thinking,
+                                              chat_template=chat_template)
+        trials, overlaps = [], []
         for _ in range(n_random_trials):
-            pick = [pool[i] for i in rng.permutation(len(pool))[:k]]
+            pick = [pool[i] for i in rng.permutation(len(pool))[:k_eff]]
+            # How many of the "random" heads are actually retrieval heads: the
+            # audit trail for the control, stored instead of trusted.
+            overlaps.append(sum(1 for h in pick if h in set(top)))
             trials.append(evaluate_extractive_qa(model, tokenizer, info, samples,
-                                                 masked_heads=pick, max_new_tokens=max_new_tokens))
+                                                 masked_heads=pick, max_new_tokens=max_new_tokens,
+                                                 prefill_chunk=prefill_chunk,
+                                                 enable_thinking=enable_thinking,
+                                                 chat_template=chat_template))
         out["by_k"][str(k)] = {
+            "k_effective": k_eff,
             "retrieval_f1": f1_retrieval,
             "random_f1_mean": float(np.mean(trials)),
             "random_f1_std": float(np.std(trials)),
+            "random_retrieval_overlap": overlaps,
             "drop_retrieval": baseline - f1_retrieval,
             "drop_random": baseline - float(np.mean(trials)),
             "masked_heads": [str(h) for h in top],
@@ -410,30 +422,60 @@ def cot_ablation(
     n_random_trials: int = 2,
     seed: int = 0,
     max_new_tokens: int = 256,
+    prefill_chunk: int | None = 4096,
+    enable_thinking: bool | None = False,
+    chat_template: bool = True,
 ) -> dict[str, Any]:
-    """Reasoning accuracy with/without CoT, and with/without retrieval heads."""
-    retrieval_ranked = scores.heads_above()
-    pool = info.scoreable_heads
+    """Reasoning accuracy with/without CoT, and with/without retrieval heads.
+
+    Same matched-arm rule as :func:`qa_ablation`: top-K by score against K heads
+    drawn from the non-retrieval pool.
+    """
+    retrieval_ranked = scores.ranked_heads()
+    pool, contaminated = control_pool(scores)
+    if contaminated:
+        log.warning("every scoreable head is above the %.2f threshold; the CoT random "
+                    "arm is drawn from all heads and is contaminated", scores.threshold)
+    k_eff = matched_k(k, len(pool))
+    if k_eff < k:
+        log.warning("CoT k=%d exceeds the %d non-retrieval heads available; using k=%d",
+                    k, len(pool), k_eff)
     rng = np.random.default_rng(seed)
-    out: dict[str, Any] = {"task": "cot_reasoning", "n_samples": len(samples), "k": k, "results": {}}
+    out: dict[str, Any] = {"task": "cot_reasoning", "n_samples": len(samples), "k": k,
+                           "k_effective": k_eff, "n_scoreable_heads": info.n_scoreable_heads,
+                           "n_non_retrieval_heads": len(pool),
+                           "random_control_contaminated": contaminated,
+                           "enable_thinking": enable_thinking,
+                           "chat_template": chat_template, "results": {}}
 
     for cot in (False, True):
         variant = "cot" if cot else "answer_only"
         baseline = evaluate_reasoning(model, tokenizer, info, samples, cot=cot,
-                                      max_new_tokens=max_new_tokens)
+                                      max_new_tokens=max_new_tokens,
+                                      prefill_chunk=prefill_chunk,
+                                      enable_thinking=enable_thinking,
+                                      chat_template=chat_template)
         masked_retrieval = evaluate_reasoning(model, tokenizer, info, samples, cot=cot,
-                                              masked_heads=retrieval_ranked[:k],
-                                              max_new_tokens=max_new_tokens)
-        trials = []
+                                              masked_heads=retrieval_ranked[:k_eff],
+                                              max_new_tokens=max_new_tokens,
+                                              prefill_chunk=prefill_chunk,
+                                              enable_thinking=enable_thinking,
+                                              chat_template=chat_template)
+        trials, overlaps = [], []
         for _ in range(n_random_trials):
-            pick = [pool[i] for i in rng.permutation(len(pool))[:k]]
+            pick = [pool[i] for i in rng.permutation(len(pool))[:k_eff]]
+            overlaps.append(sum(1 for h in pick if h in set(retrieval_ranked[:k_eff])))
             trials.append(evaluate_reasoning(model, tokenizer, info, samples, cot=cot,
-                                             masked_heads=pick, max_new_tokens=max_new_tokens))
+                                             masked_heads=pick, max_new_tokens=max_new_tokens,
+                                             prefill_chunk=prefill_chunk,
+                                             enable_thinking=enable_thinking,
+                                             chat_template=chat_template))
         out["results"][variant] = {
             "baseline": baseline,
             "retrieval_masked": masked_retrieval,
             "random_masked_mean": float(np.mean(trials)),
             "random_masked_std": float(np.std(trials)),
+            "random_retrieval_overlap": overlaps,
             "drop_retrieval": baseline - masked_retrieval,
             "drop_random": baseline - float(np.mean(trials)),
         }

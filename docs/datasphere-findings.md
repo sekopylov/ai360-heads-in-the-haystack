@@ -447,17 +447,38 @@ a flat 1.58-1.60x at every length:
 
 | requested | realized (before) | realized (after) |
 |---|---|---|
-| 1024 | 1614 | 1033 |
-| 4096 | 6538 | 4098 |
-| 16384 | 26156 | 16412 |
-| 49152 | ~78k | 49182 |
+| 1024 | 1614 | 1021 |
+| 4096 | 6538 | 4115 |
+| 16384 | 26156 | 16440 |
+| 32768 | ~52k | 32859 |
+| 49152 | ~78k | 49206 |
 
 The grid is still a geometric spread of five lengths, so the *conclusions* are
 unaffected -- but the labels were wrong, and "16K" was quietly outside the range
-the run was sized for.  `text()` now recalibrates the batch size from the tokens
-actually produced, which holds the error to a couple of percent.
+the run was sized for.
+
+**Correction (code review).** The first fix was incomplete, and the "realized
+(after)" column originally published here said 1024 → 1033.  That was wrong:
+`text()` sizes only the *filler*, while the needle, the question and the chat
+template are appended afterwards, so the rendered prompt carried a fixed ~40-token
+overhead on top.  Measured with the real tokenizer, the first fix still landed at
+1088 (Qwen3-0.6B) and 1091 (Qwen3.5) for a requested 1024 -- +6%, not "a couple of
+percent".  The values in the table above are the measured ones after the second
+fix:
+
+* `text()` sizes the last batch from the tokens remaining (no `+1`, no `max(4, …)`),
+  so it stops within one sentence (~16 tokens) instead of overshooting a batch;
+* `build_needle_sample` renders the **whole prompt**, measures it, and re-budgets
+  the filler up to four times, which absorbs the needle/question/template overhead.
+
+With both in place the error is ~2% or better across 1K-49K (measured ≤0.5% at the
+detection grid's own depths, and up to ~1.4% under other seeds, where the last
+filler sentence is coarser than the tolerance; a run that cannot reach the 2%
+tolerance says so in the log).  Pinned by
+`tests/test_regressions.py::test_realized_context_length_tracks_the_request`.
 
 Worth keeping in mind as a pattern: three of the four measurement problems found in
 this project (needle answer shape, CoT baseline at the floor, and this) were
 invisible in the code and only showed up as implausible *numbers* in a real run.
-Print the realized values, not the requested ones.
+Print the realized values, not the requested ones.  A fourth instance of the same
+pattern is that the first "after" column here was itself an unverified number.
