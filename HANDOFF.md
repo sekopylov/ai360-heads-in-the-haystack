@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 211 tests: 194 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
+* 212 tests: 195 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
   the real checkpoints. All green.
 * A full GPU run finished successfully (job `bt1hqv1b91ht36s2egdp`, ~39 min,
   NVIDIA L4): 75 instances per model, masking curves, QA, CoT, correlation, nine
@@ -25,6 +25,25 @@ tied to a job id) → this file (where things stand and what is left).
   and cancelled on purpose, and it waits on a review of the current working tree.
 * DataSphere path works: cached venv on the project disk, ~40 s job startup
   instead of ~9 min. Job `bt107kjm3es8vung7130` proves all seven stages run on GPU.
+* **The ablations now reuse every condition `detect` recorded**, not just the
+  system prompt: `resolve_detection_settings` takes `chat_template`,
+  `enable_thinking`, `argmax_domain`, `threshold` and the corpus *path* from
+  `scores.meta` (and warns when the command line explicitly disagrees).  A run of
+  `detect --corpus essays.txt` followed by `mask` without `--corpus` used to select
+  heads on natural text and measure the effect on the synthetic filler; the corpus
+  is now reused, and the ablation artifact records all of those fields plus
+  `detection_pairing`, `max_new_tokens`, `prefill_chunk` and `capture_method`.
+  Adding this broke `mask` twice (it has no `--argmax-domain`/`--capture-method`),
+  so a new test parses each subcommand's argv and asserts that every `args.<flag>`
+  its `cmd_*` reads actually exists.
+* **Per-sample ablation detail is saved**: `masking_curve.json` now carries
+  `per_sample[k]` with the retrieval arm's `NiahMetrics.as_dict()` (per-sample f1,
+  exact-match, recall, prefix-recall and the *generated texts*) and the same for
+  each random trial, so a specific failure can be inspected from the artifact
+  instead of only its mean.
+* `random_retrieval_overlap` is documented for what it measures (overlap with the
+  masked retrieval arm) and the honest control audit
+  `random_above_threshold` was added beside it.
 * **The credit loop is vectorised** (`match_masks`): it used to call
   `int(argmax[head])` once per head per step, i.e. a device->host synchronisation
   for every head of every step (~448 x 48 x 75 x 4 transfers on the dense control);
@@ -393,7 +412,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 211 passed (194 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 212 passed (195 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

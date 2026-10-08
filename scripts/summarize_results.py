@@ -152,9 +152,16 @@ def cross_model_section(root: Path, keys: list[str]) -> list[str]:
         out.append(f"- correlation: mode `{at(correlation, 'mode', '?')}`, models: "
                    f"{', '.join(labels) if labels else 'n/a'}")
     if overlap:
-        out.append(f"- head overlap: Jaccard {fmt(at(overlap, 'jaccard'), 3)} at threshold "
-                   f"{at(overlap, 'threshold')}, mode `{at(overlap, 'mode', '?')}`, "
-                   f"shared {len(at(overlap, 'shared', []) or [])} head(s)")
+        if at(overlap, "comparable") is False:
+            # `shared=0` here means "the layouts cannot be compared", not "no shared
+            # heads"; printing the count alone reads as the latter.
+            out.append("- head overlap: not comparable (different layer/head layouts); "
+                       "Jaccard suppressed")
+        else:
+            out.append(f"- head overlap: Jaccard {fmt(at(overlap, 'jaccard'), 3)} at "
+                       f"threshold {at(overlap, 'threshold')}, mode "
+                       f"`{at(overlap, 'mode', '?')}`, "
+                       f"shared {len(at(overlap, 'shared', []) or [])} head(s)")
     return out
 
 

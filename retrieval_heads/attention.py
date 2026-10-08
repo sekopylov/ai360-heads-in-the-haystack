@@ -152,6 +152,17 @@ class AttentionRecorder:
                     f"every retrieval score would silently be 0. Set capture_impl='eager' "
                     f"or use method='output_attentions'."
                 )
+            for layer, tensor in store.items():
+                expected = self.info.num_heads.get(layer)
+                if expected is not None and tensor.shape[1] != expected:
+                    # The scorer used to truncate silently to min(expected, captured),
+                    # giving the missing heads a score of 0 without a word -- the same
+                    # failure the output_attentions path already refuses.
+                    raise RuntimeError(
+                        f"the patch captured {tensor.shape[1]} heads for layer {layer} "
+                        f"but the model reports {expected}; refusing to score the "
+                        f"missing heads as zero"
+                    )
         return out, store
 
     # -- patch fallback -----------------------------------------------------
@@ -275,6 +286,12 @@ class HeadMasker(_HookGroup):
             resolved.append((module, head_dim, index, self.info.num_heads.get(layer)))
 
         for module, head_dim, index, num_heads in resolved:
+            if getattr(module.o_proj, "bias", None) is not None:
+                # Zeroing the head's slice removes its contribution to the matmul but
+                # not the bias, so "masking == pruning" is only exact for bias-free
+                # projections (all supported checkpoints).
+                log.warning("layer %s has a biased o_proj; zeroing a head's slice "
+                            "leaves the bias term behind", getattr(module, "layer_idx", "?"))
             handle = module.o_proj.register_forward_pre_hook(
                 self._make_hook(index, head_dim, num_heads), with_kwargs=True
             )

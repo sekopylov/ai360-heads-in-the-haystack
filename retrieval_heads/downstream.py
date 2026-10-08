@@ -371,6 +371,8 @@ def qa_ablation(
     out: dict[str, Any] = {"task": "extractive_qa", "baseline_f1": baseline,
                            "n_samples": len(samples), "k_values": list(k_values),
                            "n_scoreable_heads": info.n_scoreable_heads,
+                           "model": info.name, "max_new_tokens": max_new_tokens,
+                           "prefill_chunk": prefill_chunk,
                            "enable_thinking": enable_thinking,
                            "chat_template": chat_template,
                            "system_prompt": system_prompt, "by_k": {}}
@@ -460,6 +462,8 @@ def cot_ablation(
                            "k_effective": k_eff, "n_scoreable_heads": info.n_scoreable_heads,
                            "n_non_retrieval_heads": len(pool),
                            "random_control_contaminated": contaminated,
+                           "model": info.name, "max_new_tokens": max_new_tokens,
+                           "prefill_chunk": prefill_chunk,
                            "enable_thinking": enable_thinking,
                            "chat_template": chat_template,
                            "system_prompt": system_prompt, "results": {}}

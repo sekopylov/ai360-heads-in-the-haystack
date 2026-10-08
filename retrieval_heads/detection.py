@@ -161,7 +161,9 @@ class DetectionConfig:
                         "target_tokens": length,
                         "depth": depth,
                         # crc32 of the tuple instead of an arithmetic mix: stable
-                        # across runs and collision-free for any future grid.
+                        # across runs.  It is only 32 bits, so a collision between two
+                        # instances (identical filler) is possible in principle -- the
+                        # `seed` field of each instance makes it detectable.
                         "seed": self.seed + zlib.crc32(f"{n_idx}:{length}:{d_idx}".encode()),
                     })
         if self.limit is not None:
@@ -362,6 +364,7 @@ def run_detection(
     corpus: Sequence[str] | None = None,
     progress: bool = True,
     out_dir: str | Path | None = None,
+    corpus_path: str | Path | None = None,
 ) -> DetectionRun:
     """Execute the detection grid and aggregate per-head retrieval scores."""
     import time
@@ -437,11 +440,18 @@ def run_detection(
             stream.close()
 
     scores = aggregate_scores(results, info, pairing=config.pairing, threshold=config.threshold)
-    needle_tokens = [r.sample.get("n_needle_tokens", 0) for r in results]
+    # The denominator convention is about *text* tokens (what the score divides by),
+    # so the inflation ratio uses the text tokenization, not the prompt span length
+    # (which mixes in the boundary-fusion effect).
+    needle_tokens = [len(r.sample.get("needle_text_ids") or [])
+                     or r.sample.get("n_needle_tokens", 0) for r in results]
     unique_tokens = [r.sample.get("n_unique_needle_text_tokens", 0) for r in results]
     scores.meta = {
         "config": config.as_dict(),
         "corpus": "custom" if corpus else "synthetic",
+        # The path (not just custom/synthetic) so an ablation can reuse the *same*
+        # filler instead of silently measuring on a different distribution.
+        "corpus_path": str(corpus_path) if corpus_path else None,
         "argmax_domain": config.argmax_domain,
         # The score is averaged over *all* instances, including ones where the model
         # never recited the needle; `conditional` below is the recited-only view, and

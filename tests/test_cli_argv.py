@@ -147,3 +147,24 @@ def test_driver_has_exactly_one_main_and_it_runs_the_stages():
     names = [node.name for node in tree.body if isinstance(node, ast.FunctionDef)]
     duplicates = sorted({n for n in names if names.count(n) > 1})
     assert not duplicates, f"duplicate top-level function names: {duplicates}"
+
+
+def test_every_command_only_reads_flags_its_parser_defines():
+    """A `cmd_*` reading `args.<flag>` its subparser lacks raises AttributeError.
+
+    That is how the shared condition resolver broke `mask` twice (no
+    `--argmax-domain`, no `--capture-method` there): the drift only shows up when
+    the command runs, and `mask` needs a checkpoint to get that far.
+    """
+    import inspect
+    import re
+
+    from retrieval_heads import cli
+
+    parser = cli.build_parser()
+    for command, function in (("detect", cli.cmd_detect), ("mask", cli.cmd_mask),
+                              ("qa", cli.cmd_qa), ("cot", cli.cmd_cot)):
+        namespace = vars(parser.parse_args([command, "--model", "m"]))
+        used = set(re.findall(r"args\.([a-z_]+)", inspect.getsource(function)))
+        missing = sorted(used - set(namespace))
+        assert not missing, f"{command}: {function.__name__} reads undefined flags {missing}"

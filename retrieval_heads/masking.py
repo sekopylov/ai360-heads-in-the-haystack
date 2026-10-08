@@ -103,12 +103,16 @@ class NiahMetrics:
     recalls: list[float] = field(default_factory=list)
     #: The old prefix-anchored recall (needle reproduced from its first word).
     prefix_recalls: list[float] = field(default_factory=list)
+    #: The actual completions, so a failure can be inspected from the artifact
+    #: instead of only from its mean (the paper's Sec. 5 argument is about cases).
+    generated_texts: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {"f1": self.f1, "exact_match": self.exact_match, "recall": self.recall,
                 "n": self.n, "f1s": self.f1s, "exact_matches": self.exact_matches,
                 "recalls": self.recalls,
-                "prefix_recalls": self.prefix_recalls}
+                "prefix_recalls": self.prefix_recalls,
+                "generated_texts": self.generated_texts}
 
 
 def normalized_contains(text: str, needle: str) -> bool:
@@ -151,6 +155,7 @@ def evaluate_samples(
             masker.remove()
         raise
     f1s, ems, recalls, prefix_recalls = [], [], [], []
+    generated_texts: list[str] = []
     try:
         special = set(getattr(tokenizer, "all_special_ids", None) or [])
         for sample in samples:
@@ -167,6 +172,7 @@ def evaluate_samples(
             ems.append(1.0 if normalized_contains(text, sample.needle_text) else 0.0)
             recalls.append(needle_recall(text, sample.needle_text))
             prefix_recalls.append(needle_prefix_recall(text, sample.needle_text))
+            generated_texts.append(text)
     finally:
         if masker is not None:
             masker.remove()
@@ -181,6 +187,7 @@ def evaluate_samples(
         exact_matches=[100.0 * value for value in ems],
         recalls=[100.0 * value for value in recalls],
         prefix_recalls=[100.0 * value for value in prefix_recalls],
+        generated_texts=generated_texts,
     )
 
 
@@ -251,10 +258,17 @@ class MaskingCurve:
     #: std is across trials).  Reported so the noise is visible next to the effect.
     retrieval_std: list[float] = field(default_factory=list)
     retrieval_exact_std: list[float] = field(default_factory=list)
-    #: Per-K, per-trial count of "random" heads that are actually retrieval heads
-    #: (above the threshold).  Zero when the control is clean; the audit trail for
-    #: a claim that the random arm contains no retrieval heads.
+    #: Per-K, per-trial size of ``set(random arm) & set(retrieval arm)``.  This is
+    #: NOT "the control contains retrieval heads" -- `control_pool` excludes every
+    #: head above the threshold by construction, so it is zero unless the retrieval
+    #: arm itself reached below the threshold (large K).  `random_above_threshold`
+    #: is the honest count of control heads that are retrieval heads.
     random_retrieval_overlap: list[list[int]] = field(default_factory=list)
+    #: Per-K, per-trial count of control heads above the score threshold (0 when the
+    #: pool is clean; non-zero only in the contaminated fallback).
+    random_above_threshold: list[list[int]] = field(default_factory=list)
+    #: Per-K, per-arm per-sample metrics and completions (see `NiahMetrics.as_dict`).
+    per_sample: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         # `meta` first: a meta key colliding with a field name must not win.
@@ -265,6 +279,8 @@ class MaskingCurve:
             "retrieval_masked": self.retrieval_masked,
             "random_masked_mean": self.random_masked_mean,
             "random_retrieval_overlap": self.random_retrieval_overlap,
+            "random_above_threshold": self.random_above_threshold,
+            "per_sample": self.per_sample,
             "retrieval_std": self.retrieval_std,
             "retrieval_exact_std": self.retrieval_exact_std,
             "retrieval": self.retrieval,
@@ -319,6 +335,7 @@ def masking_curve(
     # is reproducible from its own artifact.
     masked_retrieval_heads: dict[str, list[str]] = {}
     random_picks: dict[str, list[list[str]]] = {}
+    per_sample: dict[str, dict[str, Any]] = {}
     if not scores.heads_above():
         log.warning("no head exceeds the %.2f threshold; the retrieval arm is still "
                     "ranked by score, but 'retrieval head' has no member here",
@@ -346,7 +363,11 @@ def masking_curve(
               "n_samples": len(samples), "pairing": scores.pairing,
               "n_scoreable_heads": info.n_scoreable_heads,
               "n_non_retrieval_heads": len(pool),
-              "random_control_contaminated": contaminated},
+              "random_control_contaminated": contaminated,
+              "max_new_tokens": max_new_tokens,
+              "prefill_chunk": prefill_chunk,
+              "argmax_domain": (scores.meta or {}).get("argmax_domain"),
+              "baseline_recall": baseline.recall},
     )
 
     iterator = k_values
@@ -390,11 +411,18 @@ def masking_curve(
                  metrics.f1, metrics.exact_match)
 
         trials, exact_trials, recall_trials, overlaps = [], [], [], []
+        trial_metrics = []
         masked_counts = []
+        above_counts: list[int] = []
+        threshold_heads = set(scores.heads_above())
         for trial in range(n_random_trials):
             pick = rng.permutation(len(pool))[:k_eff]
             random_heads = [pool[i] for i in pick]
             masked_counts.append(len(random_heads))
+            # The honest control audit: how many drawn heads are retrieval heads.
+            # (In the clean pool this is 0 by construction; it is non-zero only in
+            # the contaminated fallback, when every head is above the threshold.)
+            above_counts.append(sum(1 for h in random_heads if h in threshold_heads))
             # vs the heads actually masked by the retrieval arm at this K: at
             # large K that arm reaches below the threshold and can genuinely share
             # heads with a pool drawn from below it.
@@ -405,8 +433,15 @@ def masking_curve(
             trials.append(m.f1)
             recall_trials.append(m.recall)
             exact_trials.append(m.exact_match)
+            trial_metrics.append(m)
+        # Per-sample detail (values *and* completions) for the retrieval arm and one
+        # representative random trial: without it a failure could only be inspected by
+        # re-running the experiment.
+        per_sample[str(k)] = {"retrieval": metrics.as_dict(),
+                              "random": [m.as_dict() for m in trial_metrics]}
         curve.random_trials.append(trials)
         curve.random_retrieval_overlap.append(overlaps)
+        curve.random_above_threshold.append(above_counts)
         curve.random_masked_mean.append(float(np.mean(masked_counts)))
         curve.random_recall_mean.append(float(np.mean(recall_trials)))
         curve.random_mean.append(float(np.mean(trials)))
@@ -415,6 +450,7 @@ def masking_curve(
         log.info("k=%-4d random-masked f1=%.1f +/- %.1f exact=%.1f (retrieval-head "
                  "overlap %s)", k, np.mean(trials), np.std(trials), np.mean(exact_trials),
                  overlaps)
+    curve.per_sample = per_sample
 
     n_heads = max(info.n_scoreable_heads, 1)
     # Explicitly "requested": with `matched_k` the requested K can exceed what was

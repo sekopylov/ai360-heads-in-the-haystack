@@ -16,6 +16,7 @@ import json
 import os
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -26,6 +27,11 @@ log = get_logger("cli")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_REGISTRY = REPO_ROOT / "configs" / "models.json"
+#: Defaults used to tell "the user asked for this" from "argparse filled it in".
+DEFAULT_THRESHOLD = 0.1
+DEFAULT_ARGMAX_DOMAIN = "prompt"
+#: Sentinel: "detect did not record this field" (None can be a real value).
+_MISSING = object()
 #: Set by the job driver when it needs a modified registry (e.g. a dtype
 #: override).  Keeps `configs/models.json`, which is tracked, untouched.
 REGISTRY_ENV = "RETRIEVAL_HEADS_MODELS_JSON"
@@ -95,25 +101,76 @@ def require_matching_scores(scores, info) -> None:
         )
 
 
-def resolve_system_prompt(args: argparse.Namespace, scores: Any) -> str | None:
-    """The system prompt an ablation must use to match detection.
+@dataclass
+class DetectionSettings:
+    """The conditions a detection run recorded, reused by the ablations."""
 
-    ``--system-prompt`` wins when given, but the value detection recorded in
-    ``scores.meta['config']`` is the safer default: without it the ablation would
-    silently measure a different prompt (the exact class of drift
-    ``require_matching_scores`` exists to prevent).
+    system_prompt: str | None = None
+    chat_template: bool = True
+    enable_thinking: bool | None = False
+    argmax_domain: str = "prompt"
+    threshold: float = DEFAULT_THRESHOLD
+    corpus_path: str | None = None
+
+
+def resolve_detection_settings(args: argparse.Namespace, scores: Any) -> DetectionSettings:
+    """Reuse what detection measured instead of silently changing the conditions.
+
+    ``require_matching_scores`` only checks head geometry, so `detect
+    --no-chat-template` followed by a default `mask` used to measure a different
+    task, and `detect --corpus essays.txt` followed by `mask` without `--corpus`
+    selected heads on natural text but measured the causal effect on the synthetic
+    filler.  Every field here prefers the value recorded in
+    ``scores.meta['config']`` and warns when the command line explicitly disagrees.
     """
-    recorded = ((getattr(scores, "meta", None) or {}).get("config") or {}).get(
-        "system_prompt")
-    requested = getattr(args, "system_prompt", None)
-    if requested is None:
-        if recorded:
-            log.info("using the system prompt recorded by detect")
-        return recorded
-    if recorded is not None and requested != recorded:
-        log.warning("--system-prompt differs from the one detect recorded; this ablation "
-                    "measures a different prompt")
-    return requested
+    config = ((getattr(scores, "meta", None) or {}).get("config") or {})
+    meta = getattr(scores, "meta", None) or {}
+    settings = DetectionSettings()
+
+    def pick(name: str, recorded: Any, requested: Any, implied_by_default: bool) -> Any:
+        # `_MISSING` distinguishes "not recorded" from "recorded as None": for
+        # enable_thinking, None is a real value (leave the model's thinking mode on).
+        if recorded is _MISSING:
+            return requested
+        if implied_by_default:
+            if recorded != requested:
+                log.info("%s=%r taken from the detect run (the command line implies %r)",
+                         name, recorded, requested)
+            return recorded
+        if requested != recorded:
+            log.warning("%s=%r differs from the value detect recorded (%r); this ablation "
+                        "measures different conditions", name, requested, recorded)
+        return requested
+
+    settings.system_prompt = pick("system-prompt", config.get("system_prompt", _MISSING),
+                                  args.system_prompt, args.system_prompt is None)
+    settings.chat_template = pick("chat-template", config.get("chat_template", _MISSING),
+                                  not args.no_chat_template, not args.no_chat_template)
+    requested_thinking = None if args.thinking else False
+    settings.enable_thinking = pick("enable-thinking",
+                                    config.get("enable_thinking", _MISSING),
+                                    requested_thinking, not args.thinking)
+    recorded_domain = meta.get("argmax_domain", config.get("argmax_domain", _MISSING))
+    # Only `detect` has the flag; the ablations still record the domain the heads
+    # were selected under (it is not re-derived from the scores).
+    requested_domain = getattr(args, "argmax_domain", DEFAULT_ARGMAX_DOMAIN)
+    settings.argmax_domain = pick("argmax-domain", recorded_domain, requested_domain,
+                                  requested_domain == DEFAULT_ARGMAX_DOMAIN)
+    requested_threshold = getattr(args, "threshold", DEFAULT_THRESHOLD)
+    settings.threshold = pick("threshold", config.get("threshold", _MISSING),
+                              requested_threshold,
+                              requested_threshold == DEFAULT_THRESHOLD)
+
+    recorded_corpus = meta.get("corpus_path")
+    if args.corpus is None and recorded_corpus:
+        log.info("corpus=%r taken from the detect run", recorded_corpus)
+        settings.corpus_path = recorded_corpus
+    else:
+        if args.corpus != recorded_corpus:
+            log.warning("corpus=%r differs from the value detect recorded (%r); the "
+                        "filler distribution changes", args.corpus, recorded_corpus)
+        settings.corpus_path = args.corpus
+    return settings
 
 
 def default_out_dir(model_arg: str, out: str | None) -> Path:
@@ -342,7 +399,8 @@ def cmd_detect(args: argparse.Namespace) -> int:
         corpus = load_corpus(args.corpus)
     else:
         corpus = None
-    run_detection(model, tokenizer, info, cfg, corpus=corpus, out_dir=out_dir)
+    run_detection(model, tokenizer, info, cfg, corpus=corpus, out_dir=out_dir,
+                  corpus_path=args.corpus)
     return 0
 
 
@@ -361,9 +419,9 @@ def cmd_mask(args: argparse.Namespace) -> int:
     scores = RetrievalScores.load(out_dir / f"scores_{args.pairing}")
     model, tokenizer, info = _load(args.model, dtype=args.dtype)
     require_matching_scores(scores, info)
-    corpus = load_corpus(args.corpus) if args.corpus else None
-    # Must match what detect measured: prefer the recorded value, warn on a clash.
-    system_prompt = resolve_system_prompt(args, scores)
+    # Must match what detect measured: prefer the recorded conditions, warn on a clash.
+    settings = resolve_detection_settings(args, scores)
+    corpus = load_corpus(settings.corpus_path) if settings.corpus_path else None
 
     # The eval needle is held out of detection: selecting heads on the same text
     # they are then scored on inflates the retrieval arm (paper: "additional set").
@@ -384,10 +442,10 @@ def cmd_mask(args: argparse.Namespace) -> int:
     samples = make_eval_samples(
         tokenizer, lengths=lengths, depths=(0.1, 0.3, 0.5, 0.7, 0.9),
         needle=needle, question=question, seed=args.seed + 7,
-        chat_template=not args.no_chat_template,
-        enable_thinking=None if args.thinking else False,
+        chat_template=settings.chat_template,
+        enable_thinking=settings.enable_thinking,
         corpus=corpus,
-        system_prompt=system_prompt,
+        system_prompt=settings.system_prompt,
     )
     k_values = resolve_k(args, info, default_fracs=DEFAULT_K_FRACS["mask"])
     log.info("masking K values %s (%.1f%%-%.1f%% of %d scoreable heads)",
@@ -400,10 +458,19 @@ def cmd_mask(args: argparse.Namespace) -> int:
         prefill_chunk=normalize_prefill_chunk(args.prefill_chunk),
     )
     curve.meta["corpus"] = "custom" if corpus else "synthetic"
+    curve.meta["corpus_path"] = settings.corpus_path
     curve.meta["needle"] = needle
     curve.meta["question"] = question
     curve.meta["needle_source"] = "eval"       # never in DETECTION_NEEDLES
     curve.meta["seed"] = args.seed
+    # The conditions the *heads were chosen under* (detect) and the ones this
+    # ablation ran under; if they differ the artifact says so instead of hiding it.
+    curve.meta["chat_template"] = settings.chat_template
+    curve.meta["system_prompt"] = settings.system_prompt
+    curve.meta["enable_thinking"] = settings.enable_thinking
+    curve.meta["threshold"] = settings.threshold
+    curve.meta["detection_pairing"] = (scores.meta or {}).get("config", {}).get("pairing")
+    curve.meta["capture_method"] = getattr(args, "capture_method", "patch")
     save_json(add_provenance(curve.as_dict(), dtype=info.dtype),
               out_dir / "masking_curve.json")
 
@@ -420,7 +487,13 @@ def cmd_mask(args: argparse.Namespace) -> int:
                                         n_trials=args.mixer_trials, seed=args.seed)
         payload = ablation.as_dict()
         payload.update({"needle": needle, "question": question,
-                        "needle_source": "eval", "seed": args.seed})
+                        "needle_source": "eval", "seed": args.seed,
+                        "model": info.name, "max_new_tokens": args.max_new_tokens,
+                        "prefill_chunk": normalize_prefill_chunk(args.prefill_chunk),
+                        "chat_template": settings.chat_template,
+                        "system_prompt": settings.system_prompt,
+                        "corpus": "custom" if corpus else "synthetic",
+                        "corpus_path": settings.corpus_path})
         save_json(add_provenance(payload, dtype=info.dtype),
                   out_dir / "mixer_ablation.json")
     if torch.cuda.is_available():
@@ -457,6 +530,7 @@ def cmd_qa(args: argparse.Namespace) -> int:
     scores = RetrievalScores.load(out_dir / f"scores_{args.pairing}")
     model, tokenizer, info = _load(args.model, dtype=args.dtype)
     require_matching_scores(scores, info)
+    settings = resolve_detection_settings(args, scores)
 
     samples = load_qa_jsonl(args.data) if args.data else builtin_qa_samples()
     warn_oversized_samples(samples, info, tokenizer, "qa")
@@ -465,9 +539,9 @@ def cmd_qa(args: argparse.Namespace) -> int:
                          n_random_trials=args.random_trials,
                          seed=args.seed, max_new_tokens=args.max_new_tokens,
                          prefill_chunk=normalize_prefill_chunk(args.prefill_chunk),
-                         enable_thinking=None if args.thinking else False,
-                         chat_template=not args.no_chat_template,
-                         system_prompt=resolve_system_prompt(args, scores))
+                         enable_thinking=settings.enable_thinking,
+                         chat_template=settings.chat_template,
+                         system_prompt=settings.system_prompt)
     save_json(add_provenance(result, dtype=info.dtype), out_dir / "task_qa.json")
     return 0
 
@@ -482,6 +556,7 @@ def cmd_cot(args: argparse.Namespace) -> int:
     scores = RetrievalScores.load(out_dir / f"scores_{args.pairing}")
     model, tokenizer, info = _load(args.model, dtype=args.dtype)
     require_matching_scores(scores, info)
+    settings = resolve_detection_settings(args, scores)
 
     samples = load_reasoning_jsonl(args.data) if args.data else builtin_reasoning_samples()
     warn_oversized_samples(samples, info, tokenizer, "cot")
@@ -494,9 +569,9 @@ def cmd_cot(args: argparse.Namespace) -> int:
                           n_random_trials=args.random_trials,
                           seed=args.seed, max_new_tokens=args.max_new_tokens,
                           prefill_chunk=normalize_prefill_chunk(args.prefill_chunk),
-                          enable_thinking=None if args.thinking else False,
-                          chat_template=not args.no_chat_template,
-                          system_prompt=resolve_system_prompt(args, scores))
+                          enable_thinking=settings.enable_thinking,
+                          chat_template=settings.chat_template,
+                          system_prompt=settings.system_prompt)
     save_json(add_provenance(result, dtype=info.dtype), out_dir / "task_cot.json")
     return 0
 

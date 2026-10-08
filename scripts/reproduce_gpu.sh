@@ -25,6 +25,12 @@ for m in "${MODELS[@]}"; do RUNS+=("results/$m"); done
 # artifact records the dtype, so a mixed comparison is visible.
 DTYPE=(--dtype bfloat16)
 
+# Census first, as the laptop script and the job driver do: without --out no
+# model_info.json is written and the run tree loses that artifact.
+for m in "${MODELS[@]}"; do
+  "$PY" -m retrieval_heads.cli describe --model "$m" --out "results/$m" "${DTYPE[@]}"
+done
+
 for m in "${MODELS[@]}"; do
   "$PY" -m retrieval_heads.cli detect --model "$m" --profile paper "${DTYPE[@]}" \
       --lengths 1024 2048 4096 8192 16384 24576 32768 40960 49152
