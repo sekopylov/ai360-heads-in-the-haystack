@@ -94,10 +94,37 @@ def main():
     fig.suptitle("Each point = one head; scores averaged over successful cases")
     fig.savefig(output / "pairwise_scatter.png", dpi=180)
     plt.close(fig)
+    # Same head identity/colors across panels; label the union of top-5 heads
+    # from each metric rather than attempting 1152 overlapping annotations.
+    highlighted = sorted(set(int(index) for row in values
+                             for index in np.argsort(-row, kind='stable')[:5]))
+    fig, axes = plt.subplots(1, len(pairs), figsize=(6 * len(pairs), 5.5), squeeze=False)
+    colors = plt.get_cmap('tab20')
+    for ax, (i, j) in zip(axes[0], pairs):
+        ax.scatter(values[i], values[j], s=12, color='#94a3b8', alpha=.3, edgecolors='none')
+        for number, index in enumerate(highlighted):
+            color = colors(number % 20)
+            ax.scatter(values[i, index], values[j, index], s=55, color=color,
+                       edgecolors='black', linewidths=.4, zorder=3, label=heads[index])
+            ax.annotate(heads[index], (values[i, index], values[j, index]),
+                        xytext=(6, 8 if number % 2 == 0 else -14), textcoords='offset points',
+                        fontsize=8, color=color, arrowprops={'arrowstyle': '-', 'color': color, 'lw': .5})
+        ax.set_xlabel(labels[i])
+        ax.set_ylabel(labels[j])
+        ax.grid(alpha=.2)
+        ax.margins(.16)
+    handles, legend_labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, legend_labels, loc='lower center', ncol=min(len(highlighted), 8),
+               title='Layer-head (zero-based); colored = union of top-5 per metric')
+    fig.suptitle(f"{manifest['model_version']}: same labeled heads across metric pairs")
+    fig.tight_layout(rect=(0, .15, 1, .94))
+    fig.savefig(output / 'pairwise_heads.png', dpi=180)
+    plt.close(fig)
     summary = {"metrics": names, "head_count": len(heads),
                "successful_cases": manifest["successful_cases"],
                "selected_cases": aggregation.get('selected_case_count', manifest['successful_cases']),
                "attention_scope": manifest["attention_scope"],
+               "highlighted_heads": [heads[index] for index in highlighted],
                "pearson": pearson, "spearman": spearman,
                "zero_head_counts": {name: int(np.sum(values[i] == 0)) for i, name in enumerate(names)}}
     (output / "correlations.json").write_text(json.dumps(summary, indent=2))

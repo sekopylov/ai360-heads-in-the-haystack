@@ -161,7 +161,6 @@ forward на позиции48k; это не проверка качества р
 ## 4. Основной результат: Qwen3-8B survey
 
 Конфигурация: [`qwen3-8b-survey.yaml`](datasphere/qwen3-8b-survey.yaml).
-[Облачная джоба](https://datasphere.yandex.cloud/communities/bt1dv4jmd0u81i806t74/projects/bt1u5v72b71eesdhp9k5/job/bt12jdilhjsoabggv50s).
 Полные локальные данные: `datasphere-results/qwen3-8b-survey/` (игнорируются Git).
 
 - 3 исходных корпуса `part1/part2/part3`, по одному needle/вопросу на корпус.
@@ -212,6 +211,12 @@ survey агрегация по успешным случаям совпадае�
 
 ![Legacy: средние и per-case оценки](report-assets/survey-legacy-top.png)
 
+Обычная top-1 метрика здесь — legacy: максимальное внимание должно попасть
+в needle-span с совпадающим token ID. Ниже её карта по всем слоям и головам;
+шкала допускает score>1 из-за повторных попаданий.
+
+![Обычная top-1 метрика: слои и головы](report-assets/survey-legacy-heatmap.png)
+
 ![Multiset: средние и per-case оценки](report-assets/survey-multiset-top.png)
 
 ![Attention-mass: средние и per-case оценки](report-assets/survey-mass-top.png)
@@ -236,6 +241,15 @@ survey агрегация по успешным случаям совпадае�
 ![Матрицы корреляций](report-assets/survey-correlations.png)
 
 ![Каждая точка — одна голова](report-assets/survey-scatter.png)
+
+На следующем графике выделены конкретные головы: объединение top-5 каждой
+метрики, остальные головы показаны серым фоном. Всего в анализе1152 головы.
+Подписи — `слой-голова`
+с индексацией от0; цвет одной головы одинаков во всех трёх панелях.
+Это позволяет увидеть, как одна и та же голова оценивается разными метриками.
+Выделение top-5 не меняет коэффициенты корреляции по всем головам выше.
+
+![Попарные оценки с подписями конкретных голов](report-assets/survey-correlations-heads.png)
 
 ## 5. Ограничения и дальнейшая проверка
 
