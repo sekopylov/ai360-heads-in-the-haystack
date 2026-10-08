@@ -348,8 +348,15 @@ def cmd_mask(args: argparse.Namespace) -> int:
     # Five depths (not three): the curve is noisy at three samples, and the extra
     # points are what make the per-K spread meaningful.  A properly powered run is
     # still the paper-scale grid.
+    # Same window guard as `detect`: a length past the trained window is
+    # extrapolation, not a measurement, and `detect` already refuses it.
+    lengths, _dropped = within_context_limit(args.lengths or (1024,), info)
+    if not lengths:
+        raise SystemExit(
+            f"every requested length exceeds {info.name}'s window; nothing to measure"
+        )
     samples = make_eval_samples(
-        tokenizer, lengths=args.lengths or (1024,), depths=(0.1, 0.3, 0.5, 0.7, 0.9),
+        tokenizer, lengths=lengths, depths=(0.1, 0.3, 0.5, 0.7, 0.9),
         needle=needle, question=question, seed=args.seed + 7,
         chat_template=not args.no_chat_template,
         enable_thinking=None if args.thinking else False,
@@ -394,6 +401,27 @@ def cmd_mask(args: argparse.Namespace) -> int:
     return 0
 
 
+def warn_oversized_samples(samples: Sequence[Any], info: Any, tokenizer: Any,
+                           what: str) -> None:
+    """Warn when a document is longer than the model's trained window.
+
+    `--data` is user-supplied and bypasses every grid check, so the only guard is
+    this measurement.
+    """
+    limit = getattr(info, "max_position_embeddings", None)
+    if not limit:
+        return
+    budget = limit - PROMPT_OVERHEAD_TOKENS
+    longest = 0
+    for sample in samples:
+        text = f"{getattr(sample, 'context', '')} {getattr(sample, 'question', '')}"
+        longest = max(longest, len(tokenizer(text, add_special_tokens=False).input_ids))
+    if longest > budget:
+        log.warning("%s: the longest sample is %d tokens, above the %d-token window "
+                    "minus overhead; those answers are extrapolation",
+                    what, longest, limit)
+
+
 def cmd_qa(args: argparse.Namespace) -> int:
     from retrieval_heads.downstream import builtin_qa_samples, load_qa_jsonl, qa_ablation
     from retrieval_heads.scoring import RetrievalScores
@@ -404,6 +432,7 @@ def cmd_qa(args: argparse.Namespace) -> int:
     require_matching_scores(scores, info)
 
     samples = load_qa_jsonl(args.data) if args.data else builtin_qa_samples()
+    warn_oversized_samples(samples, info, tokenizer, "qa")
     result = qa_ablation(model, tokenizer, info, scores, samples,
                          k_values=resolve_k(args, info, default_fracs=DEFAULT_K_FRACS["qa"]),
                          n_random_trials=args.random_trials,
@@ -427,6 +456,7 @@ def cmd_cot(args: argparse.Namespace) -> int:
     require_matching_scores(scores, info)
 
     samples = load_reasoning_jsonl(args.data) if args.data else builtin_reasoning_samples()
+    warn_oversized_samples(samples, info, tokenizer, "cot")
     ks = resolve_k(args, info, default_fracs=DEFAULT_K_FRACS["cot"])
     if len(ks) > 1:
         log.warning("cot evaluates a single K per run; using %d and ignoring %s",

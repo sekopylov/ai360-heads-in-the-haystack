@@ -82,7 +82,7 @@ def main() -> int:
         depth=args.depth, builder=HaystackBuilder(seed=0),
     )
     print(f"prompt={sample.length} tokens  needle={sample.needle_span} "
-          f"({sample.n_unique_needle_tokens} unique)\n")
+          f"({sample.n_unique_needle_text_tokens} unique)\n")
 
     trace, generated = decode_with_attention(
         model, info, sample.input_ids, max_new_tokens=args.max_new_tokens, tokenizer=tokenizer,
@@ -94,7 +94,7 @@ def main() -> int:
     credits, _, considered = credits_from_trace(trace, sample, info, pairing=args.pairing)
     print("generated:", repr(tokenizer.decode(generated, skip_special_tokens=True)[:220]), "\n")
 
-    denom = max(sample.n_unique_needle_tokens, 1)
+    denom = max(sample.n_unique_needle_text_tokens, 1)
     ranked = top_heads(credits, info, k=6)
     print(f"top heads ({args.pairing}):")
     for head in ranked:

@@ -20,6 +20,7 @@ import torch
 
 from retrieval_heads.attention import HeadMasker, TokenMixerMasker
 from retrieval_heads.generation import greedy_ids
+from retrieval_heads.scoring import needle_prefix_recall, needle_recall
 from retrieval_heads.haystack import NeedleSample, build_needle_sample
 from retrieval_heads.models import ModelInfo
 from retrieval_heads.scoring import RetrievalScores, needle_recall
@@ -100,11 +101,14 @@ class NiahMetrics:
     f1s: list[float] = field(default_factory=list)
     exact_matches: list[float] = field(default_factory=list)
     recalls: list[float] = field(default_factory=list)
+    #: The old prefix-anchored recall (needle reproduced from its first word).
+    prefix_recalls: list[float] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {"f1": self.f1, "exact_match": self.exact_match, "recall": self.recall,
                 "n": self.n, "f1s": self.f1s, "exact_matches": self.exact_matches,
-                "recalls": self.recalls}
+                "recalls": self.recalls,
+                "prefix_recalls": self.prefix_recalls}
 
 
 def normalized_contains(text: str, needle: str) -> bool:
@@ -146,7 +150,7 @@ def evaluate_samples(
         if masker is not None:
             masker.remove()
         raise
-    f1s, ems, recalls = [], [], []
+    f1s, ems, recalls, prefix_recalls = [], [], [], []
     try:
         special = set(getattr(tokenizer, "all_special_ids", None) or [])
         for sample in samples:
@@ -162,6 +166,7 @@ def evaluate_samples(
             f1s.append(token_f1(scored_ids, sample.needle_text_ids))
             ems.append(1.0 if normalized_contains(text, sample.needle_text) else 0.0)
             recalls.append(needle_recall(text, sample.needle_text))
+            prefix_recalls.append(needle_prefix_recall(text, sample.needle_text))
     finally:
         if masker is not None:
             masker.remove()
@@ -175,6 +180,7 @@ def evaluate_samples(
         f1s=[100.0 * value for value in f1s],
         exact_matches=[100.0 * value for value in ems],
         recalls=[100.0 * value for value in recalls],
+        prefix_recalls=[100.0 * value for value in prefix_recalls],
     )
 
 

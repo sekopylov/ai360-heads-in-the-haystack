@@ -170,3 +170,17 @@ def test_zeroing_the_attention_row_equals_zeroing_the_oproj_slice(tiny_hybrid):
     assert not torch.allclose(base, via_oproj), "the head mask changed nothing"
     assert torch.allclose(via_oproj, via_row, atol=1e-5), \
         (via_oproj - via_row).abs().max().item()
+
+
+def test_eager_capture_and_sdpa_prefill_agree_on_positions(tiny_hybrid):
+    """detect captures under eager but prefills under sdpa; the argmax must agree."""
+    model, info = tiny_hybrid
+    ids = _ids(length=24)
+
+    def positions(prefill_impl: str):
+        trace, _ = decode_with_attention(model, info, ids, max_new_tokens=3,
+                                         capture_method="patch",
+                                         prefill_impl=prefill_impl, stop_on_eos=False)
+        return [step.positions()[2].tolist() for step in trace.steps]
+
+    assert positions("eager") == positions("sdpa")

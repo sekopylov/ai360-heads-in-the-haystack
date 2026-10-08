@@ -527,14 +527,22 @@ def build_model_info(model: nn.Module, config: Any, *, path: str, name: str | No
             log.debug("layer %d: q_proj outputs %d = 2 x %d; the block is gated",
                       layer, q_width, heads * dim)
 
-    num_linear_heads = {
-        layer: int(
+    num_linear_heads: dict[int, int] = {}
+    for layer, module in linear.items():
+        heads = int(
             getattr(module, "num_v_heads", None)
             or getattr(getattr(module, "config", tcfg), "linear_num_value_heads", 0)
             or 0
         )
-        for layer, module in linear.items()
-    }
+        if heads <= 0:
+            # `n_all_heads` (and the README's "8 of 336" claim) silently loses the
+            # whole layer if a mixer reports no head count.
+            log.warning(
+                "token-mixer layer %d exposes no head count (neither num_v_heads nor "
+                "config.linear_num_value_heads); n_all_heads will under-count",
+                layer,
+            )
+        num_linear_heads[layer] = heads
 
     layer_types = list(getattr(tcfg, "layer_types", None) or [])
     if not layer_types:

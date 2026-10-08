@@ -32,6 +32,8 @@ def prefill_cache(
     materialise the full ``(heads, seq, seq)`` matrix, which asked for 20.6 GiB in
     one allocation at 16K on a 22 GiB card (docs/datasphere-findings.md section 18).
     """
+    if prefill_chunk is not None and prefill_chunk <= 0:
+        raise ValueError("prefill_chunk must be positive or None")
     if prefill_chunk is not None and input_ids.shape[1] > prefill_chunk:
         cache = None
         out = None

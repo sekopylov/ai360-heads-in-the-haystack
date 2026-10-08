@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 194 tests: 177 fast (`pytest -m "not integration"`, ~10 s), 17 integration against
+* 196 tests: 179 fast (`pytest -m "not integration"`, ~10 s), 17 integration against
   the real checkpoints. All green.
 * A full GPU run finished successfully (job `bt1hqv1b91ht36s2egdp`, ~39 min,
   NVIDIA L4): 75 instances per model, masking curves, QA, CoT, correlation, nine
@@ -25,6 +25,11 @@ tied to a job id) → this file (where things stand and what is left).
   and cancelled on purpose, and it waits on a review of the current working tree.
 * DataSphere path works: cached venv on the project disk, ~40 s job startup
   instead of ~9 min. Job `bt107kjm3es8vung7130` proves all seven stages run on GPU.
+* **`needle_recall` no longer requires the needle from its first word.**  It is now
+  a word-level LCS ratio (the old prefix measure is kept as `needle_prefix_recall`);
+  a correct sub-span answer used to score 0.0 and be dropped from the recited-only
+  matrices, which is exactly the filter those matrices rest on.  `credits_aligned`
+  got the same treatment (true token-level LCS, not a prefix-anchored walk).
 * **One definition of "a needle token".**  The needle is now inserted with a space
   after it (`"{needle} \n"`), so the tokenizer no longer fuses its last character
   with the newline; the prompt span therefore ends on the needle's own token and
@@ -331,7 +336,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 194 passed (177 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 196 passed (179 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

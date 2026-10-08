@@ -396,6 +396,23 @@ meaningful within a family.
   heads and to show the masking effect, but the paper's per-head numbers come from
   ~600 instances and are smoother than what you get here. Raise `--profile paper`
   on a GPU for that grid.
+* **Synthetic filler by default.** Every shipped profile generates the haystack
+  from a 60-word template pool, so a 1K-50K context is highly repetitive text.
+  Attention argmax is sensitive to that regularity, so the *absolute* scores are
+  not transferable to the paper's natural documents; the head ranking and the
+  masking effect are the parts that replicate. `--corpus <file>` (essay text) is
+  wired through `detect`/`mask`, but no profile sets it yet.
+* **The score's ceiling is set by the question, not only by the tokenizer.**
+  `tokenization_attainable_score` records only whether the prompt exposes every
+  needle token. The questions ask about a *sub-span* of the needle ("eat a
+  sandwich in Dolores Park"), while `k` is the whole needle, so even a perfect
+  copy head will not reach 1.0 on a long needle. `needle_recall` (the
+  longest-common-subsequence ratio) and the per-instance `generated_text` are the
+  handles for that gap.
+* **`needle_recall` is a diagnostic, not the score.** It used to require the model
+  to reproduce the needle from its *first* word, which scored a correct sub-span
+  answer 0.0 and silently dropped it from the recited-only matrices; it is now an
+  LCS ratio, and the old prefix measure is kept as `needle_prefix_recall`.
 * **Hybrid models, one number short.** For Qwen3.5 the linear layers *cannot* be
   scored. Masking experiments (`token_mixer_ablation`) do cover them, so their
   contribution is measurable at layer granularity — just not as "retrieval

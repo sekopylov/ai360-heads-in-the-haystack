@@ -266,6 +266,10 @@ class DetectionRun:
                 1 for i in self.instances
                 if i.meta.get("truncated", not i.meta.get("eos_reached", True))
             ),
+            "mean_needle_prefix_recall": (
+                sum(i.meta.get("needle_prefix_recall", 0.0) for i in self.instances) / n
+                if n else 0.0
+            ),
             "mean_needle_recall": (
                 sum(i.needle_recall for i in self.instances) / n if n else 0.0
             ),
@@ -286,7 +290,7 @@ class DetectionRun:
             "needle_stats": {
                 key: scores.meta[key] for key in
                 ("needle_tokens_mean", "unique_needle_tokens_mean", "denominator_inflation",
-                 "max_attainable_score_mean")
+                 "tokenization_attainable_mean")
                 if key in scores.meta
             },
             "sparsity": scores.sparsity(),
@@ -419,7 +423,7 @@ def run_detection(
 
     scores = aggregate_scores(results, info, pairing=config.pairing, threshold=config.threshold)
     needle_tokens = [r.sample.get("n_needle_tokens", 0) for r in results]
-    unique_tokens = [r.sample.get("n_unique_needle_tokens", 0) for r in results]
+    unique_tokens = [r.sample.get("n_unique_needle_text_tokens", 0) for r in results]
     scores.meta = {
         "config": config.as_dict(),
         "corpus": "custom" if corpus else "synthetic",

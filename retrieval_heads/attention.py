@@ -241,7 +241,9 @@ class HeadMasker(_HookGroup):
         by_layer: dict[int, list[int]] = {}
         for head in self.heads:
             n_heads = self.info.num_heads.get(head.layer)
-            if n_heads is not None and head.head >= n_heads:
+            if head.head < 0 or (n_heads is not None and head.head >= n_heads):
+                # A negative index would silently zero the *last* head of the layer
+                # (`view[..., -1, :]`), i.e. mask a head nobody asked for.
                 raise KeyError(
                     f"head {head} is out of range: layer {head.layer} has {n_heads} heads"
                 )

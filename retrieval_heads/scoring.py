@@ -338,15 +338,13 @@ def credits_aligned(
     *,
     pairing: str = "next_step",
 ) -> dict[HeadRef, set[int]]:
-    """Stricter variant: a greedy in-order subsequence match against the needle.
+    """Stricter variant: the *longest common subsequence* alignment with the needle.
 
-    Tokens must appear in needle order (not just anywhere in the window), but the
-    match is greedy rather than a true longest-common-subsequence alignment.
-
-    :func:`credits_from_trace` (the paper) credits any generated token that
-    appears anywhere in the needle.  This variant walks the needle and the
-    generated sequence together, so a common token such as ``"."`` cannot earn
-    credit out of order.  Useful as a robustness check on short needles.
+    :func:`credits_from_trace` (the paper) credits any generated token that appears
+    anywhere in the needle.  This variant requires the tokens to form an in-order
+    subsequence, so a common token such as ``"."`` cannot earn credit out of order.
+    Being a true LCS (not a walk anchored on the needle's first token) it correctly
+    credits a correct answer that starts mid-needle.
     """
     # The same "needle token" set as `credits_from_trace`: walking the prompt-span
     # ids instead made this variant systematically lower for a reason that had
@@ -356,16 +354,13 @@ def credits_aligned(
     # generated token belongs to next_step only), so stream positions line up
     # with the step list used below.
     steps = [s for s in trace.steps if s.applies_to is None or pairing in s.applies_to]
-    # longest in-order alignment between the emitted stream and the needle
-    alignment: dict[int, int] = {}
-    cursor = 0
     stream = [s.predicted_token for s in steps] if pairing == "next_step" else [
         s.fed_token for s in steps
     ]
-    for pos, tok in enumerate(stream):
-        if cursor < len(needle_ids) and tok == needle_ids[cursor]:
-            alignment[pos] = cursor
-            cursor += 1
+    # Longest common subsequence: an in-order match that is not anchored on the
+    # needle's first token (the old cursor walk was, so a sub-span answer -- which is
+    # what the questions ask for -- scored ~0 here).
+    alignment = dict(lcs_alignment(stream, needle_ids))
 
     start, end = sample.needle_span
     prompt_ids = sample.input_ids[0]
@@ -426,21 +421,80 @@ class InstanceResult:
         }
 
 
-def needle_recall(generated_text: str, needle_text: str) -> float:
-    """Fraction of needle words present, in order, in the generated text.
+def _norm_word(word: str) -> str:
+    return word.strip(".,!?;:").lower()
 
-    A cheap readability diagnostic: it tells us whether the instance is a valid
-    retrieval test at all, without being used for scoring.
+
+def lcs_length(a: Sequence[Any], b: Sequence[Any]) -> int:
+    """Length of the longest common subsequence (rolling-row DP)."""
+    if not a or not b:
+        return 0
+    previous = [0] * (len(b) + 1)
+    for item in a:
+        current = [0]
+        for j, other in enumerate(b):
+            if item == other:
+                current.append(previous[j] + 1)
+            else:
+                current.append(max(previous[j + 1], current[j]))
+        previous = current
+    return previous[-1]
+
+
+def lcs_alignment(a: Sequence[Any], b: Sequence[Any]) -> list[tuple[int, int]]:
+    """In-order pairs ``(i, j)`` of one longest common subsequence of ``a`` and ``b``."""
+    n, m = len(a), len(b)
+    if not n or not m:
+        return []
+    table = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        row, nxt = table[i], table[i + 1]
+        for j in range(m - 1, -1, -1):
+            row[j] = nxt[j + 1] + 1 if a[i] == b[j] else max(nxt[j], row[j + 1])
+    pairs: list[tuple[int, int]] = []
+    i = j = 0
+    while i < n and j < m:
+        if a[i] == b[j]:
+            pairs.append((i, j))
+            i, j = i + 1, j + 1
+        elif table[i + 1][j] >= table[i][j + 1]:
+            i += 1
+        else:
+            j += 1
+    return pairs
+
+
+def needle_recall(generated_text: str, needle_text: str) -> float:
+    """Fraction of the needle recovered in order (longest common subsequence).
+
+    A cheap validity diagnostic for the instance, not part of the score.  It must be
+    a *subsequence*, not a prefix: the questions ask for a sub-span of the needle, so
+    a correct extractive answer starts mid-needle.  The old prefix-anchored walk gave
+    such answers 0.0 and silently dropped them from the recited-only matrices.
     """
-    needle_words = [w.lower() for w in needle_text.split()]
+    needle_words = [_norm_word(word) for word in needle_text.split()]
     if not needle_words:
         return 0.0
-    cursor, hit = 0, 0
+    generated_words = [_norm_word(word)
+                       for word in generated_text.replace("*", " ").lower().split()]
+    return lcs_length(needle_words, generated_words) / len(needle_words)
+
+
+def needle_prefix_recall(generated_text: str, needle_text: str) -> float:
+    """The previous measure: needle words reproduced *from its first word*.
+
+    Kept as a separate diagnostic because it answers a different question ("did the
+    model dictate the needle as a whole?"), which is what `recited` used to mean.
+    """
+    needle_words = [_norm_word(word) for word in needle_text.split()]
+    if not needle_words:
+        return 0.0
+    cursor = hits = 0
     for word in generated_text.replace("*", " ").lower().split():
-        if cursor < len(needle_words) and word.strip(".,!?;:") == needle_words[cursor].strip(".,!?;:"):
-            hit += 1
+        if cursor < len(needle_words) and _norm_word(word) == needle_words[cursor]:
+            hits += 1
             cursor += 1
-    return hit / len(needle_words)
+    return hits / len(needle_words)
 
 
 @torch.no_grad()
@@ -508,7 +562,9 @@ def score_instance(
         n_steps=len(generated),
         aligned_scores=aligned_out,
         meta={"pairing": pairing, "eos_reached": trace.stopped_on_eos,
-              "truncated": not trace.stopped_on_eos},
+              "truncated": not trace.stopped_on_eos,
+              # The old prefix-anchored diagnostic, kept so the change is auditable.
+              "needle_prefix_recall": needle_prefix_recall(text, sample.needle_text)},
     )
 
 
@@ -548,7 +604,11 @@ class RetrievalScores:
         return [h for h in self.info.scoreable_heads if self.head_score(h) > t]
 
     def sparsity(self, thresholds: Sequence[float] = (0.0, 0.1, 0.5)) -> dict[str, Any]:
-        """Fractions of heads at/above each threshold -- the paper's Fig. 2 stats."""
+        """Fractions of heads strictly *above* each threshold (paper's Fig. 2 stats).
+
+        Strict on purpose: the paper defines a retrieval head as score > 0.1, so the
+        `0.0` bucket counts "any credit at all", not "every head".
+        """
         total = self.info.n_scoreable_heads
         values = torch.tensor([self.head_score(h) for h in self.info.scoreable_heads])
         out: dict[str, Any] = {"n_heads": total, "thresholds": {}}
@@ -624,6 +684,18 @@ class RetrievalScores:
             if not meta.get("model"):
                 raise ValueError(f"{meta_path} has no model metadata; pass info= explicitly")
             info = ModelInfo.from_dict(meta["model"])
+        expected_shape = (info.num_layers, info.max_heads)
+        if tuple(score.shape) != expected_shape or tuple(activation.shape) != expected_shape:
+            raise ValueError(
+                f"{path} holds {tuple(score.shape)}/{tuple(activation.shape)} matrices but "
+                f"the metadata describes {expected_shape}; the artifact belongs to another "
+                f"model"
+            )
+        if saved_mask is None and meta.get("schema_version", 0) >= 5:
+            raise ValueError(
+                f"{path} has schema_version {meta.get('schema_version')} but no "
+                f"scoreable_mask; refusing to guess which entries are real"
+            )
         if saved_mask is not None and not torch.equal(saved_mask, info.scoreable_mask()):
             # The mask was once written and never checked; a sidecar that drifted
             # from its `info` would silently mis-place every head of every ablation.

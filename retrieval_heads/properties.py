@@ -105,24 +105,13 @@ def layouts_match(scores_a: RetrievalScores, scores_b: RetrievalScores) -> bool:
     """
     def key(scores: RetrievalScores):
         info = scores.info
+        # head_dim matters: the same (layers, heads) with a different projection
+        # width addresses different positions, so the grids are not comparable.
         return (info.num_layers, tuple(sorted(info.scoreable_layers)),
-                tuple(sorted(info.num_heads.items())))
+                tuple(sorted(info.num_heads.items())), info.head_dim)
 
     return key(scores_a) == key(scores_b)
 
-
-def _resample(matrix: torch.Tensor, shape: tuple[int, int]) -> np.ndarray:
-    """Nearest-neighbour resample a layer x head matrix onto a common grid.
-
-    Required because two models in different families rarely share a layer/head
-    count; the paper still reports a (low) correlation between them.
-    """
-    arr = np.asarray(matrix, dtype=np.float64)
-    src_l, src_h = arr.shape
-    dst_l, dst_h = shape
-    li = np.clip((np.arange(dst_l) * src_l / dst_l).astype(int), 0, src_l - 1)
-    hi = np.clip((np.arange(dst_h) * src_h / dst_h).astype(int), 0, src_h - 1)
-    return arr[np.ix_(li, hi)]
 
 
 def pearson(a: np.ndarray, b: np.ndarray) -> float:
@@ -169,11 +158,13 @@ def correlate(
             scores_a.info.name, scores_b.info.name,
         )
         return float("nan")
-    if a.shape != b.shape:
-        # pad the smaller grid so both cover the full depth of the network
-        cols = max(a.shape[1], b.shape[1])
-        target = (max(a.shape[0], b.shape[0]), cols)
-        a, b = _resample(a, target), _resample(b, target)
+    if a.shape != b.shape:  # pragma: no cover - layouts_match should prevent this
+        # Unreachable for consistent objects; reaching it means a matrix contradicts
+        # its own info, and silently resampling would invent data.
+        raise ValueError(
+            f"grid correlation needs matching matrix shapes, got {a.shape} and {b.shape}; "
+            f"the scores object is inconsistent with its ModelInfo"
+        )
     return pearson(a, b)
 
 

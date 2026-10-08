@@ -196,6 +196,9 @@ class NeedleSample:
             "needle_span": list(self.needle_span),
             "n_needle_tokens": self.n_needle_tokens,
             "n_unique_needle_tokens": self.n_unique_needle_tokens,
+            # The denominator the score actually uses (the span count above can
+            # differ when a boundary token is fused).
+            "n_unique_needle_text_tokens": self.n_unique_needle_text_tokens,
             "prompt_tokens": self.length,
             "target_tokens": self.target_tokens,
             "seed": self.seed,
@@ -306,6 +309,13 @@ def build_needle_sample(
         char_start = prompt.find(needle)
         if char_start < 0:  # pragma: no cover - defensive
             raise RuntimeError("needle text vanished from the rendered prompt")
+        if char_start != prompt.rfind(needle):
+            # A second occurrence (in the question or the template) would make the
+            # span point at the wrong text and silently shift every score.
+            raise RuntimeError(
+                "the needle text occurs more than once in the rendered prompt; the "
+                "recorded span would not identify which occurrence was scored"
+            )
         char_end = char_start + len(needle)
 
         ids, offsets = _tokenize_with_offsets(tokenizer, prompt)
@@ -338,10 +348,11 @@ def build_needle_sample(
     # it instead of silently treating it as pure needle.
     straddles = offsets[lo][0] < char_start or offsets[hi - 1][1] > char_end
     needle_text_ids = tokenizer(needle, add_special_tokens=False).input_ids
-    # How much of the needle the prompt can actually expose to the scorer: the
+    # How much of the needle the *tokenization* can expose to the scorer: the
     # intersection of the text tokens and the span tokens, over the unique text
-    # tokens.  With the space-after-needle insertion this is 1.0; it is recorded so a
-    # future needle that fuses again cannot silently lower every score.
+    # tokens.  This is a tokenization ceiling only -- it says nothing about how much
+    # of the needle the question actually asks for.  With the space-after-needle
+    # insertion it is 1.0 for every shipped needle.
     span_ids = ids[lo:hi]
     max_attainable = len(set(needle_text_ids) & set(span_ids)) / max(len(set(needle_text_ids)), 1)
     if max_attainable < 0.98:

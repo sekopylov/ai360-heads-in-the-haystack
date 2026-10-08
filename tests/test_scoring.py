@@ -191,8 +191,11 @@ def test_aligned_matching_rejects_out_of_order_tokens():
     loose, _, _ = credits_from_trace(trace, sample, info, pairing="next_step")
     assert loose[HeadRef(0, 0)] == {7, 8}          # paper's set-based rule
     strict = credits_aligned(trace, sample, info, pairing="next_step")
-    # in-order walk matches only the "7" at the very end (needle[0] == 7)
-    assert strict[HeadRef(0, 0)] == {7}
+    # A longest-common-subsequence alignment of needle [7, 8] against the stream
+    # [8, 7] has length 1, so exactly one of the two can be credited (which one is a
+    # tie); the point is that the out-of-order pair is not both credited.
+    assert len(strict[HeadRef(0, 0)]) == 1, strict
+    assert strict[HeadRef(0, 0)] <= {7, 8}
 
 
 def test_credits_ignore_layers_the_model_does_not_score():
@@ -206,6 +209,22 @@ def test_credits_ignore_layers_the_model_does_not_score():
     credits, _, _ = credits_from_trace(trace, sample, info, pairing="next_step")
     assert credits[HeadRef(0, 0)] == {7}
     assert HeadRef(99, 0) not in credits
+
+
+def test_needle_recall_credits_a_sub_span_answer():
+    """The questions ask for a sub-span, so a correct answer starts mid-needle.
+
+    The old prefix-anchored walk scored such answers 0.0 and dropped them from the
+    recited-only matrices.
+    """
+    needle = "The best thing to do in San Francisco is to eat a sandwich in Dolores Park"
+    from retrieval_heads.scoring import needle_prefix_recall
+
+    answer = "eat a sandwich in Dolores Park"
+    # 12 of the needle's 32 words, in order -- comfortably above RECITED_RECALL
+    # (0.3), whereas the prefix-anchored measure is 0.
+    assert needle_recall(answer, needle) > 0.3
+    assert needle_prefix_recall(answer, needle) == 0.0
 
 
 def test_needle_recall_is_case_insensitive():

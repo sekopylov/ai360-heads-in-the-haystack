@@ -921,7 +921,8 @@ def test_run_detection_aggregates_streams_and_writes_conditional(tmp_path, monke
         calls["n"] += 1
         recited = calls["n"] == 1                     # first instance is solved
         return InstanceResult(
-            sample={"n_needle_tokens": 3, "n_unique_needle_tokens": 2},
+            sample={"n_needle_tokens": 3, "n_unique_needle_tokens": 2,
+                    "n_unique_needle_text_tokens": 2},
             meta={"eos_reached": False, "truncated": True},
             scores={"next_step": {"L0H0": 0.9 if recited else 0.0, "L0H1": 0.2},
                     "same_step": {"L0H0": 0.8 if recited else 0.0, "L0H1": 0.1}},

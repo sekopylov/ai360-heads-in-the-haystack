@@ -59,7 +59,8 @@ def at(seq: Any, index: Any, default: Any = None) -> Any:
     """
     if isinstance(seq, Mapping):
         return seq.get(index, default)
-    if not isinstance(seq, (list, tuple)) or not isinstance(index, int) or index >= len(seq):
+    if (not isinstance(seq, (list, tuple)) or not isinstance(index, int)
+            or index < 0 or index >= len(seq)):
         return default
     return seq[index]
 
