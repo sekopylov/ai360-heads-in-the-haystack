@@ -487,7 +487,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --context_intervals 2 \
     --depths 0,50,100 \
     --out results/new/qwen3_test \
-    2>&1 | tee logs/new_qwen3_test.log
+    2>&1 | tee source/logs/new_qwen3_test.log
 ```
 
 ```python
@@ -524,7 +524,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --needle 0 \
     --every 5 \
     --out results/new/replay_needle0 \
-    2>&1 | tee logs/new_replay_test.log
+    2>&1 | tee source/logs/new_replay_test.log
 ```
 
 Сравнить (ячейка 7.5). Если сошлось, этого достаточно; при желании — все 200 примеров первой иглы:
@@ -537,7 +537,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --replay source/results/dump/Qwen1.5-14B-Chat/detect \
     --needle 0 \
     --out results/new/replay_needle0 \
-    2>&1 | tee logs/new_replay.log
+    2>&1 | tee source/logs/new_replay.log
 ```
 
 ### 7.5. Сравнение
