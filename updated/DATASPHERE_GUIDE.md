@@ -288,7 +288,7 @@ depth 45, 2048 новых токенов; результаты `datasphere-resul
 3/3 EOS, ROUGE recall100, peak allocated12.536GiB; токены825/750/637.
 Общая занятая память по GPU-мониторингу около94%, запас для24k небольшой.
 
-Расширенная проверка после smoke: [план теста Qwen3](datasphere/QWEN3_TEST_PLAN.md).
+Расширенная проверка после smoke задаётся готовыми Qwen3-конфигурациями ниже.
 `datasphere/qwen3-survey.yaml` — 36 detection-генераций: длины 4k/8k/16k/24k,
 глубины 15/45/75%, три исходных корпуса со своими needle-вопросами;
 `datasphere/qwen3-full.yaml` — 324 генерации с парным baseline/top/random masking.

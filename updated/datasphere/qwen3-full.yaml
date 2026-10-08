@@ -8,7 +8,7 @@ cmd: >
   python3 job.py
   --profile full
   --adapter qwen3
-  --model ${DS_PROJECT_HOME 1`/c0/models/Qwen/Qwen3-4B-Thinking-2507
+  --model ${DS_PROJECT_HOME}/c0/models/Qwen/Qwen3-4B-Thinking-2507
   --output-root datasphere-results/qwen3-full
   --detection-data ${DETECTION_DATA}
   --mask-data ${MASK_DATA}
