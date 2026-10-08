@@ -77,6 +77,8 @@ if __name__ == "__main__":
     parser.add_argument('--full_steps', type=int, default=3, help='decode steps with full attention rows on a few samples, grid mode')
     parser.add_argument('--raw_prompt', action='store_true', help='do not use the chat template')
     parser.add_argument('--slow_tokenizer', action='store_true')
+    parser.add_argument('--dtype', type=str, default="auto", help='auto (as in the checkpoint), float32, bfloat16: to measure the effect of the precision')
+    parser.add_argument('--no_flash_sdp', action='store_true', help='use another kernel of the PyTorch attention for the context: to measure the numerical noise')
     parser.add_argument('--inputs_only', action='store_true', help='build the inputs and compare them with --ref_dump, the model is not loaded')
     parser.add_argument('--ref_dump', type=str, default=None)
     args = parser.parse_args()
@@ -100,7 +102,11 @@ if __name__ == "__main__":
         raise SystemExit
 
     from . import runner
-    enc, model = runner.load(args.model_path, slow_tokenizer=args.slow_tokenizer)
+    import torch
+    if args.no_flash_sdp:
+        torch.backends.cuda.enable_flash_sdp(False)
+    dtype = "auto" if args.dtype == "auto" else getattr(torch, args.dtype)
+    enc, model = runner.load(args.model_path, slow_tokenizer=args.slow_tokenizer, torch_dtype=dtype)
     stop = runner.stop_tokens(enc, model, args.legacy)
     real_needles = [n["real_needle"] for n in haystack.load_needles(args.haystack_dir)]
     os.makedirs(args.out, exist_ok=True)
