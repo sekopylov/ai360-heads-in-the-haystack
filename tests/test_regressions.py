@@ -427,10 +427,17 @@ def test_require_matching_scores_rejects_a_foreign_artifact():
 def test_within_context_limit_drops_extrapolated_lengths():
     from retrieval_heads.cli import within_context_limit
 
+    from retrieval_heads.cli import PROMPT_OVERHEAD_TOKENS
+
     info = attention_info(1, 1)
     info.max_position_embeddings = 40960
+    # A requested length equal to the window is dropped: the realized prompt is
+    # filler + needle + question + template, i.e. ~64 tokens longer.
     kept, dropped = within_context_limit([1024, 49152, 40960], info)
-    assert (kept, dropped) == ([1024, 40960], [49152])
+    assert kept == [1024]
+    assert dropped == [49152, 40960]
+    assert within_context_limit([40960 - PROMPT_OVERHEAD_TOKENS], info)[0] == [
+        40960 - PROMPT_OVERHEAD_TOKENS]
     info.max_position_embeddings = None
     assert within_context_limit([1024, 49152], info) == ([1024, 49152], [])
 
@@ -705,10 +712,12 @@ def test_save_json_is_atomic(tmp_path):
 def test_detection_plan_seeds_are_unique_and_stable():
     from retrieval_heads.detection import DetectionConfig
 
-    config = DetectionConfig(lengths=[1024, 4096], depths_per_length=3)
-    seeds = [item["seed"] for item in config.plan()]
+    first = DetectionConfig(lengths=[1024, 4096], depths_per_length=3)
+    second = DetectionConfig(lengths=[1024, 4096], depths_per_length=3)
+    seeds = [item["seed"] for item in first.plan()]
     assert len(seeds) == len(set(seeds)), "duplicate filler seeds in the grid"
-    assert seeds == [item["seed"] for item in config.plan()], "seeds are not deterministic"
+    # Two independently constructed configs, not the same cached plan twice.
+    assert seeds == [item["seed"] for item in second.plan()], "seeds are not deterministic"
 
 
 def test_summarizer_tolerates_short_lists(tmp_path):
@@ -1018,29 +1027,43 @@ def test_score_pie_title_does_not_say_mixed():
 
 
 def test_greedy_generate_derives_eos_by_default(monkeypatch):
-    """`eos=()` used to disable stopping; the default must ask the model."""
+    """`greedy_generate(eos=None)` must call the real function, not a stand-in.
+
+    The previous version monkeypatched `masking.greedy_generate` itself, so it
+    validated `evaluate_samples` and never touched the default path -- which is how
+    a `NameError` on `tokenizer` survived it.
+    """
     import retrieval_heads.masking as masking
 
     seen = {}
 
-    def fake_greedy(model, input_ids, *, max_new_tokens, eos, attn_impl="sdpa", prefill_chunk=None):
+    def fake_ids(model, input_ids, *, max_new_tokens, eos, attn_impl="sdpa", prefill_chunk=None):
         seen["eos"] = set(eos)
         return [1]
 
-    monkeypatch.setattr(masking, "greedy_generate", fake_greedy, raising=False)
-    monkeypatch.setattr(masking, "eos_ids", lambda model, tokenizer=None: {7}, raising=False)
+    monkeypatch.setattr(masking, "greedy_ids", fake_ids)
+    monkeypatch.setattr(masking, "eos_ids", lambda model, tokenizer=None: {7})
 
     class Tok:
-        def decode(self, ids, skip_special_tokens=True):
-            return ""
+        eos_token_id = None
 
+    assert masking.greedy_generate(None, torch.zeros(1, 2, dtype=torch.long),
+                                   max_new_tokens=2, tokenizer=Tok()) == [1]
+    assert seen["eos"] == {7}, "the default did not derive EOS from the model"
+
+
+def test_eos_ids_accepts_numpy_and_torch_integers():
     from types import SimpleNamespace
 
-    sample = SimpleNamespace(input_ids=torch.zeros(1, 2, dtype=torch.long),
-                             needle_ids=[1], needle_text_ids=[1], needle_text="z",
-                             n_unique_needle_tokens=1, n_unique_needle_text_tokens=1)
-    masking.evaluate_samples(None, Tok(), attention_info(1, 1), [sample], max_new_tokens=2)
-    assert seen["eos"] == {7}, "the default did not derive EOS from the model"
+    import numpy as np
+
+    from retrieval_heads.utils import eos_ids
+
+    model = SimpleNamespace(
+        config=SimpleNamespace(eos_token_id=np.int64(11)),
+        generation_config=SimpleNamespace(eos_token_id=torch.tensor(12)),
+    )
+    assert eos_ids(model) == {11, 12}
 
 
 def test_require_matching_scores_checks_head_dim():
@@ -1072,6 +1095,87 @@ def test_grid_correlation_across_layouts_is_nan():
     b = RetrievalScores(info=attention_info(3, 1), score=torch.rand(3, 1),
                         activation_freq=torch.zeros(3, 1), n_instances=1)
     assert correlate(a, b, mode="grid") != correlate(a, b, mode="grid")   # NaN
+
+
+def test_discovery_requires_every_layer_to_be_classified():
+    """An unknown mixer class must fail loudly, not make the model look dense."""
+    from types import SimpleNamespace
+
+    from torch import nn
+
+    from retrieval_heads.models import build_model_info
+
+    class UnknownMixer(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.layer_idx = 1
+
+    class Model(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.layers = nn.ModuleList([UnknownMixer()])
+
+    config = SimpleNamespace(num_hidden_layers=2, num_attention_heads=2,
+                             num_key_value_heads=2, head_dim=4, hidden_size=8,
+                             max_position_embeddings=64)
+    with pytest.raises(RuntimeError, match="neither a scoreable attention"):
+        build_model_info(Model(), config, path="toy")
+
+
+def test_head_dim_disagreement_is_fatal():
+    from types import SimpleNamespace
+
+    from torch import nn
+
+    from retrieval_heads.models import build_model_info
+
+    class Attention(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.layer_idx = 0
+            self.head_dim = 4
+            self.config = SimpleNamespace(num_attention_heads=2, num_key_value_heads=1,
+                                          hidden_size=8, max_position_embeddings=64)
+            for name in ("q_proj", "k_proj", "v_proj"):
+                setattr(self, name, nn.Linear(8, 8, bias=False))
+            self.o_proj = nn.Linear(16, 8, bias=False)      # 16 != 2 * 4
+
+    class Model(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.layers = nn.ModuleList([Attention()])
+
+    config = SimpleNamespace(num_hidden_layers=1, num_attention_heads=2,
+                             num_key_value_heads=1, head_dim=4, hidden_size=8,
+                             max_position_embeddings=64)
+    with pytest.raises(RuntimeError, match="head geometry is inconsistent"):
+        build_model_info(Model(), config, path="toy")
+
+
+def test_correlation_figure_carries_the_sorted_caveat():
+    import matplotlib.pyplot as plt
+
+    from retrieval_heads.plotting import plot_corr_map
+    from retrieval_heads.properties import CorrelationMatrix
+
+    matrix = CorrelationMatrix(labels=["a", "b"], values=[[1.0, 0.9], [0.9, 1.0]],
+                               mode="sorted",
+                               caveat="sorted mode compares ranks, not heads")
+    fig = plot_corr_map(matrix)
+    try:
+        texts = [text.get_text() for text in fig.texts]
+        assert any("ranks" in text for text in texts), texts
+    finally:
+        plt.close(fig)
+
+
+def test_score_instance_always_records_both_pairings():
+    """The removed `compute_second_pairing` flag could strip a key summary() reads."""
+    import inspect
+
+    from retrieval_heads.scoring import score_instance
+
+    assert "compute_second_pairing" not in inspect.signature(score_instance).parameters
 
 
 def test_plot_task_cot_gets_a_figure_title():

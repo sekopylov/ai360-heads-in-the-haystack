@@ -215,14 +215,17 @@ def plot_layer_profile(scores_by_model: Mapping[str, RetrievalScores]) -> plt.Fi
 # --------------------------------------------------------------------------- Fig. 5 corr map
 def plot_corr_map(corr: CorrelationMatrix | Mapping[str, Any]) -> plt.Figure:
     """Pearson correlation between models' retrieval-score distributions."""
+    caveat = None
     if isinstance(corr, CorrelationMatrix):
         labels, values, mode = corr.labels, np.array(corr.values), corr.mode
+        caveat = getattr(corr, "caveat", None)
     else:
         # dtype=float: a JSON artifact writes non-finite entries as `null`, which
         # numpy otherwise reads as an object array and isfinite() then rejects.
         labels = corr["labels"]
         values = np.array(corr["values"], dtype=float)
         mode = corr.get("mode", "grid")
+        caveat = corr.get("caveat")
     if not labels:
         raise ValueError("plot_corr_map needs at least one label")
     if not np.any(np.isfinite(values)):
@@ -240,6 +243,8 @@ def plot_corr_map(corr: CorrelationMatrix | Mapping[str, Any]) -> plt.Figure:
                         color="white" if abs(value) > 0.55 else "black")
     ax.set_title(f"Retrieval-score correlation ({mode})", fontsize=9)
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03)
+    if caveat:
+        fig.text(0.01, 0.005, caveat, fontsize=6, color="grey", wrap=True)
     return finish(fig, "Retrieval-score correlation between models")
 
 
@@ -380,7 +385,7 @@ def plot_attention_distribution(
         ax.fill_between(np.arange(len(row)), row, color=PALETTE[0], alpha=0.75, lw=0)
         ax.axvspan(span[0], span[1] - 1, color=PALETTE[3], alpha=0.18,
                    label=f"needle [{span[0]}, {span[1]})")
-        ax.set_xlim(0, len(row) - 1)
+        ax.set_xlim(0, max(len(row) - 1, 1))
         ax.set_ylabel("attn")
         ax.set_title(label, fontsize=8, loc="left")
         ax.legend(loc="upper left", fontsize=7)

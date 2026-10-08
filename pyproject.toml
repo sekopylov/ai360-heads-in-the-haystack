@@ -40,5 +40,8 @@ markers = [
     "integration: loads real model checkpoints and is therefore slow",
 ]
 filterwarnings = [
-    "ignore::DeprecationWarning",
+    # Narrowed: a blanket DeprecationWarning ignore hides the earliest signal that a
+    # transformers internal this code reaches into is moving.
+    "error::DeprecationWarning:retrieval_heads.*",
+    "default::DeprecationWarning:transformers.*",
 ]

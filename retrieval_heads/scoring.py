@@ -292,10 +292,11 @@ def credits_from_trace(
     if pairing not in PAIRINGS:
         raise ValueError(f"pairing must be one of {PAIRINGS}, got {pairing!r}")
 
-    # Union of the prompt span ids and the needle-text ids: a boundary token can be
-    # fused with filler (`".\n"`), and the model emits the text version (`"."`).
-    # `getattr` keeps duck-typed samples (and older artifacts) working.
-    needle_set = set(sample.needle_ids) | set(getattr(sample, "needle_text_ids", None) or ())
+    # ONE definition of "a needle token": the tokenization of the needle text (the
+    # paper's k).  An earlier version unioned this with the prompt-span ids, which
+    # (a) credited the fused boundary token `".\n"` that is not a needle token and
+    # (b) could never credit `"."`; `max_attainable_score` now records the ceiling.
+    needle_set = set(getattr(sample, "needle_text_ids", None) or sample.needle_ids)
     start, end = sample.needle_span
     prompt_ids = sample.input_ids[0]
 
@@ -347,7 +348,10 @@ def credits_aligned(
     generated sequence together, so a common token such as ``"."`` cannot earn
     credit out of order.  Useful as a robustness check on short needles.
     """
-    needle_ids = sample.needle_ids
+    # The same "needle token" set as `credits_from_trace`: walking the prompt-span
+    # ids instead made this variant systematically lower for a reason that had
+    # nothing to do with in-order strictness (the span's last token could be fused).
+    needle_ids = list(getattr(sample, "needle_text_ids", None) or sample.needle_ids)
     # Steps this pairing actually scores (the prefill row that produces the first
     # generated token belongs to next_step only), so stream positions line up
     # with the step list used below.
@@ -363,15 +367,14 @@ def credits_aligned(
             alignment[pos] = cursor
             cursor += 1
 
-    needle_set = set(needle_ids)
     start, end = sample.needle_span
     prompt_ids = sample.input_ids[0]
     credits: dict[HeadRef, set[int]] = {h: set() for h in info.scoreable_heads}
     for pos, needle_index in alignment.items():
         step = steps[pos]
         token = stream[pos]
-        if token not in needle_set:
-            continue
+        # `token == needle_ids[needle_index]` by construction of the walk, so there
+        # is nothing to filter here (the old `if token not in needle_set` was dead).
         for layer, argmax in step.positions().items():
             if layer not in info.num_heads:
                 continue
@@ -452,7 +455,6 @@ def score_instance(
     prefill_impl: str = "sdpa",
     capture_impl: str = "eager",
     capture_method: str = "patch",
-    compute_second_pairing: bool = True,
     prefill_chunk: int | None = None,
 ) -> InstanceResult:
     """Run one NIAH instance and return its per-head retrieval scores."""
@@ -464,8 +466,9 @@ def score_instance(
     )
 
     pairings = [pairing]
-    if compute_second_pairing:
-        pairings += [p for p in PAIRINGS if p != pairing]
+    # Both pairings always come from the same pass: an option to skip the second one
+    # left `scores`/`aligned_scores` without a key that summary()/save() read.
+    pairings += [p for p in PAIRINGS if p != pairing]
 
     # Denominator over the needle *text*: unique tokens of the prompt span would
     # count the fused boundary token and cap the achievable score below 1.

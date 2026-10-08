@@ -108,21 +108,33 @@ def default_out_dir(model_arg: str, out: str | None) -> Path:
     return REPO_ROOT / "results" / (Path(model_arg).name if path_like else model_arg)
 
 
+#: Rough token overhead of the needle, question and chat template on top of the
+#: filler (``build_needle_sample`` measures it exactly; this is the pre-flight guard).
+PROMPT_OVERHEAD_TOKENS = 64
+
+
 def within_context_limit(lengths, info) -> tuple[list[int], list[int]]:
     """Split lengths into ``(kept, dropped)`` by the model's context window.
 
-    Positions past the trained range are extrapolation, not a measurement, and
-    the paper profile asks for 49152 from Qwen3-0.6B, which was trained to 40960.
-    The dropped list is returned so the artifact can show the requested grid.
+    ``target_tokens`` is the realized prompt, but the check happens before the
+    prompt exists, so a margin is subtracted: without it a requested length equal to
+    ``max_position_embeddings`` passed the filter and the realized context (filler +
+    needle + question + template) landed past the trained window.
+
+    Positions past the trained range are extrapolation, not a measurement, and the
+    paper profile asks for 49152 from Qwen3-0.6B, which was trained to 40960.  The
+    dropped list is returned so the artifact can show the requested grid.
     """
     limit = getattr(info, "max_position_embeddings", None)
     if not limit:
         return list(lengths), []
-    kept = [length for length in lengths if length <= limit]
-    dropped = [length for length in lengths if length > limit]
+    budget = limit - PROMPT_OVERHEAD_TOKENS
+    kept = [length for length in lengths if length <= budget]
+    dropped = [length for length in lengths if length > budget]
     if dropped:
-        log.warning("%s: dropping lengths %s above max_position_embeddings=%d",
-                    info.name, dropped, limit)
+        log.warning("%s: dropping lengths %s above max_position_embeddings=%d minus the "
+                    "%d-token prompt overhead (budget %d)",
+                    info.name, dropped, limit, PROMPT_OVERHEAD_TOKENS, budget)
     return kept, dropped
 
 
@@ -266,6 +278,9 @@ def cmd_detect(args: argparse.Namespace) -> int:
         "needles", len(DETECTION_NEEDLES))
     max_new_tokens = args.max_new_tokens if args.max_new_tokens is not None else profile.get(
         "max_new_tokens", 32)
+    if int(needles) > len(DETECTION_NEEDLES):
+        log.warning("--needles %s clamped to the %d shipped detection needles",
+                    needles, len(DETECTION_NEEDLES))
     if not lengths or int(depths) < 1 or int(needles) < 1:
         raise SystemExit(
             f"empty detection grid: lengths={list(lengths)}, depths={depths}, "
@@ -361,8 +376,9 @@ def cmd_mask(args: argparse.Namespace) -> int:
     if info.linear_layers:
         mixer_k = tuple(k for k in k_values if k <= 4) or (1, 2)
         if mixer_k != tuple(k_values):
-            log.info("token-mixer ablation uses K=%s (the masking K set is reduced to K<=4 "
-                     "because it re-runs the prefill per layer)", list(mixer_k))
+            log.warning("token-mixer ablation runs at K=%s, not the requested K=%s: the "
+                        "ablation re-runs the prefill per layer, so it is capped at K<=4",
+                        list(mixer_k), list(k_values))
         ablation = token_mixer_ablation(model, tokenizer, info, samples,
                                         k_values=mixer_k,
                                         max_new_tokens=args.max_new_tokens,
@@ -440,6 +456,8 @@ def cmd_compare(args: argparse.Namespace) -> int:
     caveat = ("mode='sorted' correlates sorted score vectors, not head positions; a high "
               "value does not mean the models use the same heads") if mode == "sorted" else None
     corr = correlation_matrix([runs[n] for n in names], mode=mode, labels=names)
+    if caveat:
+        corr.caveat = caveat
     corr_payload = corr.as_dict()
     if caveat:
         corr_payload["caveat"] = caveat
@@ -492,6 +510,9 @@ def cmd_figures(args: argparse.Namespace) -> int:
         safe("layer_profile.pdf", lambda: plot_layer_profile(runs))
         mode = "grid" if _same_layout(runs) else "sorted"
         corr = correlation_matrix(list(runs.values()), mode=mode, labels=list(runs))
+        if mode == "sorted":
+            corr.caveat = ("sorted mode correlates ranked score vectors; a high value "
+                           "does not mean the models use the same heads")
         safe("corr_map.pdf", lambda: plot_corr_map(corr))
     if curves:
         safe("masking_heads.pdf", lambda: plot_masking_curve(curves))

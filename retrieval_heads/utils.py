@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import numbers
 import os
 import random
 import tempfile
@@ -87,15 +88,25 @@ def eos_ids(model: Any, tokenizer: Any = None) -> set[int]:
     ``generation_config.eos_token_id``, so on a model that defines EOS only there
     the NIAH ablations never stopped and kept generating past the answer.
     """
-    ids: set[int] = set()
-    for source in (getattr(model, "config", None), getattr(model, "generation_config", None)):
-        value = getattr(source, "eos_token_id", None) if source is not None else None
-        if isinstance(value, int):
+    def _add(value: Any) -> None:
+        # `numbers.Integral` covers np.int64; torch scalar tensors implement __index__.
+        if isinstance(value, numbers.Integral):
             ids.add(int(value))
         elif isinstance(value, (list, tuple, set)):
-            ids.update(int(v) for v in value)
-    if tokenizer is not None and getattr(tokenizer, "eos_token_id", None) is not None:
-        ids.add(int(tokenizer.eos_token_id))
+            for item in value:
+                _add(item)
+        elif value is not None:
+            try:
+                ids.add(int(value))
+            except (TypeError, ValueError):
+                pass
+
+    ids: set[int] = set()
+    for source in (getattr(model, "config", None), getattr(model, "generation_config", None)):
+        if source is not None:
+            _add(getattr(source, "eos_token_id", None))
+    if tokenizer is not None:
+        _add(getattr(tokenizer, "eos_token_id", None))
     return ids
 
 

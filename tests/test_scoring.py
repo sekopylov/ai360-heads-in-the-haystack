@@ -33,8 +33,14 @@ def make_info(num_layers: int = 2, heads: int = 2) -> ModelInfo:
         head_dim=4,
         hidden_size=8,
         max_position_embeddings=128,
-        attention_modules={i: None for i in range(num_layers)},  # type: ignore[dict-item]
+        # Was `{i: None}`, which would crash confusingly in HeadMasker; these tests
+        # never mask, but a future one would trip over it.
+        attention_modules={i: _ToyAttention() for i in range(num_layers)},
     )
+
+
+class _ToyAttention:
+    """Placeholder module object: only identity matters to these tests."""
 
 
 class FakeSample:

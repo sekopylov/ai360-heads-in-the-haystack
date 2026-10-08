@@ -135,7 +135,8 @@ class DetectionConfig:
         """Deterministic list of instances; each entry is one NIAH test.
 
         Cached: `as_dict()` (called from every `summary()`) used to rebuild the grid
-        and re-log the `--limit` warning each time.
+        and re-log the `--limit` warning each time.  The cache means the config must
+        be treated as immutable after the first plan()/as_dict() call.
 
         Depths are the endpoints-inclusive ``iter_depths``, so 0.0 and 1.0 (needle
         first/last) are in the grid; the paper samples 10 interior depths, so the
@@ -284,7 +285,8 @@ class DetectionRun:
             # per-token reading of the paper's formula.
             "needle_stats": {
                 key: scores.meta[key] for key in
-                ("needle_tokens_mean", "unique_needle_tokens_mean", "denominator_inflation")
+                ("needle_tokens_mean", "unique_needle_tokens_mean", "denominator_inflation",
+                 "max_attainable_score_mean")
                 if key in scores.meta
             },
             "sparsity": scores.sparsity(),
@@ -427,6 +429,8 @@ def run_detection(
         # the score relative to a per-token reading.
         "needle_tokens_mean": float(np.mean(needle_tokens)) if needle_tokens else 0.0,
         "unique_needle_tokens_mean": float(np.mean(unique_tokens)) if unique_tokens else 0.0,
+        "max_attainable_score_mean": float(np.mean(
+            [r.sample.get("max_attainable_score", 1.0) for r in results])) if results else 1.0,
         "denominator_inflation": (
             float(np.mean(needle_tokens)) / float(np.mean(unique_tokens))
             if unique_tokens and float(np.mean(unique_tokens)) else 1.0

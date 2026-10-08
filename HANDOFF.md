@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 189 tests: 172 fast (`pytest -m "not integration"`, ~14 s), 17 integration against
+* 194 tests: 177 fast (`pytest -m "not integration"`, ~10 s), 17 integration against
   the real checkpoints. All green.
 * A full GPU run finished successfully (job `bt1hqv1b91ht36s2egdp`, ~39 min,
   NVIDIA L4): 75 instances per model, masking curves, QA, CoT, correlation, nine
@@ -25,6 +25,16 @@ tied to a job id) → this file (where things stand and what is left).
   and cancelled on purpose, and it waits on a review of the current working tree.
 * DataSphere path works: cached venv on the project disk, ~40 s job startup
   instead of ~9 min. Job `bt107kjm3es8vung7130` proves all seven stages run on GPU.
+* **One definition of "a needle token".**  The needle is now inserted with a space
+  after it (`"{needle} \n"`), so the tokenizer no longer fuses its last character
+  with the newline; the prompt span therefore ends on the needle's own token and
+  `span_ids == needle_text_ids`.  Scoring, the denominator, F1's gold and
+  `credits_aligned` all use `set(needle_text_ids)`; the earlier *union* of span and
+  text ids (an undocumented deviation from the paper) is gone, and each sample
+  records `max_attainable_score` (1.0 for every shipped needle/depth).
+* `masking.greedy_generate(eos=None)` referenced an undefined `tokenizer` and raised
+  `NameError`; the test that "covered" it monkeypatched the function itself.  Fixed,
+  with a test that goes through the real default path.
 * **The needle's gold tokens now come from the needle text, not the prompt span.**
   The span's last token can be the fused `".\n"` while the model emits `"."`, which
   capped NIAH-F1 at 21/22 = 0.955 (exactly the old baseline) and made the emitted
@@ -243,6 +253,9 @@ would move the numbers and want a run to justify them:
   confounded with "how much of this stack matters". Averaging over random subsets
   would be the honest version.
 
+**Committed** as `d283b63` (whole tree, including the previously untracked CI
+workflow, `generation.py`, `provenance.py` and the test files).  Not pushed.
+
 **Process blocker: much of the code is untracked.**  `git ls-files` does not know
 `.github/workflows/tests.yml`, `retrieval_heads/generation.py`,
 `retrieval_heads/provenance.py`, `tests/test_regressions.py`,
@@ -318,7 +331,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 189 passed (172 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 194 passed (177 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

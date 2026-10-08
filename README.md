@@ -215,7 +215,9 @@ Filler text is generated from a seeded word list (offline, deterministic);
 * **Prefill cheap, decode precise.** Attention maps are only needed at decoding
   steps, where `q_len = 1`. The prefill therefore runs on `sdpa` and only the
   decode steps on `eager`. A captured row costs `(heads, kv_len)` instead of
-  `(heads, seq, seq)`, so memory stays flat in context length — the difference
+  `(heads, seq, seq)`, so *capture* memory stays flat in context length (the
+  masking/ablation stage does not: each masked layer clones its `o_proj` input, so
+  its peak grows with context length times the number of masked layers) — the difference
   between running at 4K and at 50K on one machine.
 * **Masking a head = zeroing its `o_proj` input slice.** A head's attention
   output only ever touches `[h·d : (h+1)·d]` of what enters `o_proj`, so zeroing

@@ -423,7 +423,7 @@ def prepare_models(args: argparse.Namespace) -> None:
     if root.is_symlink() and not root.exists():
         # `exists()` follows the link, so a dangling one looked "already present"
         # and verify_weights then failed instead of the link being recreated.
-        print(f"[entry] removing a dangling {root} symlink")
+        print(f"[entry] removing a dangling {root} symlink -> {os.readlink(root)!r}")
         root.unlink()
     if root.is_symlink() or root.exists():
         print(f"[entry] {root} already present, leaving it alone")

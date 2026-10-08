@@ -171,7 +171,7 @@ def test_needle_gold_tokens_come_from_the_needle_text(tokenizer):
     assert token_f1(text_ids, sample.needle_text_ids) == 1.0
     # The span boundary may straddle the needle; it is recorded rather than silent.
     assert "span_straddles_boundary" in sample.meta
-    if sample.meta["span_straddles_boundary"]:
-        assert sample.needle_ids[-1] != text_ids[-1]
-        # ... and the union used for scoring contains both versions.
-        assert text_ids[-1] in set(sample.needle_ids) | set(sample.needle_text_ids)
+    # The insertion keeps a space after the needle, so the span ends on the needle's
+    # own token and the scorer's ceiling is 1.0 (it used to be capped at 21/22).
+    assert sample.meta["max_attainable_score"] == 1.0
+    assert not sample.meta["span_straddles_boundary"]

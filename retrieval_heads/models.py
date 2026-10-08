@@ -87,6 +87,12 @@ def _is_vision_module(qualified_name: str) -> bool:
 def _head_dim(module: nn.Module) -> int:
     if hasattr(module, "head_dim"):
         return int(module.head_dim)
+    # `o_proj` is not gated: it maps heads*head_dim -> hidden, so it is the reliable
+    # fallback.  `q_proj.out_features` is twice the width for gated attention.
+    heads = getattr(module, "num_heads", None)
+    o_width = getattr(getattr(module, "o_proj", None), "in_features", None)
+    if heads and o_width:
+        return int(o_width // heads)
     return int(module.q_proj.out_features // module.num_heads)
 
 
@@ -302,6 +308,14 @@ def require_scoreable(info: ModelInfo) -> ModelInfo:
     return info
 
 
+def _heads_per_layer(info: ModelInfo) -> str:
+    """`8` when uniform, else the explicit layer->heads mapping."""
+    values = set(info.num_heads.values())
+    if len(values) == 1:
+        return str(values.pop())
+    return str(dict(sorted(info.num_heads.items())))
+
+
 def describe_model(info: ModelInfo) -> str:
     """Human-readable summary, printed by every entry-point script."""
     lines = [
@@ -311,7 +325,7 @@ def describe_model(info: ModelInfo) -> str:
         f"linear layers    : {len(info.linear_layers)}"
         + (f" {info.linear_layers}" if info.linear_layers else ""),
         f"hybrid           : {info.is_hybrid}",
-        f"heads/layer      : {sorted(set(info.num_heads.values()))}"
+        f"heads/layer      : {_heads_per_layer(info)}"
         f"  (kv: {sorted(set(info.num_kv_heads.values()))})",
         f"head_dim         : {info.head_dim}",
         f"scoreable heads  : {info.n_scoreable_heads}",
@@ -463,6 +477,20 @@ def build_model_info(model: nn.Module, config: Any, *, path: str, name: str | No
     tcfg = text_config(config)
     attention, linear, names = discover_modules(model)
 
+    # Coverage invariant: every transformer layer must be recognised as either a
+    # scoreable attention block or a token mixer.  A renamed/unknown mixer class
+    # otherwise disappears silently -- the model would look dense, `linear_layers`
+    # would be empty and `n_all_heads` would quietly change the published numbers.
+    num_layers = int(getattr(tcfg, "num_hidden_layers", 0) or 0)
+    if num_layers:
+        missing = sorted(set(range(num_layers)) - (set(attention) | set(linear)))
+        if missing:
+            raise RuntimeError(
+                f"layers {missing} have neither a scoreable attention module nor a "
+                f"recognised token mixer (unknown class name?); refusing to describe "
+                f"the model as if those layers did not exist"
+            )
+
     num_heads = {
         layer: int(getattr(module, "config", tcfg).num_attention_heads)
         for layer, module in attention.items()
@@ -485,14 +513,19 @@ def build_model_info(model: nn.Module, config: Any, *, path: str, name: str | No
 
     for layer, module in attention.items():
         heads, dim = num_heads.get(layer), _head_dim(module)
+        o_width = getattr(getattr(module, "o_proj", None), "in_features", None)
+        if heads and o_width and o_width != heads * dim:
+            # Not a "looks gated" note: with head_dim from the module and o_proj the
+            # un-gated projection, a disagreement means the geometry is wrong and
+            # every masked slice would land on the wrong positions.
+            raise RuntimeError(
+                f"layer {layer}: o_proj takes {o_width} features but num_heads {heads} "
+                f"x head_dim {dim} = {heads * dim}; the head geometry is inconsistent"
+            )
         q_width = getattr(getattr(module, "q_proj", None), "out_features", None)
         if q_width is not None and heads and dim and q_width != heads * dim:
-            log.warning(
-                "layer %d: q_proj outputs %d but num_heads*head_dim = %d; the block "
-                "looks gated (q_proj emits gate+query). head_dim comes from the module "
-                "attribute, but architectures without one would be mis-sized.",
-                layer, q_width, heads * dim,
-            )
+            log.debug("layer %d: q_proj outputs %d = 2 x %d; the block is gated",
+                      layer, q_width, heads * dim)
 
     num_linear_heads = {
         layer: int(

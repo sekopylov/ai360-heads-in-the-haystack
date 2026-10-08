@@ -71,6 +71,7 @@ def greedy_generate(
     eos: Iterable[int] | None = None,
     attn_impl: str = "sdpa",
     prefill_chunk: int | None = None,
+    tokenizer: Any = None,
 ) -> list[int]:
     """Plain greedy decoding (no attention capture) -- used for the ablations.
 

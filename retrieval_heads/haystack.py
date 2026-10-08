@@ -214,14 +214,17 @@ def render_chat(tokenizer: Any, messages: list[dict[str, str]], *,
         kwargs["enable_thinking"] = enable_thinking
     try:
         return tokenizer.apply_chat_template(messages, **kwargs)
-    except Exception:
+    except Exception as exc:
         # The template may reject `enable_thinking` with something other than a
         # TypeError (a jinja UndefinedError, for instance).  Retry without it, but if
         # that also fails let the original error surface.
         if "enable_thinking" not in kwargs:
             raise
         kwargs.pop("enable_thinking")
-        return tokenizer.apply_chat_template(messages, **kwargs)
+        try:
+            return tokenizer.apply_chat_template(messages, **kwargs)
+        except Exception as second:
+            raise second from exc
 
 
 def format_prompt(
@@ -232,10 +235,9 @@ def format_prompt(
     chat_template: bool = True,
     system_prompt: str | None = None,
     enable_thinking: bool | None = False,
-    instruction: str | None = None,
 ) -> str:
     """Wrap ``context`` + ``question`` in a plain or chat-template prompt."""
-    tail = f"\n\nQuestion: {question}\nAnswer:" if instruction is None else f"\n\n{instruction}\n\nQuestion: {question}\nAnswer:"
+    tail = f"\n\nQuestion: {question}\nAnswer:"
     if not chat_template:
         return context + tail
     messages: list[dict[str, str]] = []
@@ -256,7 +258,6 @@ def build_needle_sample(
     chat_template: bool = True,
     system_prompt: str | None = None,
     enable_thinking: bool | None = False,
-    instruction: str | None = None,
     seed: int = 0,
 ) -> NeedleSample:
     """Build one instance with the needle placed at relative ``depth``.
@@ -287,11 +288,19 @@ def build_needle_sample(
         # snap to the nearest whitespace so we never split a word
         while cut < len(filler) and not filler[cut].isspace():
             cut += 1
-        context = f"{filler[:cut]}\n{needle}\n{filler[cut:]}".strip()
+        # A space after the needle, before the newline: without it the tokenizer
+        # fuses the needle's last character with the newline (`.` + `\n` -> `".\n"`),
+        # so the span's last token is not a needle token and the score's ceiling
+        # drops below 1 (`.\n` in k, `.` unreachable).
+        context = f"{filler[:cut]}\n{needle} \n{filler[cut:]}".strip()
+        if context.endswith(needle):
+            # depth 1.0: the needle abuts the question block, whose "\n\n" would fuse
+            # with the needle's last character (`.\n\n`).  Keep the separating space.
+            context += " "
 
         prompt = format_prompt(
             tokenizer, context, question, chat_template=chat_template,
-            system_prompt=system_prompt, enable_thinking=enable_thinking, instruction=instruction,
+            system_prompt=system_prompt, enable_thinking=enable_thinking,
         )
 
         char_start = prompt.find(needle)
@@ -329,6 +338,16 @@ def build_needle_sample(
     # it instead of silently treating it as pure needle.
     straddles = offsets[lo][0] < char_start or offsets[hi - 1][1] > char_end
     needle_text_ids = tokenizer(needle, add_special_tokens=False).input_ids
+    # How much of the needle the prompt can actually expose to the scorer: the
+    # intersection of the text tokens and the span tokens, over the unique text
+    # tokens.  With the space-after-needle insertion this is 1.0; it is recorded so a
+    # future needle that fuses again cannot silently lower every score.
+    span_ids = ids[lo:hi]
+    max_attainable = len(set(needle_text_ids) & set(span_ids)) / max(len(set(needle_text_ids)), 1)
+    if max_attainable < 0.98:
+        log.warning("needle span exposes only %.0f%% of the needle's unique tokens "
+                    "(span %s, text %s); every retrieval score is capped there",
+                    100 * max_attainable, span_ids[-3:], needle_text_ids[-3:])
     input_ids = torch.tensor([ids], dtype=torch.long)
 
     sample = NeedleSample(
@@ -342,7 +361,8 @@ def build_needle_sample(
         haystack_tokens=len(ids),
         seed=seed,
         meta={"span_tight": tight, "span_straddles_boundary": straddles,
-              "needle_text_ids": list(needle_text_ids)},
+              "needle_text_ids": list(needle_text_ids),
+              "max_attainable_score": max_attainable},
     )
     log.debug("built sample: %d tokens, needle %s (%d tok) at depth %.2f",
               len(ids), span, span[1] - span[0], depth)

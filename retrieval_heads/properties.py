@@ -181,6 +181,9 @@ def correlate(
 class CorrelationMatrix:
     labels: list[str]
     values: list[list[float]]
+    #: Interpretation note (e.g. that `sorted` mode does not compare head
+    #: positions); carried to the figure so a PDF reader sees it too.
+    caveat: str | None = None
     mode: str = "grid"
 
     def as_dict(self) -> dict[str, Any]:

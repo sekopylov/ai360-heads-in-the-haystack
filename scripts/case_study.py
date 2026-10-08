@@ -44,7 +44,8 @@ def find_copy_step(trace, sample, head: HeadRef, pairing: str):
     prefill row belongs to ``next_step`` only, so using it for ``same_step`` would
     draw a panel the scorer does not credit.
     """
-    needle_set = set(sample.needle_ids)
+    # Same set the scorer credits: the needle *text* tokenization.
+    needle_set = set(sample.needle_text_ids)
     start, end = sample.needle_span
     prompt = sample.input_ids[0]
     for step in trace.steps:
