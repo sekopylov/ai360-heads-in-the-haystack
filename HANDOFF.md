@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 212 tests: 195 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
+* 215 tests: 198 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
   the real checkpoints. All green.
 * **The committed artifacts now match the code.** The GPU run was refreshed in two
   jobs on an NVIDIA L4, 75 instances per model:
@@ -26,6 +26,13 @@ tied to a job id) → this file (where things stand and what is left).
   CPU tree is **not** refreshed and stays historical.
 * DataSphere path works: cached venv on the project disk, ~40 s job startup
   instead of ~9 min. Job `bt107kjm3es8vung7130` proves all seven stages run on GPU.
+* **Each model is now loaded once per run.** The driver executes a model's stages
+  back to back in one process (`stage_plan`, model-major) and `cli._load` keeps
+  exactly one resident model, evicting the previous one; a full run used to load
+  each checkpoint once per stage (ten loads, ~50 s each on the L4, i.e. ~8 of the
+  30 minutes).  `run_state.json` in the output prefix records every stage
+  (`running` before, `ok`/`failed` after), and the service still collects the
+  outputs of a failed job -- that is what makes the resume path possible.
 * **The ablations now reuse every condition `detect` recorded**, not just the
   system prompt: `resolve_detection_settings` takes `chat_template`,
   `enable_thinking`, `argmax_domain`, `threshold` and the corpus *path* from
@@ -418,7 +425,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 212 passed (195 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 215 passed (198 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

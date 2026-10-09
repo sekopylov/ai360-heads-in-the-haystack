@@ -496,7 +496,10 @@ meaningful within a family.
   actually solve -- chosen for headroom, not to be a benchmark.
 * **Timings.** Qwen3.5's Gated DeltaNet layers fall back to pure-PyTorch kernels
   without `flash-linear-attention` / `causal-conv1d`, which dominates runtime on
-  CPU. That affects speed only, not correctness.
+  CPU. That affects speed only, not correctness.  On a job the driver runs a
+  model's stages back to back in one process (`stage_plan`), so each checkpoint is
+  loaded once rather than once per stage -- ~50 s saved per skipped load, and the
+  resident-memory cost stays at one model.
 * **The committed `ds-results/` matches the code; `results/` does not.**  The GPU
   tree was regenerated on the current pipeline (schema 5, held-out eval needle,
   prompt-only argmax, corrected filler sizing) and `docs/results-gpu.md` is

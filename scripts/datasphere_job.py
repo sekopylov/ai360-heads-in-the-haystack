@@ -26,6 +26,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 #: Per-stage flags for each scale, kept in step with the two reproduce scripts.
 #:
@@ -73,6 +74,10 @@ SCALES: dict[str, dict[str, list[str]]] = {
 }
 
 STAGES = ("describe", "detect", "mask", "qa", "cot", "compare", "figures")
+#: Stages that need a loaded model (and therefore benefit from the one-model cache).
+MODEL_STAGES = ("describe", "detect", "mask", "qa", "cot")
+#: Stages that read every model's artifacts and need no model at all.
+MODEL_FREE_STAGES = ("compare", "figures")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -468,11 +473,75 @@ def override_dtype(models: list[str], dtype: str) -> None:
           f"(runtime registry {runtime})")
 
 
-def run(stage: str, argv: list[str]) -> None:
-    # sys.executable is the cached venv's python when --use-venv re-exec'd us.
-    cmd = [sys.executable, "-m", "retrieval_heads.cli", *argv]
-    print(f"\n[entry] === {stage}: {' '.join(cmd)}", flush=True)
-    subprocess.run(cmd, check=True)
+def run_cli(stage: str, argv: list[str]) -> None:
+    """Execute one stage **in this process**.
+
+    Not a subprocess, because ``retrieval_heads.cli._load`` keeps one model resident
+    and the driver runs a model's stages back to back: a full run used to pay the
+    ~50 s weight load once per stage per model (ten times), now twice.  The
+    CLI/driver contract is still the argv list from :func:`stage_argv`, so the
+    existing contract tests keep their meaning.
+
+    A failing stage raises, which aborts the job exactly as ``check=True`` did --
+    and the service still collects everything already written under ``outputs``,
+    which is how the detect/mask artifacts of a failed run were salvaged.
+    """
+    from retrieval_heads import cli
+
+    print(f"\n[entry] === {stage}: {' '.join(argv)}", flush=True)
+    try:
+        rc = cli.main(argv)
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 1
+        print(f"[entry] stage {stage} exited with {exc!r}", flush=True)
+        raise SystemExit(code) from exc
+    if rc:
+        raise SystemExit(f"[entry] stage {stage} returned {rc}")
+
+
+def record_stage_state(prefix: Path, stage: str, model: str | None, status: str,
+                       error: str | None = None) -> None:
+    """Append one line of provenance to ``<prefix>/run_state.json``.
+
+    Written *before* a stage starts (``running``) and again when it ends, so a job
+    that dies half-way still tells whoever picks up the pieces which stages
+    finished.  The outputs of a failed job are collected by the service, which is
+    what makes a resume possible at all (see ``configs/datasphere/t4-resume.yaml``).
+    """
+    path = prefix / "run_state.json"
+    state: dict[str, Any] = {"stages": []}
+    if path.exists():
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            state = {"stages": []}
+    entry: dict[str, Any] = {
+        "stage": stage, "model": model, "status": status,
+        "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+    if error:
+        entry["error"] = error[:300]
+    state.setdefault("stages", []).append(entry)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
+
+def stage_plan(stages: list[str], models: list[str]) -> list[tuple[str, str | None]]:
+    """Order ``(stage, model)`` pairs so that each model is loaded once.
+
+    Model-needing stages are grouped per model (model-major): everything for model A
+    runs while A is resident, then the next load evicts it.  The model-free stages
+    (``compare``, ``figures``) read every model's artifacts, so they come last.
+    """
+    plan: list[tuple[str, str | None]] = []
+    for model in models:
+        for stage in stages:
+            if stage in MODEL_STAGES:
+                plan.append((stage, model))
+    for stage in stages:
+        if stage in MODEL_FREE_STAGES:
+            plan.append((stage, None))
+    return plan
 
 
 def stage_argv(
@@ -525,6 +594,12 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"[entry] unknown stages {unknown}; known: {list(STAGES)}")
 
     print(f"[entry] cwd={os.getcwd()} python={sys.version.split()[0]}")
+    # Stages now run in this process, so keep progress visible: a pipe would
+    # otherwise block-buffer it until the stage ends.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except (AttributeError, ValueError):  # pragma: no cover - non-reconfigurable stream
+        pass
     if args.inspect_dir:
         report_environment()
         for path in args.inspect_dir:
@@ -551,10 +626,17 @@ def main(argv: list[str] | None = None) -> int:
         override_dtype(args.models, args.dtype)
 
     prefix = Path(args.out_prefix)
-    for stage in stages:
-        for cli_argv in stage_argv(stage, profile=args.profile, models=args.models,
+    for stage, model in stage_plan(stages, args.models):
+        targets = [model] if model else args.models
+        for cli_argv in stage_argv(stage, profile=args.profile, models=targets,
                                    prefix=prefix, seed=args.seed):
-            run(stage, cli_argv)
+            record_stage_state(prefix, stage, model, "running")
+            try:
+                run_cli(stage, cli_argv)
+            except BaseException as exc:  # noqa: BLE001 - record, then abort
+                record_stage_state(prefix, stage, model, "failed", str(exc))
+                raise
+            record_stage_state(prefix, stage, model, "ok")
 
     print("\n[entry] artifacts under", prefix.absolute())
     for path in sorted(prefix.rglob("*")):

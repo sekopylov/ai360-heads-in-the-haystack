@@ -319,21 +319,42 @@ def resolve_k(args: argparse.Namespace, info, *, default_fracs: Sequence[float] 
     return sorted(values)
 
 
+#: One resident model, reused across the stages of the same model in one process.
+#: `datasphere_job.py` runs a model's stages back to back for exactly this reason:
+#: loading Qwen3.5-0.8B takes ~50 s on the job GPU, and a full run used to pay that
+#: once per stage per model.  Size 1 on purpose -- two models at once would double
+#: the resident memory for no benefit, since the stages are model-major.
+_LOADED: dict[tuple, tuple] = {}
+
+
 def _load(name: str, *, attn_implementation: str = "eager", dtype: str | None = None):
     import torch
 
     from retrieval_heads.models import describe_model, load_model
 
     path, settings = resolve_model(name)
+    resolved_dtype = dtype or settings.get("dtype", "float32")
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    key = (path, str(resolved_dtype), attn_implementation, device)
+    cached = _LOADED.get(key)
+    if cached is not None:
+        log.info("reusing the already-loaded %s (no second weight load)", name)
+        return cached
+
     model, tokenizer, info = load_model(
-        path, dtype=dtype or settings.get("dtype", "float32"),
+        path, dtype=resolved_dtype,
         attn_implementation=attn_implementation, device=device,
     )
     if device == "cuda":  # pragma: no cover - GPU path
         log.info("loaded model on CUDA")
     print(describe_model(info))
     print()
+    if _LOADED:
+        # Evict the previous model: keep exactly one resident.
+        _LOADED.clear()
+        if device == "cuda":  # pragma: no cover - GPU path
+            torch.cuda.empty_cache()
+    _LOADED[key] = (model, tokenizer, info)
     return model, tokenizer, info
 
 

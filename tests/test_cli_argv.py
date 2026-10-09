@@ -149,6 +149,76 @@ def test_driver_has_exactly_one_main_and_it_runs_the_stages():
     assert not duplicates, f"duplicate top-level function names: {duplicates}"
 
 
+def test_stage_plan_is_model_major_so_each_model_loads_once():
+    """Order the stages so the one-model cache can actually be reused.
+
+    A full run used to load each checkpoint once per stage (ten loads, ~50 s each
+    on the job GPU); grouping a model's stages keeps it to two.
+    """
+    driver = load_job_driver()
+    models = ["qwen3.5-0.8b", "qwen3-0.6b"]
+    plan = driver.stage_plan(["describe", "detect", "mask", "qa", "cot",
+                              "compare", "figures"], models)
+
+    assert set(driver.MODEL_STAGES) | set(driver.MODEL_FREE_STAGES) == set(driver.STAGES)
+    assert not set(driver.MODEL_STAGES) & set(driver.MODEL_FREE_STAGES)
+
+    # Every model stage of the first model comes before any stage of the second.
+    first_second_model = min(i for i, (_, model) in enumerate(plan)
+                             if model == models[1])
+    assert all(model != models[1] for _, model in plan[:first_second_model])
+    assert {model for _, model in plan[:first_second_model]} == {models[0]}
+
+    # Model-free stages need every model's artifacts, so they run last.
+    assert [stage for stage, model in plan if model is None] == ["compare", "figures"]
+    assert all(model is not None for stage, model in plan
+               if stage in driver.MODEL_STAGES)
+
+
+def test_run_state_records_every_stage(tmp_path):
+    """A job that dies half-way must still say how far it got."""
+    import json
+
+    driver = load_job_driver()
+    driver.record_stage_state(tmp_path, "detect", "qwen3-0.6b", "running")
+    driver.record_stage_state(tmp_path, "detect", "qwen3-0.6b", "ok")
+    driver.record_stage_state(tmp_path, "mask", "qwen3-0.6b", "failed", "boom")
+
+    state = json.loads((tmp_path / "run_state.json").read_text(encoding="utf-8"))
+    assert [(e["stage"], e["status"]) for e in state["stages"]] == [
+        ("detect", "running"), ("detect", "ok"), ("mask", "failed")]
+    assert state["stages"][-1]["error"] == "boom"
+
+
+def test_load_keeps_exactly_one_model_resident(monkeypatch):
+    """`_load` reuses the resident model and evicts the previous one."""
+    import retrieval_heads.cli as cli
+    import retrieval_heads.models as models
+
+    from tests.test_regressions import attention_info
+
+    calls: list[str] = []
+
+    def fake_load(path, *, dtype, attn_implementation, device):
+        calls.append(path)
+        return object(), object(), attention_info(1, 2)
+
+    monkeypatch.setattr(models, "load_model", fake_load)
+    monkeypatch.setattr(models, "describe_model", lambda info: "census")
+    monkeypatch.setattr(cli, "resolve_model",
+                        lambda name: (f"/models/{name}", {"dtype": "float32"}))
+    monkeypatch.setattr(cli, "_LOADED", {})
+    monkeypatch.setattr("torch.cuda.is_available", lambda: False)
+
+    cli._load("a")
+    cli._load("a")
+    assert calls == ["/models/a"], "the second call reloaded the same model"
+
+    cli._load("b")
+    assert calls == ["/models/a", "/models/b"]
+    assert len(cli._LOADED) == 1, "two models stayed resident"
+
+
 def test_every_command_only_reads_flags_its_parser_defines():
     """No `args.<flag>` a command reaches may be absent from its subparser.
 
