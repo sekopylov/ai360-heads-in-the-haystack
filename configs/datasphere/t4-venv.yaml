@@ -1,0 +1,47 @@
+name: rh-t4-venv
+desc: refresh the persistent project-disk venv only (no stages, no weights)
+
+# Why this exists
+# --------------
+# `t4-bootstrap.yaml` builds the venv *and* runs every stage at smoke scale, which is
+# the right first job but wasteful when only the environment changed (e.g. the fused
+# kernels added to the lock).  This job stops after the install: the driver returns as
+# soon as `--bootstrap-venv` finishes, because `--use-venv` is deliberately absent.
+#
+# What it installs: `flash-linear-attention` (pure Python, so no compiler involved)
+# and its `fla-core`/`einops` dependencies.  Those provide the fused
+# `chunk_gated_delta_rule` / `fused_recurrent_gated_delta_rule` ops that the hybrid's
+# 18 linear layers otherwise run as reference PyTorch -- the dominant cost of its
+# masking stage.
+#
+# `causal-conv1d` is deliberately NOT in the lock.  It is a CUDA extension compiled at
+# install time, and this job image ships only CUDA 11.8 while torch is cu128, so the
+# build fails (`detected CUDA version (11.8) mismatches ... (13.0)`); pip's isolated
+# build env made it worse by fetching a different torch.  The two conv1d helpers stay
+# on the PyTorch path, which is the cheap part of the layer.
+#
+# The install is skipped when the stamp in the venv already matches the lock's
+# sha256, so re-running this job is free (and prints why).
+
+cmd: python3 scripts/datasphere_job.py --project-home ${DS_PROJECT_HOME} --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv
+
+flags:
+  - attach-project-disk
+
+env:
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+      extra-index-urls:
+        - https://mirror.yandex.ru/pypi/web/simple/
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+
+cloud-instance-types:
+  - gt4i.1             # observed: NVIDIA L4, 22.2 GiB, sm_89 (T4-class slot)
+  - gt4.1              # fallback: 1x T4, 16 GB VRAM

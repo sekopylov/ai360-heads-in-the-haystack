@@ -1,0 +1,35 @@
+name: rh-cuda-probe
+desc: read-only probe of the job image (CUDA toolkits in /usr/local, venv state)
+
+# Why this exists
+# --------------
+# `causal-conv1d` is compiled at install time against the venv's torch, so the image
+# must provide an `nvcc` matching torch's CUDA (cu128).  The first attempt failed with
+# "detected CUDA version (11.8) mismatches ... (13.0)" -- 11.8 is the image's toolkit,
+# 13.0 came from pip's *build isolation* pulling a different torch.  This job answers
+# the two questions that decide the fix, without touching anything: which CUDA
+# toolkits the image ships, and whether the project-disk venv still has the packages
+# it had before the failed install.
+#
+# It writes nothing: `--inspect-dir` is strictly read-only.
+
+cmd: python3 scripts/datasphere_job.py --project-home ${DS_PROJECT_HOME} --inspect-dir /usr/local --inspect-dir ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv/bin
+
+flags:
+  - attach-project-disk
+
+env:
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+
+cloud-instance-types:
+  - gt4i.1             # the same image the venv job uses
+  - gt4.1

@@ -270,6 +270,71 @@ DataSphere кеширует входные данные в проекте, по�
 
 ## 4. Рабочие прогоны
 
+### 3.3 t4-venv.yaml — обновить кэшированный venv, ничего не считая
+
+Когда меняется `scripts/requirements-datasphere.txt`, venv на диске проекта надо
+пересобрать. `t4-bootstrap.yaml` делает это **и** прогоняет все стадии на
+smoke-масштабе; если менялось только окружение, лишние стадии не нужны:
+
+```yaml
+# configs/datasphere/t4-venv.yaml
+name: rh-t4-venv
+desc: refresh the persistent project-disk venv only (no stages, no weights)
+
+cmd: python3 scripts/datasphere_job.py --project-home ${DS_PROJECT_HOME} --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv
+
+flags:
+  - attach-project-disk
+
+env:
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+
+cloud-instance-types:
+  - gt4i.1
+  - gt4.1
+```
+
+Особенности, проверенные на практике (`bt1130t5lg7audlevlin`, SUCCESS):
+
+* `--use-venv` здесь **нет** намеренно: драйвер ставит зависимости и сразу
+  возвращается, стадии не запускаются (и веса не нужны).
+* Установка идёт через `pip install --no-deps -r ...` по точному lock, поэтому новые
+  пакеты надо вписывать **вместе с их зависимостями**: для `flash-linear-attention`
+  это `fla-core` и `einops` (оба колеса кладут код в namespace `fla`, так что нужны
+  оба).
+* Повторный запуск бесплатен: если sha256 lock совпадает со штампом в venv, драйвер
+  печатает `venv already matches ... skipping install` и выходит.
+* После установки драйвер печатает `torch arch list`, статус импорта `fla` /
+  `causal_conv1d` и проверку flash-бэкенда SDPA — по этому логу видно и что ядра
+  встали, и что колесо покрывает нужную арх (`sm_80` = A100).
+
+**Чего в lock нет и почему.** `causal-conv1d` — CUDA-расширение, компилируемое при
+установке; образ job'а содержит только CUDA 11.8, а torch собран под cu128, поэтому
+сборка падает:
+
+```
+RuntimeError: The detected CUDA version (11.8) mismatches the version that was used
+to compile PyTorch (13.0)
+```
+
+(13.0 — потому что pip собирал в изолированном build-env и подтянул туда *другой*
+torch.) Варианты, если это понадобится: вписать `nvidia-cuda-nvcc-cu12` нужной версии
+и перейти на `--no-build-isolation` с `CUDA_HOME` на этот nvcc. Сейчас сознательно
+оставлено как есть: `causal_conv1d_fn`/`causal_conv1d_update` — дешёвые свёртки, а
+дорогие fused-операции delta-rule закрывает `flash-linear-attention`.
+
+Отдельно: `cuda-probe.yaml` — read-only job (`--inspect-dir`), который показывает,
+что лежит в образе и в venv; им и был найден единственный тулчейн 11.8.
+
 ### 4.1 CPU, масштаб `laptop` (аналог `reproduce_laptop.sh`)
 
 ```yaml

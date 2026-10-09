@@ -69,6 +69,27 @@ def _deterministic() -> bool:
 
 
 @lru_cache(maxsize=1)
+def _optional_kernels() -> dict[str, bool]:
+    """Whether the fused kernels are *installed* (not whether they were used).
+
+    `transformers` imports them lazily and falls back to pure PyTorch when the
+    import fails, so two runs of the same code can use different kernels.  The
+    packages are named, not imported: `find_spec` is cheap and side-effect free, and
+    a CUDA extension that imports is not necessarily one that runs.
+    """
+    import importlib.util
+
+    out: dict[str, bool] = {}
+    for label, module in (("flash_linear_attention", "fla"),
+                          ("causal_conv1d", "causal_conv1d")):
+        try:
+            out[label] = importlib.util.find_spec(module) is not None
+        except Exception:  # noqa: BLE001 - provenance must never break a run
+            out[label] = False
+    return out
+
+
+@lru_cache(maxsize=1)
 def _versions() -> dict[str, str]:
     # Cached: importing matplotlib on every artifact write cost seconds per save.
     out = {"python": sys.version.split()[0]}
@@ -96,6 +117,10 @@ def provenance(*, dtype: str | None = None, extra: dict[str, Any] | None = None)
         "matplotlib": versions["matplotlib"],
         # argmax ties can flip between runs if deterministic kernels are off.
         "deterministic": _deterministic(),
+        # Which optional kernels were *available*: the hybrid's linear layers take a
+        # different (fused) path when these are installed, so an artifact from a run
+        # with them is not bit-for-bit the same experiment as one without.
+        "optional_kernels": _optional_kernels(),
     }
     # A job uploads `local-paths` without `.git`, so `git_rev` is None there and the
     # artifact could not be tied to a commit.  `datasphere_job.py` hashes the code it

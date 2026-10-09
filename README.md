@@ -563,11 +563,27 @@ meaningful within a family.
   reasoning items are therefore small multi-step arithmetic a sub-1B model can
   actually solve -- chosen for headroom, not to be a benchmark.
 * **Timings.** Qwen3.5's Gated DeltaNet layers fall back to pure-PyTorch kernels
-  without `flash-linear-attention` / `causal-conv1d`, which dominates runtime on
-  CPU. That affects speed only, not correctness.  On a job the driver runs a
-  model's stages back to back in one process (`stage_plan`), so each checkpoint is
-  loaded once rather than once per stage -- ~50 s saved per skipped load, and the
-  resident-memory cost stays at one model.
+  without `flash-linear-attention`; on the L4 that fallback dominated the hybrid's
+  masking stage (12.5 of a 30-minute run).  `fla-core` / `flash-linear-attention`
+  (+`einops`) are now pinned in `scripts/requirements-datasphere.txt` and installed
+  into the project-disk venv by `configs/datasphere/t4-venv.yaml`; the job's own log
+  confirms `fla.ops.gated_delta_rule: ok`.  `causal-conv1d` is deliberately absent:
+  it is a CUDA extension compiled at install time, and the job image ships only CUDA
+  11.8 against a cu128 torch, so the build fails -- the two conv1d helpers stay on the
+  PyTorch path, which is the cheap part of the layer.  This is a *numerical* change as
+  well as a speed one (different arithmetic), so every artifact records
+  `provenance.optional_kernels`; the committed `ds-results/` predates the install and
+  has both flags `false`.  On a job the driver also runs a model's stages back to back
+  in one process (`stage_plan`), so each checkpoint is loaded once rather than once
+  per stage -- ~50 s saved per skipped load, and the resident-memory cost stays at one
+  model.
+* **Flash attention is used for the prefill, `eager` for the capture.**  `detect` and
+  the ablations prefill through SDPA (`--prefill-impl sdpa`, the default, never
+  overridden by a config), which picks the FlashAttention-2 kernel in bf16; the steps
+  that *measure* attention rows run eager, because the fused kernels do not return the
+  attention matrix.  `configs/datasphere/t4-venv.yaml` therefore probes it explicitly:
+  the job log reports `torch arch list` (sm_80 is present, i.e. the wheel covers an
+  A100) and `SDPA flash backend: ok`.
 * **The committed `ds-results/` matches the code; `results/` does not.**  The GPU
   tree was regenerated on the current pipeline (schema 5, held-out eval needle,
   prompt-only argmax, corrected filler sizing) and `docs/results-gpu.md` is

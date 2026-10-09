@@ -306,11 +306,38 @@ def bootstrap_venv(target: Path, requirements: Path) -> int:
     subprocess.run([str(python), "-m", "pip", "install", "--no-deps",
                     "-r", str(requirements)], check=True)
 
+    # Report the optional kernels explicitly.  `causal-conv1d` is a CUDA extension
+    # compiled at install time, so a failure here is the difference between the
+    # hybrid running fused kernels and silently falling back to the PyTorch path --
+    # and `torch.cuda.get_arch_list()` says whether the wheel covers the GPU we
+    # intend to use (sm_80 for an A100).
     check = (
-        "import sys, torch, transformers, matplotlib, numpy, tqdm; "
-        "print('[entry]   python', sys.version.split()[0]); "
-        "print('[entry]   torch', torch.__version__, '| cuda', torch.cuda.is_available()); "
-        "print('[entry]   transformers', transformers.__version__)"
+        "import sys, torch, transformers, matplotlib, numpy, tqdm\n"
+        "print('[entry]   python', sys.version.split()[0])\n"
+        "print('[entry]   torch', torch.__version__, '| cuda', torch.cuda.is_available())\n"
+        "print('[entry]   transformers', transformers.__version__)\n"
+        "print('[entry]   torch arch list:', torch.cuda.get_arch_list())\n"
+        "for name in ('fla', 'causal_conv1d'):\n"
+        "    try:\n"
+        "        __import__(name); print(f'[entry]   {name}: importable')\n"
+        "    except Exception as exc:\n"
+        "        print(f'[entry]   {name}: NOT importable ({type(exc).__name__}: {exc})')\n"
+        "try:\n"
+        "    from fla.ops.gated_delta_rule import chunk_gated_delta_rule\n"
+        "    print('[entry]   fla.ops.gated_delta_rule: ok')\n"
+        "except Exception as exc:\n"
+        "    print(f'[entry]   fla.ops.gated_delta_rule: MISSING ({type(exc).__name__}: {exc})')\n"
+        # The prefill runs through SDPA, which picks the flash kernel on bf16 -- but
+        # only if this GPU and this torch build support it.  Forcing the backend makes
+        # the answer explicit instead of "it probably falls back to math".
+        "import torch.nn.attention as attn\n"
+        "try:\n"
+        "    with attn.sdpa_kernel(attn.SDPBackend.FLASH_ATTENTION):\n"
+        "        q = torch.randn(1, 2, 64, 32, dtype=torch.bfloat16, device='cuda')\n"
+        "        torch.nn.functional.scaled_dot_product_attention(q, q, q)\n"
+        "    print('[entry]   SDPA flash backend: ok')\n"
+        "except Exception as exc:\n"
+        "    print(f'[entry]   SDPA flash backend: NOT available ({type(exc).__name__}: {exc})')\n"
     )
     subprocess.run([str(python), "-c", check], check=True)
 

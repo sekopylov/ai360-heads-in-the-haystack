@@ -305,6 +305,19 @@ def test_ablation_arguments_reject_silent_zero_runs():
     require_ablation_args(SimpleNamespace(max_new_tokens=8, random_trials=1))
 
 
+def test_provenance_records_which_optional_kernels_were_installed():
+    """The hybrid takes a fused path when these are present, so it is provenance.
+
+    `transformers` imports them lazily and silently falls back to PyTorch, so two runs
+    of the same code are not necessarily the same experiment.
+    """
+    from retrieval_heads.provenance import provenance
+
+    kernels = provenance()["optional_kernels"]
+    assert set(kernels) == {"flash_linear_attention", "causal_conv1d"}
+    assert all(isinstance(v, bool) for v in kernels.values())
+
+
 def test_every_command_only_reads_flags_its_parser_defines():
     """No `args.<flag>` a command reaches may be absent from its subparser.
 

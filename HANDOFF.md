@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 225 tests: 208 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
+* 226 tests: 209 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
   the real checkpoints. All green.
 * **The committed artifacts now match the code.** The GPU run was refreshed in two
   jobs on an NVIDIA L4, 75 instances per model:
@@ -26,6 +26,20 @@ tied to a job id) → this file (where things stand and what is left).
   CPU tree is **not** refreshed and stays historical.
 * DataSphere path works: cached venv on the project disk, ~40 s job startup
   instead of ~9 min. Job `bt107kjm3es8vung7130` proves all seven stages run on GPU.
+* **The project-disk venv now has `flash-linear-attention`** (job
+  `bt1130t5lg7audlevlin`, SUCCESS, stamp `1ae8818bae664fb2`): `fla-core` +
+  `flash-linear-attention` + `einops` are in `requirements-datasphere.txt`, and the
+  job log confirms `fla.ops.gated_delta_rule: ok`, so the hybrid's 18 linear layers
+  no longer run the reference PyTorch delta-rule.  `causal-conv1d` is deliberately
+  absent -- the job image ships only CUDA 11.8 against a cu128 torch, so the
+  extension cannot be compiled there (see `run-in-datasphere.md` §3.3 for the exact
+  error and the nvcc-from-pip alternative).  The same log answers the A100 questions:
+  `torch arch list` includes `sm_80`, and `SDPA flash backend: ok`.  Every artifact
+  now records `provenance.optional_kernels`, so a run with the fused kernels is
+  distinguishable from the committed `ds-results/` (both flags `false` there).
+* `configs/datasphere/t4-venv.yaml` refreshes the venv without running any stage, and
+  `configs/datasphere/cuda-probe.yaml` is a read-only `--inspect-dir` job that shows
+  what the image and the venv contain (it is how the single 11.8 toolkit was found).
 * **Each model is now loaded once per run.** The driver executes a model's stages
   back to back in one process (`stage_plan`, model-major) and `cli._load` keeps
   exactly one resident model, evicting the previous one; a full run used to load
@@ -569,7 +583,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 225 passed (208 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 226 passed (209 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

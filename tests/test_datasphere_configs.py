@@ -139,6 +139,10 @@ def test_outputs_are_declared_where_results_are_written(configs):
     for name, config in configs.items():
         if "--inspect-dir" in config["cmd"]:
             continue  # read-only audit job: it produces no artifacts by design
+        if "--bootstrap-venv" in config["cmd"] and "--use-venv" not in config["cmd"]:
+            # Environment-maintenance job: it installs into the project-disk venv and
+            # returns, so there is nothing to collect.
+            continue
         outputs = config.get("outputs") or []
         assert outputs, f"{name}: no outputs declared"
         cmd = config["cmd"]
@@ -151,7 +155,7 @@ def test_outputs_are_declared_where_results_are_written(configs):
 #: Configs that must run on a GPU.  Listed explicitly: the previous condition
 #: tested the file *name* for "gt4", so `t4.yaml` was skipped by its own check.
 GPU_CONFIGS = {"t4.yaml", "t4-smoke.yaml", "t4-cached.yaml", "t4-bootstrap.yaml",
-               "paper.yaml"}
+               "t4-venv.yaml", "paper.yaml"}
 
 
 def test_gpu_configs_request_a_gpu_shape(configs):
