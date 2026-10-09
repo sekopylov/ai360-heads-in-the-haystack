@@ -25,6 +25,14 @@ from . import spool
 from .tasks import TASKS
 
 
+def from_masked_run(path):
+    """True when the head_score file comes from a run with masked heads: by its name or by the run.json next to it."""
+    if os.path.basename(path).startswith("head_score_masked_"):
+        return True
+    run_json = os.path.join(os.path.dirname(os.path.abspath(path)), "spool", "run.json")
+    return os.path.exists(run_json) and bool(spool.load_json(run_json).get("block_list"))
+
+
 def ranked_heads(path):
     """Heads of a head_score file, best first, as [layer, head]."""
     scores = spool.load_json(path)
@@ -52,7 +60,10 @@ if __name__ == "__main__":
     parser.add_argument('--save', type=str, default="compact", choices=["compact", "rows", "none"],
                         help='compact: top-k positions and span masses per head; rows: also whole attention rows; none: answers only')
     parser.add_argument('--topk', type=int, default=5)
-    parser.add_argument('--max_new_tokens', type=int, default=50)
+    parser.add_argument('--max_new_tokens', type=int, default=256, help='cap of the answer length; the generation stops earlier at the end of the answer')
+    parser.add_argument('--limits', type=lambda s: [int(x) for x in s.split(',')], default=[50, 64, 128, 256],
+                        help='token limits to evaluate from this one run: the answer and the head metrics are also computed '
+                             'as if the generation had been cut at each of them (see rh.limits)')
     parser.add_argument('--buffer_gb', type=float, default=2.0, help='wait while the unread spool is larger than this; 0: no limit')
     parser.add_argument('--chunk_mb', type=int, default=256)
     parser.add_argument('--mask_file', type=str, default=None, help='head_score json that ranks the heads')
@@ -70,6 +81,8 @@ if __name__ == "__main__":
         parser.error('--mask_top and --mask_random are exclusive')
     if args.mask_top and not args.mask_file:
         parser.error('--mask_top needs --mask_file')
+    if args.mask_file and from_masked_run(args.mask_file):
+        parser.error(f'{args.mask_file} comes from a run with masked heads; the heads must be ranked by a run without a mask')
     spool_dir = args.spool or f"{args.out}/spool"
 
     from . import model as rh_model
@@ -89,7 +102,9 @@ if __name__ == "__main__":
     if writer.pending_ids:
         print(f"{len(writer.pending_ids)} complete samples wait in the spool for the metrics and will be skipped", flush=True)
     done_ids |= writer.pending_ids
+    limits = sorted({l for l in args.limits if l < args.max_new_tokens} | {args.max_new_tokens})
     writer.start_run({"args": vars(args), "attn_layers": attn_layers, "block_list": block_list, "stop_tokens": sorted(stop),
+                      "limits": limits,
                       "torch": torch.__version__, "transformers": transformers.__version__})
     metrics = None
     if args.with_metrics:
@@ -110,7 +125,10 @@ if __name__ == "__main__":
                 output.append(token)
                 writer.add_step(token, rows)
             response = enc.decode(output, skip_special_tokens=True).strip()
-            writer.end_sample(output, response, round(time.time() - start_time, 2))
+            # the text the answer would have had under every shorter limit; decoded here, the metrics have no tokenizer
+            responses_at = {str(l): enc.decode(output[:l], skip_special_tokens=True).strip() for l in limits if l < len(output)}
+            writer.end_sample(output, response, round(time.time() - start_time, 2),
+                              stopped=bool(output) and output[-1] in stop, responses_at=responses_at)
             if metrics is None:
                 print(f"{sample.id}: {time.time() - start_time:.1f}s, {len(output)} tokens, {response[:70]!r}", flush=True)
         completed = True

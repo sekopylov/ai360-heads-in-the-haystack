@@ -8,7 +8,8 @@ Results in --out:
     samples.jsonl            one line per sample: meta, response, answer metrics
     heads/<sample>.npz       head metrics of the sample, each [layer, head] over the layers with attention
     summary.json             aggregate over the samples
-    head_score_<metric>.json per-head scores of the successful samples, in the format of the authors' head_score
+    head_score_<metric>.json per-head scores of the successful samples, in the format of the authors' head_score;
+                             head_score_masked_<metric>.json when the run had masked heads
 """
 import argparse
 import glob
@@ -34,6 +35,7 @@ def answer_metrics(reference, response):
 class HeadMetric:
     """One value per head and sample. start() once per sample, step() per generated token, end() returns [layer, head]."""
     name = None
+    limit = None   # only the steps before this one are given to the metric; None: all
 
     def start(self, input_ids, spans, span_names):
         pass
@@ -92,11 +94,19 @@ class SpanMass(HeadMetric):
         return self.total / self.n
 
 
-def head_metrics():
-    return [Copy("copy_count", distinct=False), Copy("copy_recall", distinct=True), SpanMass("needle_mass")]
+def head_metrics(limits=()):
+    """The metrics over the whole answer and, as name@limit, over its first `limit` tokens for every limit."""
+    def make(suffix):
+        return [Copy("copy_count" + suffix, distinct=False), Copy("copy_recall" + suffix, distinct=True), SpanMass("needle_mass" + suffix)]
+    metrics = make("")
+    for limit in limits:
+        for m in make(f"@{limit}"):
+            m.limit = limit
+            metrics.append(m)
+    return metrics
 
 
-def process_sample(sample_path, wait, delete):
+def process_sample(sample_path, wait, delete, limits=()):
     """
     Reads the chunks of one sample in order, as they appear; with delete every chunk is removed as soon as it is
     read, so a sample may be larger than the buffer of the run. wait() is called when the next file is not there
@@ -107,7 +117,7 @@ def process_sample(sample_path, wait, delete):
     prefix = sample_path[:-len(".sample.npz")]
     input_ids, info = spool.read_sample(sample_path)
     span_names = sorted(info["spans"])
-    metrics, started, chunk = head_metrics(), False, 0
+    metrics, started, chunk = head_metrics(limits), False, 0
     done_path = f"{prefix}.done.json"
     while True:
         chunk_path = f"{prefix}.{chunk:06d}{spool.STEPS}"
@@ -122,7 +132,8 @@ def process_sample(sample_path, wait, delete):
                             m.start(input_ids, info["spans"], span_names)
                         started = True
                     for m in metrics:
-                        m.step(step)
+                        if m.limit is None or step["step"] < m.limit:
+                            m.step(step)
             if delete:
                 os.remove(chunk_path)
             chunk += 1
@@ -130,6 +141,15 @@ def process_sample(sample_path, wait, delete):
             result = {"id": info["id"], **info["meta"], "reference": info["reference"], "response": done["response"],
                       "n_tokens": done["n_steps"], "seconds": done["seconds"],
                       **answer_metrics(info["reference"], done["response"])}
+            if "stopped" in done:
+                # stopped: the answer ended by itself; at a limit it is truncated when it had not ended by that token
+                result["stopped"] = done["stopped"]
+                result["by_limit"] = {}
+                for limit in limits:
+                    text = done.get("responses_at", {}).get(str(limit), done["response"])
+                    scores = answer_metrics(info["reference"], text)
+                    result["by_limit"][str(limit)] = {"rouge1_recall": scores["rouge1_recall"], "success": scores["success"],
+                                                      "truncated": not (done["stopped"] and done["n_steps"] <= limit)}
             heads = {m.name: m.end().astype(np.float32) for m in metrics} if started else {}
             return "ok", result, heads
         elif done is not None or later:
@@ -180,7 +200,9 @@ def consume(spool_dir, out, follow, delete, idle_timeout=3600):
                 if delete:
                     remove_sample(sample_path)
                 continue
-            status, result, heads = process_sample(sample_path, wait, delete)
+            run_json = f"{spool_dir}/run.json"
+            limits = spool.load_json(run_json).get("limits", []) if os.path.exists(run_json) else []
+            status, result, heads = process_sample(sample_path, wait, delete, limits)
             progress[0] = time.time()
             if status != "ok":
                 # not written to samples.jsonl, so the next rh.run generates the sample again
@@ -215,12 +237,19 @@ def aggregate(spool_dir, out):
         samples = [json.loads(l) for l in f if l.strip()]
     summary = {"samples": len(samples), "successful": sum(s["success"] for s in samples),
                "mean_rouge1_recall": float(np.mean([s["rouge1_recall"] for s in samples]))}
+    if all("stopped" in s for s in samples):
+        summary["truncated_at_cap"] = sum(not s["stopped"] for s in samples)
     for key in ("context_length", "depth_percent", "needle_idx"):
         if all(key in s for s in samples):
             groups = sorted({s[key] for s in samples})
             summary[f"success_by_{key}"] = {str(g): round(float(np.mean([s["success"] for s in samples if s[key] == g])), 3) for g in groups}
 
     run = spool.load_json(f"{spool_dir}/run.json") if os.path.exists(f"{spool_dir}/run.json") else {}
+    # head scores of a run with masked heads describe the changed model: they get another name, so that they are
+    # not taken for the ranking of the heads (rh.run refuses them as --mask_file)
+    masked = len(run.get("block_list") or [])
+    summary["masked_heads"] = masked
+    prefix = "head_score_masked_" if masked else "head_score_"
     with_heads = [s for s in samples if os.path.exists(f"{out}/heads/{s['id']}.npz")]
     means = {}
     if with_heads:
@@ -233,6 +262,8 @@ def aggregate(spool_dir, out):
         layers = run.get("attn_layers") or list(range(next(iter(arrays[0].values())).shape[0]))
         summary["heads"] = {}
         for name in arrays[0]:
+            if "@" in name:
+                continue   # the metrics at the token limits are summarized by rh.limits
             values = np.stack([a[name] for a in arrays])  # [sample, layer, head]
             mean_ok = values[ok].mean(0) if ok.any() else np.zeros(values.shape[1:])
             means[name] = mean_ok.ravel()
@@ -242,7 +273,7 @@ def aggregate(spool_dir, out):
                                       "top20": [keys[i] for i in best], "top20_scores": [round(float(mean_ok.ravel()[i]), 4) for i in best]}
             # per-head lists over the successful samples, as in the authors' head_score files
             lists = values[ok].reshape(int(ok.sum()), -1).T.tolist()
-            spool.save_json(f"{out}/head_score_{name}.json", dict(zip(keys, lists)))
+            spool.save_json(f"{out}/{prefix}{name}.json", dict(zip(keys, lists)))
         names = sorted(means)
         summary["spearman"] = {f"{a} vs {b}": round(float(np.corrcoef(rank(means[a]), rank(means[b]))[0, 1]), 4)
                                for i, a in enumerate(names) for b in names[i + 1:]}

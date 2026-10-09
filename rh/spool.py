@@ -5,7 +5,8 @@ when asked, delete what they have processed; the run waits while the unread data
     run.json                      model, layers with attention, what is saved, masked heads
     NNNNNN_<id>.sample.npz        prompt tokens, spans, reference answer, meta; written before the generation
     NNNNNN_<id>.CCCCCC.steps.npz  a chunk of consecutive generation steps
-    NNNNNN_<id>.done.json         generated tokens, response text, number of chunks; written after the last chunk
+    NNNNNN_<id>.done.json         generated tokens, response text, number of chunks; whether the answer ended by itself
+                                  and its text cut at every token limit of the run; written after the last chunk
     RUN_DONE                      the run has finished
 
 A chunk holds per step and per head: the top-k attention positions and values, and the attention mass on every span
@@ -147,10 +148,10 @@ class SpoolWriter:
             time.sleep(1)
             waited += 1
 
-    def end_sample(self, output_ids, response, seconds):
+    def end_sample(self, output_ids, response, seconds, **extra):
         self.flush()
         save_json(f"{self.prefix}.done.json", {"output_ids": [int(i) for i in output_ids], "response": response,
-                                                "n_chunks": self.n_chunks, "n_steps": self.n_steps, "seconds": seconds})
+                                                "n_chunks": self.n_chunks, "n_steps": self.n_steps, "seconds": seconds, **extra})
 
     def end_run(self, completed=True):
         save_json(f"{self.path}/RUN_DONE", {"completed": completed})
