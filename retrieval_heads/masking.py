@@ -174,7 +174,11 @@ def evaluate_samples(
             ids = greedy_generate(model, sample.input_ids, max_new_tokens=max_new_tokens,
                                   eos=eos, attn_impl=attn_impl,
                                   prefill_chunk=prefill_chunk)
-            if len(ids) >= max_new_tokens and (not eos or ids[-1] not in eos):
+            # `greedy_ids` never appends the stop token, so a full-length output is
+            # exactly "the loop ran out of budget": it can only reach max_new_tokens
+            # by never seeing an EOS at the top of an iteration.  (The old condition
+            # also tested `ids[-1] not in eos`, which is dead for that reason.)
+            if len(ids) >= max_new_tokens:
                 n_truncated += 1
             text = tokenizer.decode(ids, skip_special_tokens=True)
             # Exact match is computed on skip_special_tokens text, so F1 must skip
@@ -271,6 +275,15 @@ class MaskingCurve:
     #: Samples that hit `max_new_tokens` without an EOS, per K: without it a drop
     #: cannot be told apart from a budget that ran out (the hybrid's detect run
     #: truncated 11 of 75 instances at a 48-token budget).
+    #: True at the points where the retrieval arm was capped by the *control pool*
+    #: (``k_eff`` < requested K because fewer heads sit below the threshold) and the
+    #: random arm therefore drew the whole pool: the point is not a matched
+    #: comparison, and the reader of the JSON should not plot it as one.
+    control_exhausted: list[bool] = field(default_factory=list)
+    #: Distinct control subsets actually evaluated per K (the trials are drawn
+    #: without repetition where the pool allows it, so a repeat means the space ran
+    #: out -- at which point `random_std` spans fewer interventions than n_trials).
+    random_distinct: list[int] = field(default_factory=list)
     retrieval_truncated: list[int] = field(default_factory=list)
     random_truncated_mean: list[float] = field(default_factory=list)
     baseline_truncated: int = 0
@@ -315,6 +328,8 @@ class MaskingCurve:
             "retrieval_recall": self.retrieval_recall,
             "random_recall_mean": self.random_recall_mean,
             "baseline_recall": self.baseline_recall,
+            "control_exhausted": self.control_exhausted,
+            "random_distinct": self.random_distinct,
             "retrieval_truncated": self.retrieval_truncated,
             "random_truncated_mean": self.random_truncated_mean,
             "baseline_truncated": self.baseline_truncated,
@@ -445,9 +460,21 @@ def masking_curve(
         masked_counts = []
         above_counts: list[int] = []
         threshold_heads = set(scores.heads_above())
+        # Draw the control subsets without repeating one where the pool allows it:
+        # with a small pool (the hybrid has 15) the same subset can otherwise be drawn
+        # twice, and `random_std` then measures fewer distinct interventions than the
+        # trial count suggests.  `random_distinct` in the artifact records the count.
+        seen_subsets: set[tuple[str, ...]] = set()
+        # Size of the subset space; beyond it, repeats are unavoidable.
+        subset_space = math.comb(len(pool), k_eff) if 0 <= k_eff <= len(pool) else 0
         for trial in range(n_random_trials):
-            pick = rng.permutation(len(pool))[:k_eff]
-            random_heads = [pool[i] for i in pick]
+            for _attempt in range(100):
+                pick = rng.permutation(len(pool))[:k_eff]
+                random_heads = [pool[i] for i in pick]
+                key = tuple(sorted(str(h) for h in random_heads))
+                if key not in seen_subsets or len(seen_subsets) >= subset_space:
+                    break
+            seen_subsets.add(key)
             masked_counts.append(len(random_heads))
             # The honest control audit: how many drawn heads are retrieval heads.
             # (In the clean pool this is 0 by construction; it is non-zero only in
@@ -474,6 +501,8 @@ def masking_curve(
         curve.random_retrieval_overlap.append(overlaps)
         curve.random_above_threshold.append(above_counts)
         curve.random_masked_mean.append(float(np.mean(masked_counts)))
+        curve.control_exhausted.append(bool(len(pool) and k_eff >= len(pool)))
+        curve.random_distinct.append(len(seen_subsets))
         curve.random_recall_mean.append(float(np.mean(recall_trials)))
         curve.random_mean.append(float(np.mean(trials)))
         curve.random_std.append(float(np.std(trials)))
@@ -636,7 +665,8 @@ def token_mixer_ablation(
         # makes the reported spread a spread over fewer distinct interventions than
         # the trial count suggests.
         if k >= len(layers):
-            return [list(layers)] * n
+            # A fresh list per trial: `[list(layers)] * n` would alias one object.
+            return [list(layers) for _ in range(n)]
         total = math.comb(len(layers), k)
         if n >= total:  # exhaustive: enumerate every subset once
             return [list(c) for c in itertools.combinations(layers, k)][:n]

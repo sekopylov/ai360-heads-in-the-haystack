@@ -218,7 +218,7 @@ Filler text is generated from a seeded word list (offline, deterministic);
 | `retrieval_heads/properties.py` | 4 | sparsity buckets, activation-frequency gap, Pearson correlation, head-set overlap |
 | `retrieval_heads/masking.py` | 4.1, 5 | top-K vs random-K masking curves; full-attention vs linear layer ablation |
 | `retrieval_heads/downstream.py` | 5 | extractive QA and CoT reasoning with and without masking |
-| `retrieval_heads/plotting.py` | all figures | `ring_graph`, `score_distribution`, `heat_map`, `corr_map`, `masking_heads`, `task_qa`, `task_cot` |
+| `retrieval_heads/plotting.py` | all figures | the `figures` stage writes `ring_graph`, `score_distribution`, `heat_map`, `corr_map`, `layer_profile`, `masking_heads`, `masking_recall`, `mixer_ablation`, `task_qa`, `task_cot`; the paper's Fig. 1 (`retrieval_attention_dist.pdf`) comes from `scripts/case_study.py` instead, which is not part of any stage |
 | `retrieval_heads/cli.py` | — | `describe / detect / mask / qa / cot / compare / figures` |
 
 ### Implementation notes worth knowing
@@ -269,6 +269,14 @@ needle, the prompt-only argmax domain, the needle-text gold tokens and the
 corrected filler sizing are all in effect.  Realized prompt lengths land within
 ~1% of the request (e.g. 1024 -> 1022, 16384 -> 16467 on average; per-instance
 values are in `instances_*.jsonl`), against the ~2% tolerance the code enforces.
+
+**One caveat on the field set, not the numbers.**  `ds-results/` was written at
+commit `abbfc3c`, before the last two rounds of additive bookkeeping, so
+`masking_curve.json` does *not* carry `retrieval_truncated` / `random_truncated_mean`
+/ `baseline_truncated`, `control_exhausted` or `random_distinct` (the figures and
+tables here do not read them, and no number changes).  A `mask` re-run adds them;
+until then, read the truncation discussion below as coming from `detect` (which
+always recorded `n_instances_truncated`) rather than from the curve.
 
 ### Detection
 

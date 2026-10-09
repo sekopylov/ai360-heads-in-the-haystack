@@ -82,17 +82,58 @@ def main() -> int:
                         help="must match the detect run whose scores this illustrates")
     parser.add_argument("--max-new-tokens", type=int, default=32)
     parser.add_argument("--needle-index", type=int, default=0)
+    parser.add_argument("--scores", default=None,
+                        help="a detect run directory (scores_<pairing>.json); its recorded "
+                             "conditions are reused so the figure explains that run")
+    parser.add_argument("--no-chat-template", action="store_true")
+    parser.add_argument("--system-prompt", default=None)
+    parser.add_argument("--thinking", action="store_true")
+    parser.add_argument("--capture-method", default="patch", choices=["patch", "output_attentions"])
+    parser.add_argument("--dtype", default=None)
     parser.add_argument("--out", default=str(REPO_ROOT / "results"))
     args = parser.parse_args()
 
-    model, tokenizer, info = _load(args.model)
+    model, tokenizer, info = _load(args.model, dtype=args.dtype)
     if not 0 <= args.needle_index < len(DEFAULT_NEEDLES):
         parser.error(f"--needle-index must be in [0, {len(DEFAULT_NEEDLES) - 1}], "
                      f"got {args.needle_index}")
     needle, question = DEFAULT_NEEDLES[args.needle_index]
+    # Conditions: reuse what the illustrated run recorded.  Without this the figure
+    # could show a different prompt mode than the heads it is supposed to explain
+    # (the same drift `resolve_detection_settings` fixes for the ablations).
+    if args.scores:
+        sidecar = Path(args.scores) / f"scores_{args.pairing}.json"
+        if not sidecar.exists():
+            parser.error(f"{sidecar} does not exist; --scores needs a detect run directory")
+        recorded = (json.loads(sidecar.read_text(encoding="utf-8")).get("meta") or {})
+        config = recorded.get("config") or {}
+        # (label, recorded value, apply, what the command line implied).  The flags
+        # are not named like the fields (`--no-chat-template`, `--thinking`), so the
+        # mapping is explicit.
+        for label, value, apply, current in (
+            ("chat_template", config.get("chat_template"),
+             lambda v: setattr(args, "no_chat_template", not v), not args.no_chat_template),
+            ("system_prompt", config.get("system_prompt"),
+             lambda v: setattr(args, "system_prompt", v), args.system_prompt),
+            ("enable_thinking", config.get("enable_thinking"),
+             lambda v: setattr(args, "thinking", bool(v)), args.thinking),
+            ("argmax_domain", config.get("argmax_domain"),
+             lambda v: setattr(args, "argmax_domain", v), args.argmax_domain),
+            ("capture_method", config.get("capture_method"),
+             lambda v: setattr(args, "capture_method", v), args.capture_method),
+        ):
+            if value is None and label != "system_prompt":
+                continue
+            if current != value:
+                print(f"note: {label}={value!r} taken from {sidecar.name} (the command "
+                      f"line implied {current!r})")
+            apply(value)
     sample = build_needle_sample(
         tokenizer, needle=needle, question=question, target_tokens=args.length,
         depth=args.depth, builder=HaystackBuilder(seed=0),
+        chat_template=not args.no_chat_template,
+        system_prompt=args.system_prompt,
+        enable_thinking=True if args.thinking else False,
     )
     print(f"prompt={sample.length} tokens  needle={sample.needle_span} "
           f"({sample.n_unique_needle_text_tokens} unique)\n")
@@ -108,6 +149,7 @@ def main() -> int:
         # argmax this call records.  Passing it only to the display path made the
         # figure and the JSON describe two different domains.
         argmax_domain=args.argmax_domain,
+        capture_method=args.capture_method,
     )
     credits, _, considered = credits_from_trace(trace, sample, info, pairing=args.pairing)
     print("generated:", repr(tokenizer.decode(generated, skip_special_tokens=True)[:220]), "\n")
@@ -150,10 +192,14 @@ def main() -> int:
     save_fig(plot_attention_distribution(distributions), fig_dir / "retrieval_attention_dist.pdf")
 
     save_json(
-        add_provenance({
+        add_provenance(dtype=args.dtype, payload={
             "model": info.name,
             "pairing": args.pairing,
             "argmax_domain": args.argmax_domain,
+            "capture_method": args.capture_method,
+            "chat_template": not args.no_chat_template,
+            "system_prompt": args.system_prompt,
+            "enable_thinking": True if args.thinking else False,
             "prompt_tokens": sample.length,
             "needle_span": list(sample.needle_span),
             "generated_text": tokenizer.decode(generated, skip_special_tokens=True),

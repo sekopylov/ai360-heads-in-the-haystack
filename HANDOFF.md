@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 222 tests: 205 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
+* 224 tests: 207 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
   the real checkpoints. All green.
 * **The committed artifacts now match the code.** The GPU run was refreshed in two
   jobs on an NVIDIA L4, 75 instances per model:
@@ -49,6 +49,41 @@ tied to a job id) → this file (where things stand and what is left).
   exact-match, recall, prefix-recall and the *generated texts*) and the same for
   each random trial, so a specific failure can be inspected from the artifact
   instead of only its mean.
+* **Review round (the third report), verified against the code:**
+  * **The pairing invariant was wrong on the EOS path** (the common one).  A step is
+    recorded after the EOS check, so the last *recorded* decode step always predicted
+    a token that was never fed; the re-scoping was conditioned on `not
+    stopped_on_eos`, so only the truncation path was fixed.  Rows are now scoped by
+    what actually happened: the last decode row is `same_step`-only, and the prefill
+    row is `next_step` only if something was generated at all (an immediate EOS means
+    nothing was).  The test now asserts `len(stream) == len(generated)` for both
+    exits.
+  * `require_matching_scores` compared only layer/head geometry, which a base model
+    and its chat variant share -- the Sec. 4.3 case.  It now also checks
+    `hidden_size`, `model_class` and `num_kv_heads`, and warns (not fails) on a name
+    mismatch, since a job's paths legitimately differ.
+  * `credits_from_trace` silently dropped attention rows beyond the metadata's head
+    count (`min`); it now refuses a mismatch in either direction.
+  * The control pool is a *cap* on the retrieval arm: at the hybrid's last point the
+    random arm drew the whole 15-head pool.  `control_exhausted` marks such points in
+    the artifact and the summary table, and `random_distinct` records how many
+    control subsets were actually distinct (they are now drawn without repetition).
+  * `case_study.py` ignored every recorded condition except the argmax domain; it now
+    takes `--scores <detect dir>` and reuses `chat_template`, `system_prompt`,
+    `enable_thinking`, `capture_method` (plus `--dtype`, which was not even recorded).
+  * `aligned_ranking` reports `n`/`n_missing`; the ablation records truncation; the
+    dead `ids[-1] not in eos` clause is gone (`greedy_ids` never appends the stop
+    token, so a full-length output *is* the budget signal); `[list(layers)] * n`
+    aliased one list; the summarizer no longer loses the schema check silently in an
+    environment without torch (it loads `provenance.py` by path and warns); the pie
+    figure now labels both boundaries (the run's threshold and the paper's >0.5);
+    and the docs no longer imply `figures` writes `retrieval_attention_dist.pdf`
+    (that is `case_study.py`, which is in no stage).
+  * Documented rather than hidden: `ds-results/` was written at `abbfc3c`, so it
+    lacks the additive fields added since (truncation counters, `control_exhausted`,
+    `random_distinct`) -- no number changes, and a `mask` re-run would add them.
+  * Not done: a 2-3-needle ablation grid (GPU run) and splitting
+    `test_regressions.py` by topic.
 * **Review round (the second report), verified against the code:**
   * `case_study.py` passed `--argmax-domain` to `find_copy_step` (the figure) but not
     to `decode_with_attention` (the capture the credits come from), so with `full`
@@ -496,7 +531,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 222 passed (205 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 224 passed (207 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

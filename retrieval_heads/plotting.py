@@ -14,6 +14,10 @@ Figure map (paper name -> function):
     fig_extractqa_head_case         -> plot_task_qa
     fig_task_cot / fig_case_cot     -> plot_task_cot
     token-mixer ablation            -> plot_mixer_ablation
+
+Every figure above except `fig_retrieval_attention_dist` is written by the `figures`
+stage; that one needs a captured attention row, so `scripts/case_study.py` produces
+it (and is not part of the stage list).
 """
 
 from __future__ import annotations
@@ -118,6 +122,11 @@ def plot_score_pie(scores_by_model: Mapping[str, RetrievalScores],
             f"weak (0, {thr}]\n{frac['low']['n']} ({values[1] * 100:.1f}%)",
             f"zero\n{frac['zero']['n']} ({values[2] * 100:.1f}%)",
         ]
+        # The paper's Fig. 2 caption states "less than 5% of heads" via score > 0.5,
+        # not via the run's own threshold, so the panel carries both boundaries: a
+        # reader comparing the two should not have to guess which one the caption used.
+        n_total = max(scores.info.n_scoreable_heads, 1)
+        n_half = len(scores.heads_above(0.5))
         if sum(values) <= 0:
             # matplotlib rejects an all-zero pie; say so instead of raising.
             ax.pie([1.0], labels=["no finite scores"], colors=[PALETTE[0]],
@@ -132,6 +141,7 @@ def plot_score_pie(scores_by_model: Mapping[str, RetrievalScores],
         title = f"{name}\n{scores.info.n_scoreable_heads} scoreable heads"
         if scores.info.is_hybrid:
             title += f" / {len(scores.info.linear_layers)} linear layers"
+        title += f"\n>0.5 (the paper's caption): {n_half} ({100 * n_half / n_total:.1f}%)"
         ax.set_title(title, fontsize=8)
     for ax in axes.ravel()[n:]:
         ax.axis("off")

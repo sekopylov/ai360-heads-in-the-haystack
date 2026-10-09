@@ -189,10 +189,28 @@ def test_eager_capture_and_sdpa_prefill_agree_on_positions(tiny_hybrid):
 def test_prefill_and_capture_really_use_different_kernels(tiny_hybrid, monkeypatch):
     """Comparing positions is not enough: a no-op switch would agree too.
 
-    transformers reads `config._attn_implementation` at forward time, so this spies
-    on the implementation in effect for the multi-token prefill body versus the
-    single-token capture steps.
+    Two things are checked, because they are two different claims:
+    * `transformers` reads `config._attn_implementation` at forward time, so a spy
+      records which implementation was in effect for the multi-token prefill body
+      versus the single-token capture steps;
+    * the capture-by-monkeypatch path only works while `"eager"` is *not* a
+      registered key in `ALL_ATTENTION_FUNCTIONS`: the call site passes
+      `eager_attention_forward` as the default, so an unregistered name resolves to
+      that module-global -- which is what `AttentionRecorder` patches.  If upstream
+      ever registers `"eager"`, this fails loudly instead of the recorder silently
+      capturing nothing.
     """
+    from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+    sentinel = lambda *args, **kwargs: None  # noqa: E731 - identity only
+    assert ALL_ATTENTION_FUNCTIONS.get_interface("eager", sentinel) is sentinel, (
+        "`eager` is now a registered kernel, so the monkeypatch capture no longer "
+        "intercepts the call"
+    )
+    assert ALL_ATTENTION_FUNCTIONS.get_interface("sdpa", sentinel) is not sentinel, (
+        "`sdpa` must resolve to a real kernel for the prefill/capture split to differ"
+    )
+
     model, info = tiny_hybrid
     ids = _ids(length=24)
     seen: list[tuple[int, str]] = []

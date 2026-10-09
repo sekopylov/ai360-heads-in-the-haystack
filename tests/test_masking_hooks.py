@@ -249,7 +249,10 @@ def test_decode_with_attention_emits_the_next_step_prefill_row(monkeypatch):
             return Output(logits, int(past_key_values or 0) + int(input_ids.shape[1]))
 
     model = StubModel()
-    info = attention_info(None)  # modules are never touched: the recorder is stubbed
+    # The stub recorder below emits one attention row per layer, so the metadata must
+    # say one head: `credits_from_trace` now refuses a trace whose row count and
+    # metadata disagree instead of silently dropping the extra rows.
+    info = attention_info(None, heads=1)
 
     def make_recorder(m, i, method="output_attentions"):
         class Recorder:
@@ -302,6 +305,22 @@ def test_decode_with_attention_emits_the_next_step_prefill_row(monkeypatch):
                                                      tokenizer=None)
     assert eos_generated == []
     assert eos_trace.stopped_on_eos is True
+    # The EOS path has the same shape as the truncation path: the last *recorded*
+    # step predicted the token that stopped the loop, and that token was never fed,
+    # so it must not be scored as `next_step`.  This used to be conditioned on
+    # `not stopped_on_eos`, leaving the common path with a `next_step` stream one
+    # token longer than `generated`.
+    # Nothing was generated (the very first fed token was EOS), so the prefill row
+    # is not `next_step` either -- no row may claim to predict a token that was
+    # never emitted.
+    assert [s.applies_to for s in eos_trace.steps] == [()]
+    for trace_i, generated_i in ((eos_trace, eos_generated), (trace, generated)):
+        for pairing in ("next_step", "same_step"):
+            scored = [s for s in trace_i.steps
+                      if s.applies_to is None or pairing in s.applies_to]
+            stream = ([s.predicted_token for s in scored] if pairing == "next_step"
+                      else [s.fed_token for s in scored])
+            assert len(stream) == len(generated_i), (pairing, stream, generated_i)
     model.config.eos_token_id = None
 
 

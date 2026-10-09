@@ -253,7 +253,11 @@ class DetectionRun:
         if n == 0:
             return []
         ranked = sorted(totals.items(), key=lambda kv: (-kv[1] / n, kv[0].layer, kv[0].head))
-        return [{"head": str(head), "aligned_score": value / n} for head, value in ranked[:top_k]]
+        # The mean is over the instances that *have* an aligned row, which is a
+        # subset; without the counts it is indistinguishable from a mean over all.
+        return [{"head": str(head), "aligned_score": value / n,
+                 "n": n, "n_missing": len(self.instances) - n}
+                for head, value in ranked[:top_k]]
 
     def summary(self, scores: RetrievalScores | None = None) -> dict[str, Any]:
         """Run-level summary; ``scores`` selects the pairing (default: primary)."""

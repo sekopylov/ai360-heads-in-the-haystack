@@ -93,12 +93,27 @@ def require_matching_scores(scores, info) -> None:
         )
     if saved.num_heads != info.num_heads:
         problems.append(f"heads per layer {saved.num_heads} != {info.num_heads}")
+    if saved.num_kv_heads != info.num_kv_heads:
+        problems.append(f"kv heads {saved.num_kv_heads} != {info.num_kv_heads}")
+    if saved.hidden_size != info.hidden_size:
+        # A base model and its chat/fine-tuned variant share every field above, so
+        # without these two the Sec. 4.3-style comparison would silently mask heads
+        # chosen on the other checkpoint.
+        problems.append(f"hidden_size {saved.hidden_size} != {info.hidden_size}")
+    if saved.model_class != info.model_class:
+        problems.append(f"model_class {saved.model_class!r} != {info.model_class!r}")
     if problems:
         raise SystemExit(
             f"the saved scores in --out are from {saved.name!r}, not {info.name!r} "
             f"({'; '.join(problems)}). Re-run `detect` for this model, or point --out at "
             f"its own results directory."
         )
+    if saved.name != info.name:
+        # Names differ legitimately (a registry key vs a raw path), and in a job the
+        # weights live under /job/models/..., so this is a warning, not a failure.
+        log.warning("the saved scores are labelled %r while --model resolved to %r; "
+                    "the geometry matches, so this is probably the same checkpoint "
+                    "under two names", saved.name, info.name)
 
 
 @dataclass

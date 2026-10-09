@@ -40,15 +40,43 @@ def load(path: Path) -> Any | None:
         return None
     # Every artifact goes through here, so this is the one place that can warn that
     # correlation.json / overlap.json / summaries predate the current schema.
-    try:
-        from retrieval_heads.provenance import warn_if_stale
-    except ImportError:  # pragma: no cover - the repo root is added below
+    warn_if_stale = _load_warn_if_stale()
+    if warn_if_stale is None:
+        log.warning("%s was NOT checked against the current schema: "
+                    "retrieval_heads.provenance is unimportable here", path)
         return payload
     try:
         warn_if_stale(payload, str(path), log=log)
     except TypeError:  # pragma: no cover - an older warn_if_stale signature
         log.warning("%s could not be checked against the current schema", path)
     return payload
+
+
+def _load_warn_if_stale():
+    """`warn_if_stale` without importing the package (which pulls in torch).
+
+    `import retrieval_heads.provenance` runs `retrieval_heads/__init__.py`, which
+    imports `models` -> torch + transformers.  In an environment without torch that
+    raised ImportError and the schema check was skipped *silently* -- exactly the
+    check whose absence this script exists to report.  `provenance.py` itself only
+    needs the standard library, so load it by path as a fallback.
+    """
+    try:
+        from retrieval_heads.provenance import warn_if_stale
+
+        return warn_if_stale
+    except ImportError:
+        pass
+    try:
+        import importlib.util
+
+        path = REPO_ROOT / "retrieval_heads" / "provenance.py"
+        spec = importlib.util.spec_from_file_location("_rh_provenance", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.warn_if_stale
+    except Exception:  # noqa: BLE001 - never break the summarizer
+        return None
 
 
 def at(seq: Any, index: Any, default: Any = None) -> Any:
@@ -217,11 +245,19 @@ def masking_section(root: Path, keys: list[str]) -> list[str]:
             retrieval = fmt(at(curve.get("retrieval"), i), 1)
             if std:
                 retrieval += f" ±{fmt(std, 1)}"
+            # `control_exhausted` marks a point where the random arm drew the whole
+            # sub-threshold pool, i.e. an unmatched comparison; it must not be read
+            # like the others.
+            if at(curve.get("control_exhausted", []) or [], i):
+                label += " ⚠"
             out.append(
                 f"| {curve.get('model', key)} | {label} | {100 * eff / n_heads:.1f}% "
                 f"| {retrieval} | {fmt(exact, 1)} "
                 f"| {fmt(at(curve.get('random_mean'), i), 1)} | {fmt(rand_exact, 1)} |"
             )
+        if any(curve.get("control_exhausted") or []):
+            out.append("| | _⚠ = the retrieval arm hit the control-pool size, so the "
+                       "random arm drew the whole pool (unmatched)_ | | | | | |")
         out.append(f"| | baseline | | {fmt(curve.get('baseline'), 1)} "
                    f"| {fmt(curve.get('baseline_exact_match'), 1)} | | |")
         n_samples = curve.get("n_samples")

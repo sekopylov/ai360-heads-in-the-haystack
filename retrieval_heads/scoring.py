@@ -283,17 +283,24 @@ def decode_with_attention(
             restore_attn_implementation(model, restore_capture)
     finally:
         restore_attn_implementation(model, restore)
-    if not trace.stopped_on_eos and any(step.step >= 0 for step in trace.steps):
-        # The loop ran out of budget: the final *decode* step predicted a token that
-        # was never emitted.  next_step would credit that hypothetical token; scope
-        # the step to same_step (whose `fed_token` is the real last token) so both
-        # pairings cover exactly the generated stream.  The `any(step.step >= 0)`
-        # guard is belt-and-braces: max_new_tokens <= 0 is rejected up front, so the
-        # prefill row can never be the only step here.
-        for step in reversed(trace.steps):
-            if step.applies_to is None:
-                step.applies_to = ("same_step",)
-                break
+    # Scope every row by what was actually generated, not by which way the loop
+    # exited.  A row is `next_step`-valid only if the token it predicted was really
+    # fed, and `same_step`-valid only if the token it consumed was really generated:
+    #   * the prefill row predicts the first generated token -- unless the model
+    #     stopped immediately, when nothing was generated at all;
+    #   * a decode row predicts the following token, except the last one, whose
+    #     prediction was never fed: either the budget ran out or it was the EOS that
+    #     broke the loop.  Conditioning this on `not stopped_on_eos` (as it was) left
+    #     the common EOS path with a `next_step` stream one token longer than
+    #     `generated`;
+    #   * every decode row consumed a generated token, so each stays valid for
+    #     `same_step` (the last one *only* for `same_step`).
+    decode_steps = [step for step in trace.steps if step.step >= 0]
+    for index, step in enumerate(decode_steps):
+        step.applies_to = ("same_step",) if index + 1 == len(decode_steps) else None
+    for step in trace.steps:
+        if step.step < 0:
+            step.applies_to = ("next_step",) if decode_steps else ()
     return trace, generated
 
 
@@ -382,27 +389,28 @@ def credits_from_trace(
                 # which can include a module (e.g. a vision tower) this model does
                 # not score.  Skip it rather than KeyError.
                 continue
-            heads = min(info.num_heads[layer], argmax.shape[0])
+            # Symmetric check: `min()` used to drop extra rows silently when the
+            # capture reported more heads than the metadata (the recorder validates
+            # equality at capture time, so a mismatch here means a hand-built trace).
+            n_heads = info.num_heads[layer]
+            if argmax.shape[0] != n_heads:
+                raise ValueError(
+                    f"layer {layer} reported {argmax.shape[0]} attention rows but the "
+                    f"model metadata says {n_heads}; the capture and the model "
+                    f"disagree, and this cannot change mid-run"
+                )
             counts = considered_t.get(layer)
             if counts is None:
-                counts = torch.zeros(heads, dtype=torch.long)
+                counts = torch.zeros(n_heads, dtype=torch.long)
                 considered_t[layer] = counts
-            elif counts.numel() != heads:
-                # Silently reallocating here used to drop everything counted so far
-                # (and `sink_t` would then fail on a shape mismatch anyway), so say
-                # what happened instead of losing the tally.
-                raise ValueError(
-                    f"layer {layer} reported {heads} heads after {counts.numel()} "
-                    f"in earlier steps; the attention geometry cannot change mid-run"
-                )
             counts += 1
             matched, sink = match_masks(argmax, prompt_ids, token, (start, end),
-                                        sink_position, heads)
+                                        sink_position, n_heads)
             # `setdefault` builds its default eagerly, i.e. one zeros() per layer-step
             # for nothing; the dict lookup does not.
             sink_counts = sink_t.get(layer)
             if sink_counts is None:
-                sink_counts = torch.zeros(heads, dtype=torch.long)
+                sink_counts = torch.zeros(n_heads, dtype=torch.long)
                 sink_t[layer] = sink_counts
             sink_counts += sink.long()
             hits.extend((layer, int(head), token)

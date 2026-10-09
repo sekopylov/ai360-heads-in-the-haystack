@@ -424,6 +424,30 @@ def test_require_matching_scores_rejects_a_foreign_artifact():
         require_matching_scores(foreign, loaded)
 
 
+def test_require_matching_scores_separates_a_base_model_from_its_variant():
+    """A base checkpoint and its chat/fine-tune share layers, heads and head_dim.
+
+    That is exactly the Sec. 4.3 "intrinsic" comparison, and without hidden_size /
+    model_class the ablation would silently mask heads chosen on the other one.
+    """
+    import dataclasses
+
+    from retrieval_heads.cli import require_matching_scores
+
+    base_info = attention_info(2, 2)
+    loaded = dataclasses.replace(base_info, name="chat", hidden_size=base_info.hidden_size * 2)
+    matching = RetrievalScores(info=base_info, score=torch.zeros(2, 2),
+                               activation_freq=torch.zeros(2, 2), n_instances=1)
+    with pytest.raises(SystemExit, match="hidden_size"):
+        require_matching_scores(matching, loaded)
+
+    variant = dataclasses.replace(base_info, name="base", model_class="OtherForCausalLM")
+    matching = RetrievalScores(info=variant, score=torch.zeros(2, 2),
+                               activation_freq=torch.zeros(2, 2), n_instances=1)
+    with pytest.raises(SystemExit, match="model_class"):
+        require_matching_scores(matching, loaded)
+
+
 def test_within_context_limit_drops_extrapolated_lengths():
     from retrieval_heads.cli import within_context_limit
 
