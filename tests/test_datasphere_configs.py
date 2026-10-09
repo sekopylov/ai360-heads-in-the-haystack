@@ -155,7 +155,7 @@ def test_outputs_are_declared_where_results_are_written(configs):
 #: Configs that must run on a GPU.  Listed explicitly: the previous condition
 #: tested the file *name* for "gt4", so `t4.yaml` was skipped by its own check.
 GPU_CONFIGS = {"t4.yaml", "t4-smoke.yaml", "t4-cached.yaml", "t4-bootstrap.yaml",
-               "t4-venv.yaml", "paper.yaml"}
+               "t4-venv.yaml", "paper.yaml", "a100.yaml"}
 
 
 def test_gpu_configs_request_a_gpu_shape(configs):
@@ -188,3 +188,30 @@ def test_the_disk_audit_job_is_strictly_read_only(configs):
         assert "--stages" not in cmd
         assert not (config.get("outputs") or []), f"{name} declares outputs"
         assert "--bootstrap-venv" not in cmd, f"{name} could create a venv"
+
+
+def test_a100_profile_prefills_in_one_shot_and_keeps_the_paper_grid():
+    """`--prefill-chunk 0` is the point of the A100 config: 80 GB needs no chunking.
+
+    Chunking bounds peak memory on a 22 GiB L4; at 49K in 4096-token chunks it costs
+    12 forward passes per prompt instead of one.  The grid must stay the `paper` one,
+    or the A100 numbers would not be comparable to the L4's.
+    """
+    from pathlib import Path
+
+    driver = load_job_driver()
+    assert "a100" in driver.SCALES, sorted(driver.SCALES)
+
+    for stage in ("detect", "mask", "qa", "cot"):
+        argv = driver.stage_argv(stage, profile="a100", models=["m"],
+                                 prefix=Path("ds"), seed=0)[0]
+        assert "--prefill-chunk" in argv, (stage, argv)
+        assert argv[argv.index("--prefill-chunk") + 1] == "0", (stage, argv)
+
+    def lengths(profile: str) -> list[str]:
+        argv = driver.SCALES[profile]["detect"]
+        start = argv.index("--lengths") + 1
+        return [token for token in argv[start:] if not token.startswith("--")]
+
+    assert lengths("a100") == lengths("paper"), "the A100 grid drifted from `paper`"
+

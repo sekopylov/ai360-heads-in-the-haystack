@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 226 tests: 209 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
+* 227 tests: 210 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
   the real checkpoints. All green.
 * **The committed artifacts now match the code.** The GPU run was refreshed in two
   jobs on an NVIDIA L4, 75 instances per model:
@@ -40,6 +40,13 @@ tied to a job id) → this file (where things stand and what is left).
 * `configs/datasphere/t4-venv.yaml` refreshes the venv without running any stage, and
   `configs/datasphere/cuda-probe.yaml` is a read-only `--inspect-dir` job that shows
   what the image and the venv contain (it is how the single 11.8 toolkit was found).
+* **`configs/datasphere/a100.yaml` is ready for the A100** (g2.1 only, no fallback):
+  the `paper` grid with `--prefill-chunk 0` on every generating stage, carried by the
+  new `a100` scale in the driver.  Chunking exists to bound peak memory on a 22 GiB L4;
+  at 49K it costs 12 forward passes per prompt instead of one, which 80 GB does not
+  need.  Price check (RU, incl. VAT): L4 234.00 RUB/h vs A100 542.88 RUB/h, i.e. 2.32x
+  -- so the A100 buys wall clock, and only long-context runs can pay for it.  Order of
+  operations: validate on the L4 `t4` grid, then launch this.
 * **Each model is now loaded once per run.** The driver executes a model's stages
   back to back in one process (`stage_plan`, model-major) and `cli._load` keeps
   exactly one resident model, evicting the previous one; a full run used to load
@@ -583,7 +590,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 226 passed (209 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 227 passed (210 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

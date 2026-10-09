@@ -122,7 +122,11 @@ Artifacts and logs come back with
 
 `configs/datasphere/` also holds `t4.yaml` (cacheless fallback), `t4-resume.yaml`
 (only `qa,cot,compare,figures`, reusing a finished run's detect/mask artifacts via
-`local-paths`), `laptop.yaml`, `paper.yaml` and `smoke.yaml`.  Everything non-obvious about this path — the pip
+`local-paths`), `t4-venv.yaml` (refresh the project-disk venv, run no stage),
+`cuda-probe.yaml` (read-only `--inspect-dir` audit), `a100.yaml` (the `paper` grid on
+one A100 with the prefill fed in one shot — `--prefill-chunk 0`; the A100 costs 2.32x
+the L4 per hour, so it is for long-context runs, not for iteration), `laptop.yaml`,
+`paper.yaml` and `smoke.yaml`.  Everything non-obvious about this path — the pip
 crash that shapes the requirements file, the `cmd` grammar, why the cached venv
 cannot be the entry point, what the "T4" slot actually hands out — is written up
 in [`docs/datasphere-findings.md`](docs/datasphere-findings.md).

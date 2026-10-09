@@ -71,6 +71,23 @@ SCALES: dict[str, dict[str, list[str]]] = {
         "qa": ["--k-frac", "0.04", "0.08", "0.17", "--random-trials", "5"],
         "cot": ["--k-frac", "0.08", "--random-trials", "3", "--max-new-tokens", "256"],
     },
+    #: Single A100 (g2.1, 80 GB).  Same grid as `paper` -- so the numbers stay
+    #: comparable -- but every generating stage prefills in **one shot**
+    #: (`--prefill-chunk 0`).  Chunking exists to bound peak memory at O(chunk^2) on a
+    #: 22 GiB L4; on 80 GB it is pure overhead, because each chunk boundary costs an
+    #: extra forward pass over the prompt (at 49K that is 12 passes instead of 1).
+    "a100": {
+        "detect": ["--profile", "paper", "--prefill-chunk", "0",
+                   "--lengths", "1024", "2048", "4096", "8192", "16384",
+                   "24576", "32768", "40960", "49152"],
+        "mask": ["--k-frac", "0.01", "0.02", "0.04", "0.08", "0.17", "0.33",
+                 "--lengths", "4096", "8192", "16384", "--random-trials", "5",
+                 "--prefill-chunk", "0"],
+        "qa": ["--k-frac", "0.04", "0.08", "0.17", "--random-trials", "5",
+               "--prefill-chunk", "0"],
+        "cot": ["--k-frac", "0.08", "--random-trials", "3", "--max-new-tokens", "256",
+                "--prefill-chunk", "0"],
+    },
 }
 
 STAGES = ("describe", "detect", "mask", "qa", "cot", "compare", "figures")

@@ -1,0 +1,56 @@
+name: rh-a100
+desc: paper-scale grid on one A100 (g2.1, 80 GB), prefill in one shot (no chunking)
+
+# Why this config
+# ---------------
+# Same grid as `paper.yaml` (9 geometric lengths over 1K-49K, 10 depths, 3 needles),
+# so its numbers are comparable -- but every generating stage prefills in one shot.
+# `--prefill-chunk 4096` exists to bound peak memory on a 22 GiB L4 (a float32 16K
+# prefill OOM'd there, see docs/datasphere-findings.md section 18); on 80 GB it only
+# adds forward passes: 49K in 4096-token chunks is 12 prefills per prompt instead of
+# one.  The `a100` scale in scripts/datasphere_job.py carries that flag for all four
+# generating stages.
+#
+# What it costs (Russia, incl. VAT, from the DataSphere pricing page):
+#   gt4i.1 (L4)  234.00 RUB/hour
+#   g2.1  (A100) 542.88 RUB/hour   -- 2.32x the L4
+# so this is worth launching when wall clock matters or when the long contexts
+# dominate, and the t4 grid on the L4 is the right place to validate a change first.
+#
+# Prerequisites, both already done:
+#   * the project-disk venv has flash-linear-attention (configs/datasphere/t4-venv.yaml)
+#     -- without it the hybrid's 18 linear layers run the reference PyTorch path;
+#   * `torch arch list` includes sm_80 and the SDPA flash backend works, which the
+#     venv job's own log reports.
+
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages describe,detect,mask,qa,cot,compare,figures --out-prefix ds-results-a100
+
+flags:
+  - attach-project-disk
+
+inputs:
+  - models:
+      var: WEIGHTS
+
+outputs:
+  - ds-results-a100
+
+env:
+  vars:
+    PYTORCH_ALLOC_CONF: expandable_segments:True
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+
+cloud-instance-types:
+  - g2.1               # 28 vCPU, 1x A100 80 GB
+  # No V100 fallback on purpose: `--prefill-chunk 0` at 49K needs the 80 GB, and bf16
+  # is not natively supported on sm_70, so a V100 would fail rather than degrade.
+  # A chunked run on a smaller card is `paper.yaml`'s job.
