@@ -145,15 +145,25 @@ tied to a job id) → this file (where things stand and what is left).
     are for; the artifact already records `control_exhausted`,
     `random_control_contaminated`, `k_effective` and `random_retrieval_overlap`.  Then
     *measured* it offline instead of leaving it to the preflight (3 instances per model,
-    512 tokens, 96-token budget, CPU fp32, `detect --preflight` into `.tmp/`):
-    dense `haystack` 170/448 (38%) vs `prompt` 34/448 (8%) vs `full` 32/448 (7%), pool
-    278; hybrid 37/48 (77%) / 35/48 (73%) / 31/48 (65%), **pool 11** (13 under
-    `prompt`).  `sink_in_haystack` false for all six; the argmax moved on 90.0% of the
-    dense model's scored positions against 38.8% of the hybrid's.  So the pool shrinks
-    (13 -> 11) but does not vanish, the hybrid's K grid resolves to 1/2/4/8/16 and
-    everything from K=11 is the whole pool, and the dense model's `haystack` share is
-    nowhere near the paper's 3-6% *with a chat template*.  Recorded in the README with
-    the ordering `haystack` ⊇ `prompt` ⊇ `full`, now pinned as a theorem in
+    512 tokens, 96-token budget, CPU fp32, `detect --preflight` into `.tmp/`, with the
+    chat template and without it):
+
+    | model | template | `haystack` >0.1 | `prompt` >0.1 | sink in `x` | recall | pool |
+    |---|---|---|---|---|---|---|
+    | Qwen3-0.6B | yes | 170/448 (38%) | 34/448 (8%) | no | 1.00 | 278 |
+    | Qwen3-0.6B | no | 26/448 (6%) | 18/448 (4%) | yes | 0.55 | 422 |
+    | Qwen3.5-0.8B | yes | 37/48 (77%) | 35/48 (73%) | no | 1.00 | 11 |
+    | Qwen3.5-0.8B | no | 36/48 (75%) | 35/48 (73%) | yes | 1.00 | 12 |
+
+    So: the dense model's 38% is a *template artifact* (6% in the paper's geometry,
+    inside its 3-6% band -- but there the same model recovers only 0.55 of the needle,
+    so that number is measured on a partly-failing model); the hybrid is
+    template-insensitive at 75-77% with recall 1.00 either way, i.e. its non-sparsity
+    is architectural; the pool shrinks (13 -> 11) but does not vanish, and everything
+    from K=11 is the whole pool.  The honest launch plan is therefore **both**
+    geometries (`a100-preflight.yaml` + `a100-preflight-notemplate.yaml`), with the
+    paper-comparable share and the task-success drop both reported.  The ordering
+    `haystack` ⊇ `prompt` ⊇ `full` is pinned as a theorem in
     `test_scoring.py::test_the_three_domains_are_ordered_by_credit` (40 quantised rows,
     ties included), and `summary_*.json` carries `retrieval_pool_by_domain` so the
     preflight answers the pool question without arithmetic.
