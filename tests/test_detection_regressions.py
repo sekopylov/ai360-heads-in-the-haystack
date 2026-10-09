@@ -560,7 +560,11 @@ def test_detection_saves_and_summarises_every_argmax_domain(tmp_path):
         meta={"argmax_domain": "haystack"},
     )
     alt = RetrievalScores(
-        info=info, score=torch.tensor([[0.1, 0.9], [0.0, 0.0]]),
+        # 0.05 rather than a value at the threshold: `head_score` compares a float32
+        # score against the Python float, so a score that *is* float32(0.1) counts as
+        # above 0.1 (it is 0.100000001...).  Both `heads_above` and `sparsity` do that
+        # consistently; the test avoids depending on it.
+        info=info, score=torch.tensor([[0.05, 0.9], [0.0, 0.0]]),
         activation_freq=torch.zeros(2, 2), n_instances=1, pairing="next_step",
         meta={"argmax_domain": "prompt"},
     )
@@ -588,6 +592,13 @@ def test_detection_saves_and_summarises_every_argmax_domain(tmp_path):
     assert overlap["by_domain"]["prompt"]["overlap"] == 0
     assert summary["domain_ranking_overlap"]["primary_domain"] == "haystack"
     assert set(summary["top_heads_by_domain"]) == {"haystack", "prompt"}
+    # The random arm's pool per domain: `mask` draws its control from these heads, so
+    # the number is reported before the expensive stage runs (on the hybrid it can be
+    # small enough that every large-K point collapses into one intervention).
+    pools = summary["retrieval_pool_by_domain"]
+    assert pools["haystack"] == {"threshold": 0.1, "n_heads": 4,
+                                 "n_above_threshold": 3, "n_pool": 1}, pools
+    assert pools["prompt"]["n_pool"] == 3, pools
 
 
 def _preflight_harness(monkeypatch, *, span_for):

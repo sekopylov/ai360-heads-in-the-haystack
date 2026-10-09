@@ -19,8 +19,14 @@ desc: short A100 preflight -- two lengths, both argmax domains, no mask stage
 #     the set the masking arm masks);
 #   * does the sink sit inside or outside `x` on this prompt?  `sink_in_haystack` says
 #     so, and it is the number that decides whether `--no-chat-template` is needed to
-#     reproduce the paper's geometry (add it to the detect flags below to measure that
-#     variant too -- it is a different prompt, so it cannot be derived from this run).
+#     reproduce the paper's geometry.  That variant is a *different prompt*, so it
+#     cannot be derived from this run: launch
+#     `configs/datasphere/a100-preflight-notemplate.yaml` beside it (identical grid,
+#     `--no-chat-template` on the driver) and compare;
+#   * how big is the random arm's pool per domain (`retrieval_pool_by_domain`)?  `mask`
+#     draws its control from heads at or below the threshold, so a small pool means the
+#     causal curve degenerates -- on the hybrid (48 scoreable heads) the committed
+#     `prompt` domain left 15.
 #
 # Grid: 3 needles x 2 lengths x 10 depths = 60 instances per model, capped by
 # `--limit 60` so the count is explicit.  The full run is `a100.yaml`.

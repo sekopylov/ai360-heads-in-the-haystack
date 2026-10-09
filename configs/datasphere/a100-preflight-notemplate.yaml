@@ -25,9 +25,11 @@ desc: short A100 preflight without the chat template -- the paper's sink geometr
 #   * `sink_in_haystack` -- true here, false in the template-on run;
 #   * `n_instances_recited` / `mean_needle_recall` -- whether the model can still do
 #     the task without the template (it may not, and that is a result, not a bug);
-#   * the random arm's pool: `n_heads - sparsity_by_domain[domain].thresholds['0.1'].n`
-#     (the `mask` stage draws its control from heads at or below the threshold, so a
-#     small pool means the causal curve degenerates -- see `a100.yaml`).
+#   * `retrieval_pool_by_domain` -- the random arm's pool (heads at or below the
+#     threshold) per domain.  `mask` draws its control from it, so a small pool means
+#     the causal curve degenerates: every K above it collapses into the same
+#     intervention.  On the hybrid (48 scoreable heads) the committed `prompt` domain
+#     left 15; the `haystack` share can only shrink it further.
 #
 # Grid and cost are the same as the template-on preflight: 3 needles x 2 lengths x 10
 # depths = 60 instances per model, capped by `--limit 60`.

@@ -259,6 +259,31 @@ class DetectionRun:
                 out[domain] = agg
         return out
 
+    def retrieval_pool(self, scores: RetrievalScores | None = None
+                       ) -> dict[str, dict[str, Any]]:
+        """Heads at or below the run's threshold, per argmax domain.
+
+        This is the pool `mask` draws its random arm from, so it is the number that
+        decides whether the causal curve can be a curve at all: on the hybrid (48
+        scoreable heads) 33 above 0.1 under the committed `prompt` domain left 15, and
+        a domain that raises the >0.1 share can shrink it to the point where every K
+        above the pool collapses into the same intervention.  It is reported in the
+        summary because the launch decision (domain, threshold, K set) is made from
+        that summary, not from the `mask` artifact that does not exist yet.
+        """
+        scores = scores or self.scores
+        out: dict[str, dict[str, Any]] = {}
+        for domain, agg in self.domain_aggregates(scores).items():
+            above = sum(1 for head in agg.info.scoreable_heads
+                        if agg.head_score(head) > agg.threshold)
+            out[domain] = {
+                "threshold": agg.threshold,
+                "n_heads": agg.info.n_scoreable_heads,
+                "n_above_threshold": above,
+                "n_pool": agg.info.n_scoreable_heads - above,
+            }
+        return out
+
     def domain_ranking_overlap(self, scores: RetrievalScores | None = None,
                                top_k: int = 10) -> dict[str, Any]:
         """How many of the primary domain's top heads survive under each domain.
@@ -447,6 +472,9 @@ class DetectionRun:
                 for domain, agg in self.domain_aggregates(scores).items()
             },
             "domain_ranking_overlap": self.domain_ranking_overlap(scores),
+            # The random arm's pool per domain: what `mask` will draw its control from,
+            # and therefore whether that curve can separate the arms on this model.
+            "retrieval_pool_by_domain": self.retrieval_pool(scores),
             "aligned_top_heads": self.aligned_ranking(scores),
             "n_planned": self.n_planned,
             "model_info": self.model_info.as_dict(),
