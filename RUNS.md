@@ -1210,6 +1210,37 @@ results/new/qwen3_mask/groups20/   20 случайных целыми групп
     results/new/qwen3_mask_attention_mass/top20
 ```
 
+### 8.10. То же для второго файла метрики
+
+Рейтинг из `data/head_scores/head_scores_needle_attention_mass_v1_2.json` (второй файл Михаила с тем же исходным именем, значения другие). Всё остальное как в 8.9, папка результата своя.
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file data/head_scores/head_scores_needle_attention_mass_v1_2.json \
+    --mask_top 20 \
+    --out results/new/qwen3_mask_attention_mass_2/top20 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_attention_mass_2_top20.log
+```
+
+Сравнение всех четырёх прогонов:
+
+```python
+!cd .. && .venv_new/bin/python -m rh.sweep \
+    results/new/qwen3_mask/none \
+    results/new/qwen3_mask/top20 \
+    results/new/qwen3_mask_attention_mass/top20 \
+    results/new/qwen3_mask_attention_mass_2/top20
+```
+
 ## 9. Известные особенности
 
 - Перед первым запуском нужна папка `logs/`: без неё `tee` завершается с ошибкой, и ячейка падает уже после прогона.
