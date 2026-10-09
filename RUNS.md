@@ -631,69 +631,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 
 Если прогон прервался, та же команда продолжит с места остановки: примеры, которые уже есть в `samples.jsonl`, пропускаются.
 
-### 8.3. Маскирование
-
-Оценочная игла (`data/needles_eval.jsonl`), 20 длин × 10 глубин = 200 примеров на запуск. Внимание не сохраняется (`--save none`), только ответы. Головы берутся из детекции.
-
-Без маски:
-
-```python
-!mkdir -p logs
-!cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
-    --task niah \
-    --needles data/needles_eval.jsonl \
-    --s_len 1000 \
-    --e_len 30000 \
-    --context_intervals 20 \
-    --save none \
-    --out results/new/qwen3_mask_none \
-    --with_metrics \
-    2>&1 | tee source/logs/run_qwen3_mask_none.log
-```
-
-Лучшие головы:
-
-```python
-!mkdir -p logs
-!cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
-    --task niah \
-    --needles data/needles_eval.jsonl \
-    --s_len 1000 \
-    --e_len 30000 \
-    --context_intervals 20 \
-    --save none \
-    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
-    --mask_top 60 \
-    --out results/new/qwen3_mask_top60 \
-    --with_metrics \
-    2>&1 | tee source/logs/run_qwen3_mask_top60.log
-```
-
-Случайные головы (вне 100 лучших, одни и те же на весь прогон):
-
-```python
-!mkdir -p logs
-!cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
-    --task niah \
-    --needles data/needles_eval.jsonl \
-    --s_len 1000 \
-    --e_len 30000 \
-    --context_intervals 20 \
-    --save none \
-    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
-    --mask_random 60 \
-    --seed 0 \
-    --out results/new/qwen3_mask_random60 \
-    --with_metrics \
-    2>&1 | tee source/logs/run_qwen3_mask_random60.log
-```
-
-Число голов задаётся в штуках, а сравнивать модели нужно в долях: у Qwen3-8B 1152 головы, 60 — это около 5%; у Qwen1.5-14B-Chat 1600 голов, 5% — это 80. Для каждого значения и каждого seed нужна своя папка `--out`.
-
-### 8.4. Что сохраняется и сколько это занимает
+### 8.3. Что сохраняется и сколько это занимает
 
 `--save` задаёт, что прогон пишет на каждый шаг генерации:
 
@@ -707,7 +645,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 
 В режиме `rows` ответ в 50 токенов на 30000 токенов контекста — это около 3,5 ГБ на пример; ответ в 2000 токенов — около 140 ГБ. С окном это помещается на диск, но время прогона определяется скоростью записи. Для длинных ответов режим по умолчанию — `compact`.
 
-### 8.5. Метрики отдельно от прогона
+### 8.4. Метрики отдельно от прогона
 
 `--with_metrics` только запускает второй процесс. То же вручную, в любой момент и сколько угодно раз:
 
@@ -731,7 +669,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 
 Метрики голов: `copy_count` — скор как в коде авторов, `copy_recall` — как в статье, `needle_mass` — средняя доля внимания на ответ в игле.
 
-### 8.6. Если прогон прервался
+### 8.5. Если прогон прервался
 
 Достаточно запустить ту же команду ещё раз, с тем же `--out`. Единица возобновления — пример:
 
@@ -740,11 +678,13 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 - пример, на котором прогон оборвался, удаляется из `spool` и генерируется с начала: продолжить генерацию с середины нельзя, кэш модели не сохраняется;
 - пример, на котором оборвались метрики, тоже генерируется заново: прочитанные части уже удалены, а накопленное состояние метрик было только в памяти.
 
+У каждого прогона своя папка `--out`. Имена примеров повторяются между прогонами (`n0_len1000_d0` есть и в детекции, и в маскировании), поэтому запуск с другими настройками в уже занятую папку пропустил бы все примеры как готовые. Теперь такой запуск отклоняется сразу, до загрузки модели, с перечнем отличающихся настроек. Те же настройки — это продолжение прогона, оно разрешено.
+
 Одну папку `--out` должен писать один прогон. Второй одновременный прогон в ту же папку примет файлы первого за остатки прерванного и удалит их.
 
 Метрики с `--follow` останавливаются сами, если прогон завершился с ошибкой, а при жёстком обрыве — через час без новых данных (`--idle_timeout`).
 
-### 8.7. Сверка конвейера с кодом, прошедшим сверку, на малом тесте Qwen3-8B
+### 8.6. Сверка конвейера с кодом, прошедшим сверку, на малом тесте Qwen3-8B
 
 Один и тот же малый тест (18 примеров) двумя способами: проверенным кодом `rh.verify.detect` и конвейером. Оба строят одинаковые входы и считают одним вычислительным путём.
 
@@ -776,11 +716,11 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 
 Прежний прогон `results/new/qwen3_test` для этого сравнения не годится: он сделан до того, как порядок чтения файлов текста был закреплён сортировкой, и его контексты могут отличаться.
 
-### 8.8. Лимит длины ответа: один прогон, все лимиты
+### 8.7. Лимит длины ответа: один прогон, все лимиты
 
 Прогон генерирует до конца ответа, но не дольше `--max_new_tokens` (по умолчанию 256). Метрики попутно считают всё так, как если бы генерацию обрезали на каждом из лимитов `--limits` (по умолчанию 50, 64, 128, 256): ответ, ROUGE, признак обрезки и метрики голов по первым N токенам. Отдельных прогонов под каждый лимит не нужно.
 
-Ячейки запуска из 8.1–8.3 менять не требуется, это поведение по умолчанию.
+Ячейки запуска менять не требуется, это поведение по умолчанию.
 
 Таблица по лимитам, без GPU и без модели:
 
@@ -800,31 +740,62 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 
 На что смотреть при выборе: наименьший лимит, при котором `truncated` близко к нулю, а порядок голов уже не отличается от самого большого. Число ответов, упёршихся в предел 256, есть в сводке прогона (`truncated_at_cap`).
 
-### 8.9. Перебор числа отключённых голов
+### 8.8. Маскирование
 
-Оценочная игла, 200 примеров на запуск, внимание не сохраняется. Головы — из детекции (`results/new/qwen3_detect`).
+Запускается после детекции (8.2): головы берутся из готового файла `results/new/qwen3_detect/head_score_copy_count.json`.
 
-Число голов: 20, 40, 60, 80, 100, 120 — это от 1,7% до 10,4% из 1152 голов Qwen3-8B. Все значения кратны 4, размеру группы голов с общими ключами и значениями.
+Это отдельные прогоны на другой игле (`data/needles_eval.jsonl`, про Сан-Франциско), 20 длин × 10 глубин = 200 примеров на запуск. Внимание не сохраняется (`--save none`), считаются только ответы.
 
-Три вида маски на каждое число:
+**Куда ложатся результаты.** Все прогоны с маской лежат в одной папке, по подпапке на прогон, отдельно от детекции:
 
-| Вид | Аргумент | Какие головы |
+```
+results/new/qwen3_detect/          детекция: скоры голов (уже посчитана, сюда ничего не пишем)
+results/new/qwen3_mask/none/       без маски — точка отсчёта
+results/new/qwen3_mask/top20/      20 лучших голов
+results/new/qwen3_mask/random20/   20 случайных россыпью
+results/new/qwen3_mask/groups20/   20 случайных целыми группами
+...
+```
+
+Запуск в занятую папку с другими настройками отклоняется сразу, с перечнем отличий; с теми же настройками — продолжает прерванный прогон.
+
+**Число голов:** 20, 40, 60, 80, 100, 120 — от 1,7% до 10,4% из 1152 голов Qwen3-8B. Все значения кратны 4, размеру группы голов с общими ключами и значениями.
+
+| Вид маски | Аргумент | Какие головы |
 |---|---|---|
+| без маски | — | никакие |
 | лучшие | `--mask_top K` | первые K голов по скору детекции |
 | случайные россыпью | `--mask_random K` | K случайных голов вне 100 лучших, по всей модели |
 | случайные группами | `--mask_random_groups K` | K/4 случайных групп целиком, без групп, где есть лучшие головы |
 
-Плюс один запуск без маски — ячейка «Без маски» из раздела 8.3 (`results/new/qwen3_mask_none`). Всего 19 запусков. Случайные головы выбираются один раз на запуск, `--seed 0` по умолчанию; для второго набора случайных голов — другой `--seed` и другая папка `--out`.
+Всего 19 запусков. Если времени мало, сначала без маски и 20, 60, 120 голов — это 10 запусков. Случайные головы выбираются один раз на запуск, `--seed 0` по умолчанию; для второго набора — другой `--seed` и другая подпапка, например `random20_s1`.
 
-Если времени мало, сначала 20, 60 и 120: это 10 запусков, и по ним уже видна форма кривой.
-
-Сводная таблица по всем запускам, без GPU:
+**Сводная таблица по всем запускам**, без GPU:
 
 ```python
-!cd .. && .venv_new/bin/python -m rh.sweep results/new/qwen3_mask_*
+!cd .. && .venv_new/bin/python -m rh.sweep results/new/qwen3_mask/*
 ```
 
-С `--limit 128` ответы оцениваются обрезанными на этом лимите.
+Столбцы: вид маски, число голов и затронутых групп, предел ответа, доля успешных, средний ROUGE, доля обрезанных ответов. С `--limit 128` ответы оцениваются обрезанными на этом лимите.
+
+#### Без маски
+
+Запускать первым: с ним сравниваются все остальные.
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --out results/new/qwen3_mask/none \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_none.log
+```
 
 #### Лучшие головы
 
@@ -842,7 +813,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_top 20 \
-    --out results/new/qwen3_mask_top20 \
+    --out results/new/qwen3_mask/top20 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_top20.log
 ```
@@ -861,7 +832,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_top 40 \
-    --out results/new/qwen3_mask_top40 \
+    --out results/new/qwen3_mask/top40 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_top40.log
 ```
@@ -880,7 +851,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_top 60 \
-    --out results/new/qwen3_mask_top60 \
+    --out results/new/qwen3_mask/top60 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_top60.log
 ```
@@ -899,7 +870,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_top 80 \
-    --out results/new/qwen3_mask_top80 \
+    --out results/new/qwen3_mask/top80 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_top80.log
 ```
@@ -918,7 +889,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_top 100 \
-    --out results/new/qwen3_mask_top100 \
+    --out results/new/qwen3_mask/top100 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_top100.log
 ```
@@ -937,7 +908,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_top 120 \
-    --out results/new/qwen3_mask_top120 \
+    --out results/new/qwen3_mask/top120 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_top120.log
 ```
@@ -958,7 +929,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random 20 \
-    --out results/new/qwen3_mask_random20 \
+    --out results/new/qwen3_mask/random20 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_random20.log
 ```
@@ -977,7 +948,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random 40 \
-    --out results/new/qwen3_mask_random40 \
+    --out results/new/qwen3_mask/random40 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_random40.log
 ```
@@ -996,7 +967,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random 60 \
-    --out results/new/qwen3_mask_random60 \
+    --out results/new/qwen3_mask/random60 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_random60.log
 ```
@@ -1015,7 +986,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random 80 \
-    --out results/new/qwen3_mask_random80 \
+    --out results/new/qwen3_mask/random80 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_random80.log
 ```
@@ -1034,7 +1005,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random 100 \
-    --out results/new/qwen3_mask_random100 \
+    --out results/new/qwen3_mask/random100 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_random100.log
 ```
@@ -1053,7 +1024,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random 120 \
-    --out results/new/qwen3_mask_random120 \
+    --out results/new/qwen3_mask/random120 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_random120.log
 ```
@@ -1074,7 +1045,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random_groups 20 \
-    --out results/new/qwen3_mask_groups20 \
+    --out results/new/qwen3_mask/groups20 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_groups20.log
 ```
@@ -1093,7 +1064,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random_groups 40 \
-    --out results/new/qwen3_mask_groups40 \
+    --out results/new/qwen3_mask/groups40 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_groups40.log
 ```
@@ -1112,7 +1083,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random_groups 60 \
-    --out results/new/qwen3_mask_groups60 \
+    --out results/new/qwen3_mask/groups60 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_groups60.log
 ```
@@ -1131,7 +1102,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random_groups 80 \
-    --out results/new/qwen3_mask_groups80 \
+    --out results/new/qwen3_mask/groups80 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_groups80.log
 ```
@@ -1150,7 +1121,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random_groups 100 \
-    --out results/new/qwen3_mask_groups100 \
+    --out results/new/qwen3_mask/groups100 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_groups100.log
 ```
@@ -1169,7 +1140,7 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random_groups 120 \
-    --out results/new/qwen3_mask_groups120 \
+    --out results/new/qwen3_mask/groups120 \
     --with_metrics \
     2>&1 | tee source/logs/run_qwen3_mask_groups120.log
 ```

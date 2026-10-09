@@ -33,6 +33,19 @@ def from_masked_run(path):
     return os.path.exists(run_json) and bool(spool.load_json(run_json).get("block_list"))
 
 
+# arguments that may differ between two starts of the same run
+RESUME_FREE = {"out", "spool", "buffer_gb", "chunk_mb", "with_metrics", "limit", "every"}
+
+
+def settings_conflict(old, new, defaults):
+    """
+    Compares the arguments of a previous start in the same folder with the current ones. Returns the differing
+    arguments as {name: (old, new)}; an argument the previous start did not know counts as its default.
+    """
+    return {k: (old.get(k, defaults.get(k)), v) for k, v in new.items()
+            if k not in RESUME_FREE and old.get(k, defaults.get(k)) != v}
+
+
 def ranked_heads(path):
     """Heads of a head_score file, best first, as [layer, head]."""
     scores = spool.load_json(path)
@@ -101,6 +114,16 @@ if __name__ == "__main__":
     if args.mask_file and from_masked_run(args.mask_file):
         parser.error(f'{args.mask_file} comes from a run with masked heads; the heads must be ranked by a run without a mask')
     spool_dir = args.spool or f"{args.out}/spool"
+
+    # the folder already holds a run: the same settings continue it, other settings would silently skip its samples
+    # (their names repeat between runs) and mix two experiments
+    if os.path.exists(f"{spool_dir}/run.json"):
+        defaults = {k: parser.get_default(k) for k in vars(args)}
+        previous = spool.load_json(f"{spool_dir}/run.json").get("args", {})
+        conflict = settings_conflict(previous, json.loads(json.dumps(vars(args))), defaults)
+        if conflict:
+            parser.error(f"{args.out} holds a run with other settings, choose another --out. Differences (there, here): "
+                         + "; ".join(f"{k}: {a!r} / {b!r}" for k, (a, b) in conflict.items()))
 
     from . import model as rh_model
     enc, model, attn_layers = rh_model.load(args.model_path, args.dtype)
