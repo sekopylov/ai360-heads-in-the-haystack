@@ -83,6 +83,42 @@ tied to a job id) → this file (where things stand and what is left).
   exact-match, recall, prefix-recall and the *generated texts*) and the same for
   each random trial, so a specific failure can be inspected from the artifact
   instead of only its mean.
+* **Review round (the tenth report, pre-A100; the reviewer overran its budget twice and
+  reported from a partial read, so this is a confirmation pass, not a full one):**
+  * **The budget comment understated the dominant cost -- prefills, not just
+    generations.**  Every generation in `mask`/`mixer` is preceded by its own prefill
+    (`evaluate_samples` -> `greedy_generate` -> `prefill_cache` once per sample per
+    configuration), so the unit is "prefill + decode": ~4.35k passes, of which ~3.87k
+    are the 4-16K ablations and only 480 are detect's 1K-49K.  The config now says that,
+    and names `--random-trials 5 -> 3` (~990 passes, ~23%) as the knob instead of the
+    mixer ablation (810 at most).
+  * **The hybrid's last K point is degenerate by construction, and the decision rule is
+    now in the config.**  The random arm comes from the ≤0.1 pool (11-12 heads under
+    `haystack` per the CPU probe), `--k-frac 0.33` resolves to K=16 on 48 heads, and
+    `matched_k` caps both arms at the pool: that point is one deterministic intervention,
+    not a curve point.  Read `retrieval_pool_by_domain` in the preflight; if the pool is
+    under 12, drop `0.33` for that model or mark the `control_exhausted` points as one
+    intervention.  (Already true of the committed tree -- the artifact records
+    `k_effective`, `control_exhausted`, `random_distinct`.)
+  * **The score-matrix memory numbers mixed two bases** (a bf16 figure inside a paragraph
+    about the fp32 fallback).  Corrected to the fp32 fallback with Q-heads: 8192 x 49152
+    x 4 B = 1.61 GB per head, so ~12.9 GB for the hybrid's 8 and ~25.8 GB for the dense
+    model's 16 -- inside 80 GB either way, outside the 22 GiB L4 that OOM'd.  Same fix in
+    `a100.yaml`, the `SCALES` comment and `run-in-datasphere.md`.
+  * **`--limit` warned "debugging sample" even when it cut nothing** -- the preflights
+    pass `--limit 60` for a grid of exactly 60, so the one cheap geometry measurement
+    looked biased.  It warns only on an actual truncation now, with a test.
+  * **Smaller:** `a100.yaml`'s footer still promised `qa,cot` in the resume tail (they
+    are gone from both A100 configs); `plotting.py`'s module docstring still said
+    case-study "is not part of the stage list"; the README now says the case-study PDF
+    lands in `<model>/figures/` (the JSON would otherwise collide between models); and
+    `a100-notemplate.yaml` got the V100 note it was missing, so the controlled pair
+    differs only in the geometry and the prefix.
+  * The reviewer's own §4 confirms the parts I had already verified: scoring against the
+    paper's criteria, both pairings covering exactly the generated stream, the three
+    domains as a reporting decision, the held-out eval needles, matched arms, the
+    bias-free-`o_proj` caveat, the grid arithmetic (270/210, 45/point, 1665/1395/810),
+    the driver's override wiring, dtype isolation, and artifact atomicity.
 * **Review round (the ninth report, pre-A100), verified against the code:**
   * **The launch geometry was the real finding, and it is now a controlled pair.**
     `a100.yaml` pinned `--argmax-domain haystack` *with* the chat template, i.e. the

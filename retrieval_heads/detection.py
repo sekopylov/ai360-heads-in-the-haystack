@@ -199,10 +199,17 @@ class DetectionConfig:
                         "seed": self.seed + zlib.crc32(f"{n_idx}:{length}:{d_idx}".encode()),
                     })
         if self.limit is not None:
+            full = len(items)
             items = items[: self.limit]
-            log.warning("--limit %d keeps the first %d instances in grid order (one needle, "
-                        "shortest lengths); treat this as a debugging sample, not an estimate",
-                        self.limit, len(items))
+            # Only warn when the limit actually cuts something: a preflight that passes
+            # `--limit 60` for a grid of exactly 60 would otherwise log "debugging
+            # sample, not an estimate" about a complete grid.
+            if len(items) < full:
+                log.warning(
+                    "--limit %d keeps the first %d of %d instances in grid order (one "
+                    "needle, shortest lengths); treat this as a debugging sample, not an "
+                    "estimate of the full grid", self.limit, len(items), full,
+                )
         object.__setattr__(self, "_plan_cache", list(items))
         object.__setattr__(self, "_plan_cache_key", key)
         return items

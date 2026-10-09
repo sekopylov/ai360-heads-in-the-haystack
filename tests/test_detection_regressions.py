@@ -381,6 +381,16 @@ def test_detection_config_plan_is_cached(caplog):
     assert len(first) == 1
     assert caplog.text.count("--limit") == 1, "the plan warning was re-logged"
 
+    # A limit equal to the grid is not a subsample: the preflights pass `--limit 60`
+    # for a grid of exactly 60, and a "debugging sample" warning there would make the
+    # one cheap geometry measurement look biased.
+    caplog.clear()
+    exact = DetectionConfig(lengths=[64, 128], depths_per_length=2, needles=[("n", "q")],
+                            limit=4)
+    with caplog.at_level(logging.WARNING):
+        assert len(exact.plan()) == 4
+    assert "--limit" not in caplog.text, caplog.text
+
 
 def test_score_instance_always_records_both_pairings():
     """The removed `compute_second_pairing` flag could strip a key summary() reads."""

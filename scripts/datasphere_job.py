@@ -77,8 +77,9 @@ SCALES: dict[str, dict[str, list[str]]] = {
     #: belongs to one chunk); it only bounds the attention score matrix at
     #: O(chunk x seq), which matters because a float32 SDPA fallback materialises
     #: (heads, seq, seq) and OOM'd a 22 GiB card at 16K (findings section 18).  At 49K
-    #: and 8 heads a 8192-token chunk peaks around 6.4 GiB for that matrix, so the
-    #: protection stays while the number of chunks halves.  One-shot (`0`) was the
+    #: and a 8192 chunk that is 1.61 GB per Q-head -- ~12.9 GB for the hybrid's 8 and
+    #: ~25.8 GB for the dense model's 16 -- so the protection stays (80 GB fits it,
+    #: 22 does not) while the number of chunks halves.  One-shot (`0`) was the
     #: first version of this profile and it was a bad trade: it saves ~4-8% of the
     #: attention time and gives up the bound entirely.
     "a100": {
@@ -490,10 +491,11 @@ def report_environment() -> None:
         # The prefill runs through SDPA, which picks the flash kernel in bf16 -- but
         # only if this GPU and this torch build support it.  The chunked-prefill
         # memory bound assumes it does: on the math fallback the score matrix is
-        # materialised as (heads, chunk, seq), ~6.4 GB for the hybrid and ~12.9 GB for
-        # the dense model at 49K/8192.  The bootstrap job probed this on the L4; doing
-        # it here means every job's log answers it for the card it actually got,
-        # before the grid rather than after it.
+        # materialised as (heads, chunk, seq), which at 49K/8192 is ~12.9 GB for the
+        # hybrid (8 Q-heads, fp32) and ~25.8 GB for the dense model (16) -- inside the
+        # A100's 80 GB either way, but not inside the 22 GiB L4 that OOM'd on this.
+        # The bootstrap job probed this on the L4; doing it here means every job's log
+        # answers it for the card it actually got, before the grid rather than after it.
         try:
             import torch.nn.attention as attn
 

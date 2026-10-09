@@ -35,6 +35,11 @@ desc: paper-scale grid on one A100 without the chat template -- the paper's geom
 # and why in the results doc.  The two preflights
 # (`a100-preflight.yaml`/`a100-preflight-notemplate.yaml`) measure the same axes at
 # 1024/4096 for minutes and should be launched first.
+#
+# The grid, the budget (~4.35k prefill+decode passes, `mask` dominant) and the hybrid's
+# degenerate last point are the same as in `a100.yaml` -- read that config's comments
+# and the preflight's `retrieval_pool_by_domain` before deciding whether to keep
+# `--k-frac 0.33` for a model whose control pool is 11-12 heads.
 
 cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --no-chat-template --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100-notemplate
 
@@ -64,3 +69,6 @@ env:
 
 cloud-instance-types:
   - g2.1               # 28 vCPU, 1x A100 80 GB
+  # No V100 fallback on purpose: the 8192-token chunks at 49K are sized for 80 GB, and
+  # bf16 is not natively supported on sm_70, so a V100 would fail rather than degrade.
+  # A smaller-card run is `paper.yaml`'s job.

@@ -11,16 +11,19 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 #     layer work (each token belongs to one chunk); it bounds the attention score
 #     matrix at O(chunk x seq), which is what keeps a float32 SDPA fallback from
 #     materialising (heads, seq, seq) -- that OOM'd a 22 GiB card at 16K
-#     (docs/datasphere-findings.md section 18).  At 49K/8 heads a 8192 chunk peaks
-#     near 6.4 GiB for that matrix, so the bound stays and the chunk count halves.
-#     Feeding everything in one shot saves only ~4-8% of the attention time and
-#     gives the bound up entirely.
+#     (docs/datasphere-findings.md section 18).  At 49K/8192 the fallback's matrix is
+#     8192 x 49152 x 4 bytes per Q-head = 1.61 GB, so ~12.9 GB for the hybrid's 8 heads
+#     and ~25.8 GB for the dense model's 16 (math SDPA expands GQA to Q-heads; by
+#     KV-heads it would be 3.2 and 12.9 GB).  Both fit in 80 GB, neither fits in 22 --
+#     which is the whole reason the chunk exists.  Feeding everything in one shot saves
+#     only ~4-8% of the attention time and gives the bound up entirely.
 #     On the *bf16* path this run actually takes, flash SDPA never materialises that
-#     matrix at all: the binding chunk-sized allocation was the `lm_head` logits over
-#     every position of every chunk (~4.1 GB at 8192 x 248320 for the hybrid, ~2.6 GB
-#     for the dense model), which `prefill_cache` now avoids with
-#     `logits_to_keep=1`.  So the memory argument for chunking is about the fp32
-#     fallback, and the chunk size is now bounded by that, not by the logits.
+#     matrix at all (the same tensor would be half the fp32 size), and the binding
+#     chunk-sized allocation was the `lm_head` logits over every position of every
+#     chunk (~4.1 GB at 8192 x 248320 for the hybrid, ~2.6 GB for the dense model),
+#     which `prefill_cache` now avoids with `logits_to_keep=1`.  So the memory argument
+#     for chunking is about the fp32 fallback, and the chunk size is now bounded by
+#     that, not by the logits.
 #   * `--max-new-tokens 96` for detect *and* mask.  The `paper` profile's 48 truncates
 #     11 of the hybrid's 75 instances at the t4 grid; a truncated instance scores
 #     lower -- recomputed from `ds-results/qwen3.5-0.8b/instances_next_step.jsonl`,
@@ -34,16 +37,29 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 #     located verbatim would otherwise abort the stage hours into the run.  The L4
 #     scales leave it off.
 #
-# Budget, in generations rather than adjectives (the arithmetic is checkable; the wall
-# clock is an estimate to refine from the preflight log):
-#   detect  270 instances per model (210 for the dense one), 1K-49K, 96 tokens each;
+# Budget, in passes rather than adjectives (the arithmetic is checkable; the wall clock
+# is an estimate to refine from the preflight log).  Every generation is preceded by its
+# own prefill -- `evaluate_samples` calls `greedy_generate` -> `prefill_cache` once per
+# sample per configuration -- so the unit is "prefill + decode", not "prefill":
+#   detect  210 + 270 = 480 passes at 1K-49K, 96 tokens each;
 #   mask    45 samples per point x [1 baseline + 6 K x (1 retrieval + 5 random)]
-#           = 1665 generations for the dense model, 1395 for the hybrid (its 0.01 and
-#           0.02 collapse to K=1, so five distinct points, not six);
+#           = 1665 passes for the dense model, 1395 for the hybrid (its 0.01 and 0.02
+#           collapse to K=1, so five distinct points, not six), all at 4-16K;
 #   mixer   hybrid only: mixer_k = (1,2,4) x 3 trials x 2 stacks x 45 = 810.
-# So ~3.9k generations of 4-16K plus ~480 prefills of 1K-49K.  `--random-trials 5` is
-# the dominant multiplier (five sixths of the mask arms) and the mixer ablation is the
-# first thing to cut if the wall clock bites; both are recorded in the artifacts.
+# Total ~4.35k passes, of which ~3.87k are the 4-16K ablations.  The dominant cost is
+# therefore `mask`, and the knob that cuts it is `--random-trials` (5 -> 3 removes ~990
+# passes, ~23% of the whole run, because the random arm is five sixths of each point);
+# cutting the mixer ablation saves 810 at most and is the *second* choice.
+#
+# The hybrid's last point is degenerate by construction: the random arm is drawn from
+# heads at or below the threshold, and the CPU probe puts that pool at 11-12 heads under
+# `haystack` (13 under `prompt`).  `--k-frac 0.33` resolves to K=16 on 48 heads, so
+# `matched_k` caps both arms at the pool size: the point is one deterministic
+# intervention on the whole pool, not a curve point.  Read
+# `retrieval_pool_by_domain` in the preflight summary first: if the pool is under 12,
+# either drop `0.33` for this model or mark the `control_exhausted` points as one
+# intervention in the report.  The artifact already records `k_effective`,
+# `control_exhausted` and `random_distinct` for exactly this reading.
 #
 # Stage list: no `qa`/`cot`.  Their built-in sets are 8+8 hand-written items -- a
 # pipeline check worth a minute on the L4, not A100 time, and one item is 12.5 points
@@ -95,9 +111,9 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 #     `--limit 60`) before the full grid; it is minutes and it answers the hardware
 #     question and the sink-geometry question on the real grid.
 #
-# Also here: `a100-resume.yaml` re-runs only the tail (`qa,cot,compare,figures`) on a
-# finished tree, because `mask` is the stage that costs real money (45 samples per
-# point).
+# Also here: `a100-resume.yaml` re-runs only the tail (`compare,figures,case-study`) on
+# a finished tree, because `mask` is the stage that costs real money (45 samples per
+# point, ~3.9k prefill+decode passes in the ablations).
 
 cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100
 

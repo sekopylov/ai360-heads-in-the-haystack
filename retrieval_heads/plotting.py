@@ -16,8 +16,10 @@ Figure map (paper name -> function):
     token-mixer ablation            -> plot_mixer_ablation
 
 Every figure above except `fig_retrieval_attention_dist` is written by the `figures`
-stage; that one needs a captured attention row, so `scripts/case_study.py` produces
-it (and is not part of the stage list).
+stage; that one needs a captured attention row, so `scripts/case_study.py` produces it
+-- it is the driver's `case-study` stage (run in-process so it reuses the resident
+model), and it writes into `<model>/figures/` rather than the shared `<prefix>/figures/`
+because its JSON would otherwise collide between the two models.
 """
 
 from __future__ import annotations
