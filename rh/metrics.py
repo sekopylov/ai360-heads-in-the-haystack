@@ -224,11 +224,15 @@ def aggregate(spool_dir, out):
     with_heads = [s for s in samples if os.path.exists(f"{out}/heads/{s['id']}.npz")]
     means = {}
     if with_heads:
-        arrays = [np.load(f"{out}/heads/{s['id']}.npz") for s in with_heads]
+        arrays = []
+        for sample in with_heads:
+            # read into memory and close: an open file per sample runs out of file handles on large runs
+            with np.load(f"{out}/heads/{sample['id']}.npz") as d:
+                arrays.append({k: d[k] for k in d.files})
         ok = np.array([s["success"] for s in with_heads])
-        layers = run.get("attn_layers") or list(range(arrays[0][arrays[0].files[0]].shape[0]))
+        layers = run.get("attn_layers") or list(range(next(iter(arrays[0].values())).shape[0]))
         summary["heads"] = {}
-        for name in arrays[0].files:
+        for name in arrays[0]:
             values = np.stack([a[name] for a in arrays])  # [sample, layer, head]
             mean_ok = values[ok].mean(0) if ok.any() else np.zeros(values.shape[1:])
             means[name] = mean_ok.ravel()
