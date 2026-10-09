@@ -16,6 +16,7 @@ dropped in.  Small built-in samples keep the whole pipeline runnable offline.
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -186,9 +187,43 @@ def builtin_reasoning_samples() -> list[ReasoningSample]:
 
 
 # --------------------------------------------------------------------------- metrics
+#: A decimal literal that is not glued to another digit or dot, so "3.10.12" is left
+#: alone while "0.50" and "63.0" are canonicalised.
+_NUMBER_RE = re.compile(r"(?<![\d.])-?\d+(?:\.\d+)?(?![\d.])")
+
+
+def _canonical_number(match: re.Match[str]) -> str:
+    """Rewrite a numeric literal to one canonical spelling (``63.0`` -> ``63``).
+
+    The metrics used to compare numbers **as strings**: ``accuracy("63.0", "63")``
+    was 0 because ``"63.0" != "63"``, and ``word_f1`` scored ``"0.50"`` against
+    ``"0.5"`` as a mismatch.  That only bites once real datasets are wired in (the
+    built-ins happen to use one spelling), but it is a wrong metric, not a missing
+    feature.  Canonicalising here fixes both metrics at once, because both tokenise
+    the normalised string.
+    """
+    raw = match.group(0)
+    try:
+        value = float(raw)
+    except ValueError:  # pragma: no cover - the regex only emits numeric literals
+        return raw
+    if value == int(value) and abs(value) < 1e15:
+        return str(int(value))
+    return repr(value)
+
+
+def _numbers_equal(a: str, b: str) -> bool:
+    """Numeric equality of two literal strings, tolerating float representation."""
+    try:
+        return math.isclose(float(a), float(b), rel_tol=1e-9, abs_tol=1e-12)
+    except ValueError:  # pragma: no cover - the regex only emits numeric literals
+        return a == b
+
+
 def _normalise(text: str) -> str:
     text = text.strip().lower()
     text = re.sub(r"[,\$]", "", text)
+    text = _NUMBER_RE.sub(_canonical_number, text)
     text = re.sub(r"\s+", " ", text)
     return text.strip(" .\n\t")
 
@@ -214,6 +249,9 @@ def accuracy(prediction: str, target: str) -> float:
     ``t in p`` marked ``"163"`` correct for the target ``"63"`` and ``"19"``
     correct for ``"9"``, which inflates accuracy on the short numeric answers the
     built-in reasoning set uses.
+
+    Numbers are compared *numerically*, not as strings (``63.0`` == ``63``,
+    ``0.50`` == ``0.5``): the old ``pn[0] == tn[0]`` was a spelling test.
     """
     p, t = _normalise(prediction), _normalise(target)
     if p == t:
@@ -222,7 +260,7 @@ def accuracy(prediction: str, target: str) -> float:
     # "4.6 million crowns" counts as 4.6 -- and it only affects `cot`; extractive
     # QA uses word F1.
     pn, tn = re.findall(r"-?\d+(?:\.\d+)?", p), re.findall(r"-?\d+(?:\.\d+)?", t)
-    if pn and tn and pn[0] == tn[0]:
+    if pn and tn and _numbers_equal(pn[0], tn[0]):
         return 1.0
     if not t:
         return 0.0
@@ -267,7 +305,7 @@ def _chat(tokenizer: Any, user: str, *, enable_thinking: bool | None,
 
 
 # --------------------------------------------------------------------------- evaluators
-def evaluate_extractive_qa(
+def extractive_qa_scores(
     model: Any,
     tokenizer: Any,
     info: ModelInfo,
@@ -279,10 +317,15 @@ def evaluate_extractive_qa(
     prefill_chunk: int | None = None,
     chat_template: bool = True,
     system_prompt: str | None = None,
-) -> float:
-    """Mean word-level F1 on extractive QA."""
+) -> list[float]:
+    """Per-sample word-level F1 (percent) on extractive QA.
+
+    The per-sample values are what :func:`qa_ablation` records as the retrieval arm's
+    spread: a single mean could not say whether a drop came from every item or from
+    one, and the paper's claim is about the aggregate.
+    """
     masker = HeadMasker(model, info, masked_heads) if masked_heads else None
-    scores = []
+    scores: list[float] = []
     try:
         for sample in samples:
             prompt = _chat(
@@ -297,6 +340,29 @@ def evaluate_extractive_qa(
     finally:
         if masker is not None:
             masker.remove()
+    return scores
+
+
+def evaluate_extractive_qa(
+    model: Any,
+    tokenizer: Any,
+    info: ModelInfo,
+    samples: Sequence[QASample],
+    *,
+    masked_heads: Sequence[HeadRef] = (),
+    max_new_tokens: int = 24,
+    enable_thinking: bool | None = False,
+    prefill_chunk: int | None = None,
+    chat_template: bool = True,
+    system_prompt: str | None = None,
+) -> float:
+    """Mean word-level F1 on extractive QA."""
+    scores = extractive_qa_scores(
+        model, tokenizer, info, samples, masked_heads=masked_heads,
+        max_new_tokens=max_new_tokens, enable_thinking=enable_thinking,
+        prefill_chunk=prefill_chunk, chat_template=chat_template,
+        system_prompt=system_prompt,
+    )
     return float(np.mean(scores)) if scores else 0.0
 
 
@@ -360,15 +426,20 @@ def qa_ablation(
     from heads at or below the threshold, so both remove exactly the same number
     of heads and the control contains no retrieval heads.
     """
-    baseline = evaluate_extractive_qa(model, tokenizer, info, samples,
-                                      max_new_tokens=max_new_tokens,
-                                      prefill_chunk=prefill_chunk,
-                                      enable_thinking=enable_thinking,
-                                      chat_template=chat_template,
-                                      system_prompt=system_prompt)
+    baseline_scores = extractive_qa_scores(model, tokenizer, info, samples,
+                                           max_new_tokens=max_new_tokens,
+                                           prefill_chunk=prefill_chunk,
+                                           enable_thinking=enable_thinking,
+                                           chat_template=chat_template,
+                                           system_prompt=system_prompt)
+    baseline = float(np.mean(baseline_scores)) if baseline_scores else 0.0
     log.info("QA baseline F1=%.1f", baseline)
     rng = np.random.default_rng(seed)
     out: dict[str, Any] = {"task": "extractive_qa", "baseline_f1": baseline,
+                           # Per-sample, so a drop can be attributed to every item or
+                           # to one outlier instead of only being a mean.
+                           "baseline_f1s": baseline_scores,
+                           "baseline_f1_std": float(np.std(baseline_scores)),
                            "n_samples": len(samples), "k_values": list(k_values),
                            "n_scoreable_heads": info.n_scoreable_heads,
                            "model": info.name, "max_new_tokens": max_new_tokens,
@@ -399,12 +470,14 @@ def qa_ablation(
             log.warning("QA k=%d exceeds the %d non-retrieval heads available; using k=%d",
                         k, len(pool), k_eff)
         top = retrieval_ranked[:k_eff]
-        f1_retrieval = evaluate_extractive_qa(model, tokenizer, info, samples,
-                                              masked_heads=top, max_new_tokens=max_new_tokens,
-                                              prefill_chunk=prefill_chunk,
-                                              enable_thinking=enable_thinking,
-                                              chat_template=chat_template,
-                                              system_prompt=system_prompt)
+        retrieval_scores = extractive_qa_scores(model, tokenizer, info, samples,
+                                                masked_heads=top,
+                                                max_new_tokens=max_new_tokens,
+                                                prefill_chunk=prefill_chunk,
+                                                enable_thinking=enable_thinking,
+                                                chat_template=chat_template,
+                                                system_prompt=system_prompt)
+        f1_retrieval = float(np.mean(retrieval_scores)) if retrieval_scores else 0.0
         trials, overlaps, picks = [], [], []
         # Same control-drawing rule as `masking_curve`: no repeated subset while the
         # pool allows it, so a small pool does not silently shrink the trial count.
@@ -422,6 +495,11 @@ def qa_ablation(
         out["by_k"][str(k)] = {
             "k_effective": k_eff,
             "retrieval_f1": f1_retrieval,
+            # The retrieval arm's per-sample spread: with one mean, a K that hurts
+            # half the items and helps the other half reads the same as a K that
+            # does nothing.
+            "retrieval_f1s": retrieval_scores,
+            "retrieval_f1_std": float(np.std(retrieval_scores)),
             "random_f1_mean": float(np.mean(trials)),
             "random_f1_std": float(np.std(trials)),
             "random_retrieval_overlap": overlaps,

@@ -27,7 +27,14 @@ from typing import Any, Callable
 #: repetition (so a re-run's random arm differs); and the pairing rows are scoped by
 #: what was actually generated.  Without the bump a schema-5 artifact from before all
 #: of that read as current.
-SCHEMA_VERSION = 6
+#: Bumped to 7: criterion (2) gained the paper's `haystack` argmax domain and it is
+#: now the *default*, so a new run's scores are not comparable with a `prompt`-domain
+#: one unless the domain is read; every artifact records it, and the per-instance
+#: payload gained `argmax_span` and `argmax_domain_shift`.  `sink_rate` is now taken
+#: from the prompt-restricted argmax under every domain (it is unchanged for the
+#: prompt-domain artifacts in `ds-results/`, but a reader must not assume the old
+#: derivation).
+SCHEMA_VERSION = 7
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 

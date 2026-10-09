@@ -68,22 +68,75 @@ PAIRINGS = ("next_step", "same_step")
 
 # --------------------------------------------------------------------------- trace
 def argmax_positions(attn: dict[int, torch.Tensor], *, prompt_len: int,
-                     domain: str = "prompt") -> dict[int, torch.Tensor]:
+                     domain: str = "prompt",
+                     span: tuple[int, int] | None = None) -> dict[int, torch.Tensor]:
     """Per-head most-attended key position for each layer.
 
     ``domain="prompt"`` restricts the argmax to the *input* positions, which is the
     paper's criterion (2): "the input token that receives the most attention
     probability mass" (``a in R^{|x|}``).  ``domain="full"`` lets already-generated
     positions win too, which makes the score depend on how much was generated.
+
+    ``domain="haystack"`` is the paper's ``x`` read literally: the argmax runs over
+    ``span`` -- the filler plus the needle, without the question or the chat
+    template -- so a template token cannot win it.  On the dense control 285 of 448
+    heads put their argmax on prompt position 0, a template token, so the ``prompt``
+    domain is a *lower* bound on retrieval; this is the domain that removes that
+    artifact.  Returned positions stay absolute indices into the prompt (the span
+    offset is added back), because criterion (2) indexes the prompt with them.
     """
-    if domain not in ("prompt", "full"):
-        raise ValueError(f"argmax_domain must be 'prompt' or 'full', got {domain!r}")
+    if domain not in ("prompt", "full", "haystack"):
+        raise ValueError(
+            f"argmax_domain must be 'prompt', 'full' or 'haystack', got {domain!r}"
+        )
+    if domain == "haystack":
+        if span is None:
+            raise ValueError(
+                "argmax_domain='haystack' needs the haystack token span; pass the "
+                "`haystack_span` of the NeedleSample being scored"
+            )
+        start, end = span
+        if not 0 <= start < end <= prompt_len:
+            raise ValueError(
+                f"haystack span {span} is not a non-empty range inside the prompt "
+                f"(prompt_len={prompt_len})"
+            )
     out: dict[int, torch.Tensor] = {}
     for layer, tensor in attn.items():
         row = tensor[0, :, 0, :].detach()
-        keys = row[:, :prompt_len] if domain == "prompt" else row
-        out[layer] = keys.argmax(dim=-1)
+        if domain == "full":
+            keys, offset = row, 0
+        elif domain == "prompt":
+            keys, offset = row[:, :prompt_len], 0
+        else:
+            keys, offset = row[:, span[0]:span[1]], span[0]
+        out[layer] = keys.argmax(dim=-1) + offset
     return out
+
+
+def argmax_domain_shift(trace: "DecodeTrace") -> dict[str, Any]:
+    """How far the scoring domain moves criterion (2)'s argmax.
+
+    Counts every ``(layer, head)`` of every captured step; ``shifted`` is the number
+    whose domain argmax differs from the prompt-restricted one.  This is the cheap
+    evidence for how much ``haystack`` changes the score: the captured rows are
+    identical in every domain, so the counter costs one comparison and no forward
+    pass, and it is recorded per instance and averaged into the run's summary.
+    """
+    total = shifted = 0
+    for step in trace.steps:
+        positions = step.positions()
+        prompt_positions = step.prompt_positions(trace.prompt_len)
+        for layer, argmax in positions.items():
+            reference = prompt_positions.get(layer)
+            if reference is None or reference.shape != argmax.shape:
+                continue
+            domain_idx = argmax.detach().to("cpu", torch.long)
+            prompt_idx = reference.detach().to("cpu", torch.long)
+            total += int(domain_idx.numel())
+            shifted += int((domain_idx != prompt_idx).sum())
+    return {"positions": total, "shifted": shifted,
+            "share": (shifted / total) if total else 0.0}
 
 
 @dataclass
@@ -111,12 +164,29 @@ class StepTrace:
     applies_to: tuple[str, ...] | None = None
     #: layer -> (heads,) int64 argmax positions; empty when only rows are stored.
     argmax: dict[int, torch.Tensor] = field(default_factory=dict)
+    #: layer -> (heads,) argmax over the *prompt* alone, whatever domain scored this
+    #: step.  The sink diagnostic reads this, not `argmax`: under the `haystack`
+    #: domain the sink (a template token at position 0) is ineligible by
+    #: construction, so a sink rate derived from the domain argmax would be a
+    #: structural zero rather than a measurement.
+    argmax_prompt: dict[int, torch.Tensor] = field(default_factory=dict)
 
     def positions(self) -> dict[int, torch.Tensor]:
         """Per-head most-attended position, from the stored indices or the rows."""
         if self.argmax:
             return self.argmax
         return {layer: row.argmax(dim=-1) for layer, row in self.attn.items()}
+
+    def prompt_positions(self, prompt_len: int) -> dict[int, torch.Tensor]:
+        """Per-head most-attended *prompt* position, independent of the domain."""
+        if self.argmax_prompt:
+            return self.argmax_prompt
+        if self.attn:
+            return {layer: row[:, :prompt_len].argmax(dim=-1)
+                    for layer, row in self.attn.items()}
+        # A hand-built step that recorded a single argmax: assume it was the prompt
+        # one (true for every trace built before the haystack domain existed).
+        return self.argmax
 
 
 @dataclass
@@ -130,8 +200,12 @@ class DecodeTrace:
     #: step as truncation.
     stopped_on_eos: bool = False
     #: Which positions the argmax could choose from ("prompt" = the paper's input
-    #: tokens; "full" = input + already-generated).
+    #: tokens; "full" = input + already-generated; "haystack" = the context span
+    #: alone, i.e. without the question and the chat template).
     argmax_domain: str = "prompt"
+    #: The token span the ``haystack`` domain searched (absolute prompt indices);
+    #: recorded so a reader can see exactly which positions were eligible.
+    argmax_span: tuple[int, int] | None = None
 
     @property
     def kv_len(self) -> int:
@@ -161,6 +235,7 @@ def decode_with_attention(
     prefill_chunk: int | None = None,
     store_rows: bool = False,
     argmax_domain: str = "prompt",
+    argmax_span: tuple[int, int] | None = None,
 ) -> tuple[DecodeTrace, list[int]]:
     """Greedy-decode ``input_ids`` while recording attention at every step.
 
@@ -188,6 +263,14 @@ def decode_with_attention(
     ``O(chunk x seq)`` instead -- each chunk attends to the whole accumulated KV,
     but only ``chunk`` queries are materialised at once.  The price is a small
     attention overhead (``(n+1)/n`` for ``n`` chunks), not extra layer passes.
+
+    ``argmax_domain``/``argmax_span`` choose criterion (2)'s search space: the whole
+    prompt (this function's default), the prompt plus generated positions (``full``),
+    or the haystack alone (``haystack``, which needs ``argmax_span``).  The captured
+    rows are identical in all three cases -- this is a scoring decision, not a compute
+    one -- so switching domains costs no extra forward pass.  The default here is
+    ``prompt`` only because this layer has no sample and so no haystack span; the
+    sample-aware :func:`score_instance` defaults to the paper's ``haystack``.
     """
     if max_new_tokens <= 0:
         raise ValueError(
@@ -203,16 +286,41 @@ def decode_with_attention(
         )
     input_ids = input_ids.to(model_device(model))
     prompt_len = int(input_ids.shape[1])
+    # Validate the domain/span pair *before* the forward pass: `argmax_positions`
+    # only runs on the first capture, i.e. after a possibly minutes-long prefill, so
+    # a missing span used to waste the whole prompt.
+    if argmax_domain == "haystack" and argmax_span is None:
+        raise ValueError(
+            "argmax_domain='haystack' needs argmax_span (the sample's haystack_span); "
+            "without it criterion (2) has no haystack to search"
+        )
+    if argmax_domain not in ("prompt", "full", "haystack"):
+        raise ValueError(
+            f"argmax_domain must be 'prompt', 'full' or 'haystack', got {argmax_domain!r}"
+        )
+    if argmax_span is not None:
+        start, end = argmax_span
+        if not 0 <= start < end <= prompt_len:
+            raise ValueError(
+                f"argmax_span {argmax_span} is not a non-empty range inside the prompt "
+                f"(prompt_len={prompt_len})"
+            )
     recorder = AttentionRecorder(model, info, method=capture_method)
-    trace = DecodeTrace(prompt_len=prompt_len, argmax_domain=argmax_domain)
+    trace = DecodeTrace(prompt_len=prompt_len, argmax_domain=argmax_domain,
+                        argmax_span=argmax_span)
 
     def capture(attn_tensors: dict[int, torch.Tensor]):
-        """(rows, argmax): rows only when asked for, the argmax always."""
+        """(rows, argmax, prompt argmax): rows only when asked for."""
         indices = argmax_positions(attn_tensors, prompt_len=prompt_len,
-                                   domain=argmax_domain)
+                                   domain=argmax_domain, span=argmax_span)
+        # The sink diagnostic needs the prompt-restricted argmax under *every*
+        # domain, so it is captured unconditionally (one extra argmax over an
+        # already-materialised row, no extra forward pass).
+        prompt_indices = argmax_positions(attn_tensors, prompt_len=prompt_len,
+                                          domain="prompt")
         rows = ({layer: tensor[0, :, 0, :].detach()
                  for layer, tensor in attn_tensors.items()} if store_rows else {})
-        return rows, indices
+        return rows, indices, prompt_indices
 
     restore = set_attn_implementation(model, prefill_impl)
     try:
@@ -241,7 +349,7 @@ def decode_with_attention(
             logits = last_out.logits[:, -1, :]
             cache = last_out.past_key_values
             trace.prefill_logits = logits.detach()
-            last_rows, last_idx = capture(last_attn)
+            last_rows, last_idx, last_prompt_idx = capture(last_attn)
             trace.steps.append(
                 StepTrace(
                     step=-1,
@@ -250,6 +358,7 @@ def decode_with_attention(
                     attn=last_rows,
                     applies_to=("next_step",),
                     argmax=last_idx,
+                    argmax_prompt=last_prompt_idx,
                 )
             )
 
@@ -270,7 +379,7 @@ def decode_with_attention(
                 cache = step_out.past_key_values
                 row_logits = step_out.logits[:, -1, :]
                 predicted = int(row_logits.argmax(-1)[0])
-                step_rows, step_idx = capture(attn)
+                step_rows, step_idx, step_prompt_idx = capture(attn)
                 trace.steps.append(
                     StepTrace(
                         step=step,
@@ -278,6 +387,7 @@ def decode_with_attention(
                         predicted_token=predicted,
                         attn=step_rows,
                         argmax=step_idx,
+                        argmax_prompt=step_prompt_idx,
                     )
                 )
                 nxt = row_logits.argmax(-1, keepdim=True)
@@ -332,6 +442,19 @@ def match_masks(argmax: torch.Tensor, prompt_ids: torch.Tensor, token: int,
     return matched, idx == sink_position
 
 
+def _sink_mask(argmax: torch.Tensor | None, sink_position: int, heads: int) -> torch.Tensor:
+    """Sink flags for one layer-step, taken from the *prompt* argmax.
+
+    Kept separate from :func:`match_masks` because the two answer different
+    questions: credit follows the scoring domain, the sink diagnostic is always the
+    prompt-restricted argmax (under ``haystack`` the sink is ineligible, so the
+    domain argmax would make the rate a structural zero).
+    """
+    if argmax is None:  # pragma: no cover - every captured step records both
+        return torch.zeros(heads, dtype=torch.bool)
+    return argmax[:heads].detach().to("cpu", torch.long) == sink_position
+
+
 def _per_head(counts: dict[int, torch.Tensor], info: ModelInfo) -> dict[HeadRef, int]:
     """Materialise the per-layer accumulators as the public per-head mapping."""
     out: dict[HeadRef, int] = {h: 0 for h in info.scoreable_heads}
@@ -375,7 +498,10 @@ def credits_from_trace(
     honest normaliser when the model fails to recite the needle.  The sink rate is
     therefore ``P(argmax == prompt position 0 | criterion (1) held)``, not a share of
     *all* decoding steps -- and "position 0" is the first prompt token, which under a
-    chat template is a template token rather than necessarily a BOS sink.
+    chat template is a template token rather than necessarily a BOS sink.  That
+    argmax is the prompt-restricted one whatever ``argmax_domain`` scored, so the
+    diagnostic stays comparable across domains (under ``haystack`` position 0 is not
+    even eligible).
     """
     if pairing not in PAIRINGS:
         raise ValueError(f"pairing must be one of {PAIRINGS}, got {pairing!r}")
@@ -403,6 +529,7 @@ def credits_from_trace(
         token = step.fed_token if pairing == "same_step" else step.predicted_token
         if token not in needle_set:          # criterion (1)
             continue
+        prompt_positions = step.prompt_positions(trace.prompt_len)
         for layer, argmax in step.positions().items():  # argmax: (heads,)
             if layer not in info.num_heads:
                 # The patch capture stores whatever called eager_attention_forward,
@@ -415,15 +542,18 @@ def credits_from_trace(
                 counts = torch.zeros(n_heads, dtype=torch.long)
                 considered_t[layer] = counts
             counts += 1
-            matched, sink = match_masks(argmax, prompt_ids, token, (start, end),
-                                        sink_position, n_heads)
+            matched, _domain_sink = match_masks(argmax, prompt_ids, token, (start, end),
+                                                sink_position, n_heads)
             # `setdefault` builds its default eagerly, i.e. one zeros() per layer-step
             # for nothing; the dict lookup does not.
             sink_counts = sink_t.get(layer)
             if sink_counts is None:
                 sink_counts = torch.zeros(n_heads, dtype=torch.long)
                 sink_t[layer] = sink_counts
-            sink_counts += sink.long()
+            prompt_argmax = prompt_positions.get(layer)
+            if prompt_argmax is not None:
+                _validated_head_count(info, layer, prompt_argmax)
+            sink_counts += _sink_mask(prompt_argmax, sink_position, n_heads).long()
             hits.extend((layer, int(head), token)
                         for head in matched.nonzero(as_tuple=False).flatten().tolist())
 
@@ -511,6 +641,11 @@ class InstanceResult:
     aligned_scores: dict[str, dict[str, float]] = field(default_factory=dict)
     #: pairing -> {head: sorted copied token ids} (sparse: only non-empty credits).
     copied_tokens: dict[str, dict[str, list[int]]] = field(default_factory=dict)
+    #: pairing -> {head: score under the *raw* per-token denominator |k| (repeats
+    #: counted), i.e. the other reading of the paper's formula.  Equal to `scores`
+    #: whenever the needle has no repeated token; strictly lower otherwise.  Free:
+    #: the numerator is already computed, only the divisor differs.
+    scores_raw: dict[str, dict[str, float]] = field(default_factory=dict)
     meta: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -520,6 +655,7 @@ class InstanceResult:
             **self.meta,
             "sample": self.sample,
             "scores": self.scores,
+            "scores_raw": self.scores_raw,
             "aligned_scores": self.aligned_scores,
             "copied_tokens": self.copied_tokens,
             "activations": self.activations,
@@ -624,15 +760,33 @@ def score_instance(
     capture_impl: str = "eager",
     capture_method: str = "patch",
     prefill_chunk: int | None = None,
-    argmax_domain: str = "prompt",
+    argmax_domain: str = "haystack",
+    argmax_span: tuple[int, int] | None = None,
 ) -> InstanceResult:
-    """Run one NIAH instance and return its per-head retrieval scores."""
+    """Run one NIAH instance and return its per-head retrieval scores.
+
+    The default domain is the paper's ``haystack`` (see
+    :func:`retrieval_heads.detection.DetectionConfig`); the span is taken from the
+    sample, and an explicit ``argmax_span`` overrides it (the case study passes the
+    same value through).  A sample whose prompt could not be located has no span, and
+    then the run refuses rather than silently falling back to the prompt domain.
+    """
+    if argmax_domain == "haystack" and argmax_span is None:
+        argmax_span = getattr(sample, "haystack_span", None)
+        if argmax_span is None:
+            raise ValueError(
+                f"argmax_domain='haystack' but the sample has no haystack_span "
+                f"(meta['haystack_span_verbatim']="
+                f"{(sample.meta or {}).get('haystack_span_verbatim')!r}); the rendered "
+                f"prompt could not be located, so criterion (2) has no haystack"
+            )
     trace, generated = decode_with_attention(
         model, info, sample.input_ids,
         max_new_tokens=max_new_tokens, tokenizer=tokenizer,
         prefill_impl=prefill_impl, capture_impl=capture_impl, capture_method=capture_method,
         prefill_chunk=prefill_chunk,
         argmax_domain=argmax_domain,
+        argmax_span=argmax_span,
     )
 
     pairings = [pairing]
@@ -644,7 +798,12 @@ def score_instance(
     # count the fused boundary token and cap the achievable score below 1.
     text_ids = getattr(sample, "needle_text_ids", None) or sample.needle_ids
     denom = max(len(set(text_ids)), 1)
+    # The raw per-token denominator (repeats counted).  The two agree whenever the
+    # needle has no repeated token, which is the honest way to say how much the
+    # unique-token convention matters for this sample.
+    denom_raw = max(len(text_ids), 1)
     scores: dict[str, dict[str, float]] = {}
+    scores_raw: dict[str, dict[str, float]] = {}
     activations: dict[str, dict[str, float]] = {}
     considered_out: dict[str, dict[str, int]] = {}
     aligned_out: dict[str, dict[str, float]] = {}
@@ -660,6 +819,7 @@ def score_instance(
         # it is stored next to the paper's rule for every run.
         aligned = credits_aligned(trace, sample, info, pairing=p)
         scores[p] = {str(h): len(credits[h]) / denom for h in info.scoreable_heads}
+        scores_raw[p] = {str(h): len(credits[h]) / denom_raw for h in info.scoreable_heads}
         aligned_out[p] = {str(h): len(aligned[h]) / denom for h in info.scoreable_heads}
         activations[p] = {str(h): (1.0 if credits[h] else 0.0) for h in info.scoreable_heads}
         considered_out[p] = {str(h): considered[h] for h in info.scoreable_heads}
@@ -675,6 +835,7 @@ def score_instance(
     return InstanceResult(
         sample=sample.as_dict(),
         scores=scores,
+        scores_raw=scores_raw,
         activations=activations,
         considered=considered_out,
         sink_rate=sink_rates,
@@ -685,6 +846,15 @@ def score_instance(
         aligned_scores=aligned_out,
         copied_tokens=copied_tokens,
         meta={"pairing": pairing, "argmax_domain": argmax_domain,
+              # The span the argmax actually searched, in absolute prompt indices
+              # (`None` for the prompt/full domains).  The sample already carries
+              # `haystack_span`, but recording it here ties the *score* to the
+              # domain it was computed in even if the sample dict is edited.
+              "argmax_span": list(argmax_span) if argmax_span is not None else None,
+              # How many (layer, head, step) argmax positions the domain moved
+              # relative to the prompt-restricted one -- the direct measure of what
+              # `haystack` changes, free because the rows are the same.
+              "argmax_domain_shift": argmax_domain_shift(trace),
               "eos_reached": trace.stopped_on_eos,
               "truncated": not trace.stopped_on_eos,
               # The old prefix-anchored diagnostic, kept so the change is auditable.
@@ -844,8 +1014,16 @@ def aggregate_scores(
     *,
     pairing: str = "next_step",
     threshold: float = 0.1,
+    field: str = "scores",
 ) -> RetrievalScores:
-    """Average per-instance retrieval scores into dense layer x head matrices."""
+    """Average per-instance retrieval scores into dense layer x head matrices.
+
+    ``field`` selects which per-instance mapping to average: ``"scores"`` (the
+    unique-token denominator, the paper's default reading) or ``"scores_raw"`` (the
+    per-token one).  One implementation, so the two matrices cannot drift apart.
+    """
+    if field not in ("scores", "scores_raw"):
+        raise ValueError(f"field must be 'scores' or 'scores_raw', got {field!r}")
     # Accumulate in zeros, then hide non-scoreable entries behind NaN.  (Adding
     # into a NaN-filled matrix would poison every entry it touches.)
     score = torch.zeros((info.num_layers, info.max_heads), dtype=torch.float32)
@@ -853,9 +1031,10 @@ def aggregate_scores(
     n = 0
     for result in results:
         n += 1
+        values = getattr(result, field)[pairing]
         for head in info.scoreable_heads:
             key = str(head)
-            score[head.layer, head.head] += result.scores[pairing][key]
+            score[head.layer, head.head] += values[key]
             activation[head.layer, head.head] += result.activations[pairing][key]
     if n == 0:
         raise ValueError("no instances to aggregate")

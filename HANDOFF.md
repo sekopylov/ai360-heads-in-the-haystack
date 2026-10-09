@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 228 tests: 211 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
+* 253 tests: 236 fast (`pytest -m "not integration"`, ~10 s), 17 integration against
   the real checkpoints. All green.
 * **The committed artifacts now match the code.** The GPU run was refreshed in two
   jobs on an NVIDIA L4, 75 instances per model:
@@ -42,7 +42,10 @@ tied to a job id) → this file (where things stand and what is left).
   what the image and the venv contain (it is how the single 11.8 toolkit was found).
 * **`configs/datasphere/a100.yaml` is ready for the A100** (g2.1 only, no fallback):
   the `paper` grid with `--prefill-chunk 8192` (not one-shot) and a 96-token detect
-  budget, carried by the new `a100` scale in the driver.  The first version used
+  budget, carried by the new `a100` scale in the driver.  Since round six the `a100`
+  scale also pins `--argmax-domain haystack` (the paper's `a in R^{|x|}`, and the code
+  default) and spends the mask stage's 15-sample budget as 3 held-out needles x 5
+  depths instead of 1 x 10.  The first version used
   `--prefill-chunk 0` on the theory that 49K in 4096-token chunks cost twelve prefills
   -- it does not: every token belongs to one chunk, so layer work is unchanged and
   only the attention term grows, by `(n+1)/n` (~8% at 12 chunks).  Chunking is what
@@ -78,6 +81,99 @@ tied to a job id) → this file (where things stand and what is left).
   exact-match, recall, prefix-recall and the *generated texts*) and the same for
   each random trial, so a specific failure can be inspected from the artifact
   instead of only its mean.
+* **Review round (the sixth report: B1 + C6 + the offline backlog), verified against
+  the code:**
+  * **B1 -- the `haystack` argmax domain is implemented and is now the default.**
+    `NeedleSample` gained `haystack_span` (the context's token span, located by
+    anchoring on the needle rather than `prompt.find(context)`, and verified verbatim;
+    `meta['haystack_span_verbatim']` says whether it was).  `argmax_positions` takes a
+    `span`, `decode_with_attention`/`score_instance` take `argmax_span` and validate
+    it *before* the forward pass, `detect`/`case_study` expose the third choice, and
+    `score_instance` defaults the span to the sample's own.  `DetectionConfig`,
+    the CLI and `case_study` now default to `haystack`; every job scale and both
+    reproduce scripts pin it explicitly, so a future default change cannot silently
+    alter a job.  No extra forwards: the captured rows are identical in all three
+    domains.
+  * **The sink rate had to be decoupled from the domain.**  Under `haystack`,
+    position 0 (a template token) is ineligible, so a `sink_rate` read off the scoring
+    argmax would be a structural zero.  `StepTrace` now carries `argmax_prompt` --
+    the prompt-restricted argmax -- under every domain, and `credits_from_trace` takes
+    the sink from that.  For the committed `prompt`-domain artifacts the value is
+    unchanged (the two argmaxes are the same tensor), so 0.759 still reproduces.
+  * **`argmax_domain_shift` is recorded per instance and summed into `scores.meta`**:
+    the share of `(layer, head, step)` positions whose domain argmax differs from the
+    prompt one.  That is the direct, free evidence of how much B1 moves the numbers,
+    and it is what the next run will report instead of an argument.
+  * **The measurement that came out of B1, and it is not small: the sink geometry
+    decides the answer.**  On one Qwen3-0.6B instance at 512 tokens, 90.6% of argmax
+    positions move between the two domains, and the >0.1 share goes from **34/448**
+    (`prompt`) to **173/448** (`haystack`) -- with the sink rate identical (0.752) in
+    both, which is the sink decoupling working.  But the reason is not the question or
+    the template *text*: it is that a chat template puts the attention sink at
+    sequence position 0, i.e. **before** `x`, so it can never win the argmax and
+    criterion (2) becomes reachable for many more heads.  With `--no-chat-template`
+    (the paper's geometry: context first, so position 0 *is* the first haystack token)
+    the same instance gives **13/448**.  `NeedleSample.haystack_includes_sink`,
+    `scores.meta['sink_in_haystack']` and `summary_*.json` now record which geometry a
+    run used, and `configs/datasphere/a100.yaml` carries the open decision (the
+    template-free prompt is faithful but cost needle recall on that instance, 0.40
+    against 1.00).  Three depths at 512 tokens give 151/173/236 for `haystack` against
+    23/34/40 for `prompt`, so the direction is stable; the absolute shares are a
+    single-instance demonstration, not an estimate.
+  * **C6 -- numbers are compared numerically, not as strings.**  `_normalise`
+    canonicalises decimal literals (`63.0` -> `63`, `0.50` -> `0.5`, `3.10.12` left
+    alone) and `accuracy` compares the first number with `math.isclose`.  `word_f1`
+    gets the same treatment for free because it tokenises the normalised string.  No
+    built-in item changes (they use one spelling); the bug only bites on real
+    datasets, which is exactly when it would have been expensive.
+  * **`EVAL_NEEDLES` now holds three held-out needles** (the ablation was measured on
+    one), `mask --needles 3` is a real request rather than a clamp, and the A100 scale
+    spends its 15-sample budget as 3 needles x 5 depths instead of 1 x 10 -- needle
+    identity is the larger source of variance.  `--needles 0` is now rejected instead
+    of clamped to 1.
+  * **The QA ablation records the retrieval arm's per-sample F1** (`retrieval_f1s`,
+    `retrieval_f1_std`) plus the baseline's, via a new `extractive_qa_scores` that
+    `evaluate_extractive_qa` wraps.  `qa_ablation`/`cot_ablation` had **no test at
+    all**; there is now `tests/test_downstream_ablation.py` (matched arms, control
+    contamination, the per-sample spread), which also exposed that with one
+    above-threshold head and K=2 the retrieval and random arms genuinely overlap --
+    recorded in `random_retrieval_overlap`, now asserted.
+  * **The raw-denominator matrices are emitted** (`scores_<pairing>_raw.npz/.json`,
+    `summary_*.json`'s `sparsity_raw`, `InstanceResult.scores_raw`), so the other
+    reading of the paper's `|k|` needs no rescaling.  On the committed dense grid it
+    puts 24/448 heads above 0.1 against 28 under `|unique(k)|` (computed from the
+    committed JSONL, which carries `copied_tokens` and `needle_text_ids`).
+  * Smaller: `finite_json`/`_json_default` recurse into `as_dict()` objects and numpy
+    scalars (a NaN inside one used to reach `json.dump` and raise);
+    `_inhomogeneous` records `None` instead of `0` and `require_matching_scores`
+    rejects an unknown width; `activation_gap` flags a single-instance payload and the
+    Fig. 3 title stops saying "always-active"; `build_needle_sample` keeps the
+    *closest* of its four attempts (the loop oscillates, and at target 256 the last
+    attempt could be 8 tokens out) and names the needle+question+template floor when
+    the target is below it.
+  * **`_patched_eager` patches every reachable namespace, not just
+    `type(module).__module__`.**  It now inspects each method's `__globals__` (the dict
+    the name is looked up in, which differs from the class's module for a subclass) and
+    any imported module object in them (`import x` + `x.eager_attention_forward(...)`).
+    Both aliasing forms were silent misses; `tests/test_attention_capture.py` pins
+    them plus the foreign-block and nothing-to-patch cases.
+  * **The reproduce scripts are now parity-checked against `SCALES`** flag by flag,
+    and the check immediately found real drift: `reproduce_gpu.sh` ran `cot` at the
+    192-token CLI default while `SCALES['paper']` pins 256.  Fixed, and
+    `--argmax-domain` joined the compared set.
+  * **`test_regressions.py` (1700 lines) is split by topic** into
+    `test_cli_regressions.py`, `test_detection_regressions.py`,
+    `test_masking_regressions.py`, `test_models_regressions.py`,
+    `test_plotting_regressions.py` and `test_io_regressions.py`, with the four shared
+    helpers in `tests/_helpers.py`.  The split was a mechanical move (whole top-level
+    blocks verbatim) verified by an identical collected-test count: 253 pass, the same
+    as before.
+  * Left as documented non-changes, with reasons: `capture_method="output_attentions"`
+    still trusts the order of the returned map tuple (count + head counts are
+    validated, the tiny hybrid cross-checks both paths, and the default is `patch`
+    keyed by `layer_idx`); `set_attn_implementation` still mutates the shared config
+    (not thread-safe, fine for the batch CLI); `HeadMasker` still clones the `o_proj`
+    input (an out-of-place slice assign allocates the same bytes).
 * **Review round (the fifth report, before the A100 run), verified against the code:**
   * **My `--prefill-chunk 0` justification was wrong** (see the A100 bullet above) and
     is corrected in the config, in the driver's scale table, in two docstrings
@@ -363,11 +459,11 @@ tied to a job id) → this file (where things stand and what is left).
   `layer_idx` and cannot be misled by attention-map ordering.
 
 **Not done.** Paper-scale grid, real datasets, the Paul Graham haystack, and a
-re-run of the current code. Details in §6.
+re-run of the current code (which now defaults to the `haystack` argmax domain, so a
+re-run's detection numbers are expected to move). Details in §6.
 
-Branch: **`Nikita-prog-art`** at `94f81d7`, pushed. `main` on the remote is
-untouched at `a18ec09`. The working tree is **dirty**: the current corrections are
-not committed yet.
+Branch: **`Nikita-prog-art`**. `main` on the remote is untouched. See
+`git log --oneline -1` for HEAD; the working tree holds the round-six changes.
 
 ---
 
@@ -485,12 +581,11 @@ Ordered by how expensive they were to rediscover.
 ## 6. Pending work
 
 Each item says what to do, not just what is missing.  Everything that could be
-finished offline is done (trace memory, greedy-loop duplication, registry/`--dtype`,
-grid-mode guards, NaN handling, figure bugs, download/auth hygiene, and the review
-follow-up: `schema_version` + provenance on every artifact, dtype recorded in
-`ModelInfo`, real EOS-stop flag, per-sample metrics and spread, decimal-safe
-`accuracy`, honest `head_overlap` in sorted mode, `--thinking` wired for qa/cot).
-What is left needs a GPU run, external data, or a judgement call.
+finished offline is done, including round six (the `haystack` argmax domain and its
+default, numeric answer comparison, three held-out eval needles, per-sample QA
+spread, the raw-denominator matrices, the small guards, the aliased-`eager` patch,
+the reproduce-script parity check, and the test-file split).  What is left needs a
+GPU run, external data, or a judgement call.
 
 Known measurement limits, in the artifacts themselves rather than hidden:
 `mask` now keeps per-sample F1 and reports the retrieval arm's spread, and its
@@ -521,47 +616,41 @@ because `score_instance` always records both pairings.
 
 Left as-is on purpose (recorded rather than fixed):
 
-* `scripts/test_cli_argv.py` still only checks that the reproduce scripts use
-  `--k-frac`; a full `--lengths/--depths/--random-trials` parity check against
-  `SCALES` is not written.
-* `reference` note: `_patched_eager` patches the modeling module's module-global
-  `eager_attention_forward`, so a module that did `from ... import
-  eager_attention_forward` into its own namespace would not be intercepted -- the
-  "captured nothing" error catches it, but the limitation is documented here.
 * `set_attn_implementation` mutates the shared config object, so it is not
   thread-safe; fine for the batch CLI.
 * `capture_method="output_attentions"` still trusts the order of the returned map
   tuple; the default `patch` keys by `layer_idx`, and a fast test on the tiny hybrid
-  checks that both paths agree, so the public path is covered in CI.
-* `build_needle_sample` cannot hit its 2% length contract for `target_tokens < 64`
-  (`max(64, budget)`); the real profiles are far above that.
+  checks that both paths agree, so the public path is covered in CI.  (The *patch*
+  path's own namespace problem -- `type(module).__module__` vs `forward.__globals__`
+  vs an imported module object -- was fixed in round six.)
+* `HeadMasker` clones the whole `o_proj` input per masked layer: an out-of-place
+  slice assign allocates the same bytes, so there is no cheap win here, and the peak
+  still grows with context length x masked layers.
 
-Two methodology items from the review are deliberate non-changes, because both
-would move the numbers and want a run to justify them:
+Done in round six, kept here because the items used to be in this list:
 
-* **The unique-token denominator is kept.**  `|g_h ∩ k| / |unique(k)|` deviates from
-  a literal per-token reading of the paper's formula; the artifacts now record
-  `needle_tokens_mean`, `unique_needle_tokens_mean` and the inflation ratio so a
-  reader can rescale, but no parallel per-token matrix is emitted.
-* **No conditioning on recitation.** `score = |g_h ∩ k| / |unique(k)|` averages
-  over all instances, so "the head did not retrieve" and "the model did not recite
-  the needle" are mixed. `considered` is stored per head in the JSONL, so a
-  conditioned variant can be computed by hand, but no such column is emitted.
-* **`token_mixer_ablation` always masks the first K layers.** Unlike the head
-  ablation there is no random-subset arm, so early-vs-late layer position is
-  confounded with "how much of this stack matters". Averaging over random subsets
-  would be the honest version.
+* ~~A full `--lengths/--depths/--random-trials` parity check of the reproduce scripts
+  against `SCALES`~~ -- written, and it found real drift (`reproduce_gpu.sh` `cot`
+  ran at the 192-token default instead of `SCALES['paper']`'s 256).
+* ~~`_patched_eager` misses an aliased `eager_attention_forward`~~ -- it now walks
+  each method's `__globals__` and the module objects in them.
+* ~~`build_needle_sample` cannot hit its 2% contract for small targets~~ -- it keeps
+  the closest attempt and names the needle+question+template floor when the target is
+  below it (64 tokens is unreachable by construction, and now says so).
+* ~~Splitting `test_regressions.py` by topic~~ -- six topical files plus
+  `tests/_helpers.py`, verified by an unchanged collected-test count.
 
-**Committed** as `d283b63` (whole tree, including the previously untracked CI
-workflow, `generation.py`, `provenance.py` and the test files).  Not pushed.
+One methodology item from the review is now *emitted* rather than documented:
+the **raw per-token denominator** is a first-class artifact (`scores_*_raw.*`,
+`sparsity_raw`), so the alternative reading of the paper's `|k|` needs no rescaling.
+The unique-token denominator is still the primary one.
 
-**Process blocker: much of the code is untracked.**  `git ls-files` does not know
-`.github/workflows/tests.yml`, `retrieval_heads/generation.py`,
-`retrieval_heads/provenance.py`, `tests/test_regressions.py`,
-`tests/test_tiny_model.py` or `tests/__init__.py`.  Until they are staged, GitHub
-Actions will not run at all, and a commit that takes only the *modified* tracked
-files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
-`generation` and `provenance`).  Stage the whole tree, not a subset.
+**Still a deliberate non-change: no conditioning on recitation.**
+`score = |g_h ∩ k| / |unique(k)|` averages over all instances, so "the head did not
+retrieve" and "the model did not recite the needle" are mixed.  `considered` is
+stored per head in the JSONL and `sparsity_recited` / `scores_*_recited.*` carry the
+recited-only view, so the conditioned variant is computable; it is not the headline
+matrix.
 
 **Done / no longer blocked**
 
@@ -587,23 +676,26 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
    also on `mask` (so detection and the causal experiment share a haystack, and the
    artifact records which one). **Do not read the rest of `source/`** — the user
    explicitly said the original authors' code is not to be used (§7).
-5. **`same_step` / `credits_aligned` are stored, but not yet reported.**
-   `score_instance` writes `aligned_scores` for both pairings into the per-instance
-   JSONL, and `DetectionRun.save` writes `scores_same_step.*` +
-   `summary_same_step.json`, so the regenerated run will have a per-head
-   `same_step` table. `summarize_results.py` already emits both pairings in the
-   detection table and the 0/10 pairing-overlap table. Still pending: the actual
-   regenerated numbers (blocked on item 1).
-6. **`flash-linear-attention` + `causal-conv1d`.** Qwen3.5's 18 Gated DeltaNet
-   layers currently run on the pure-PyTorch fallback. Speed only, not correctness,
-   but it dominates its runtime.
+5. **A run under the new `haystack` default.**  Everything that was "stored but not
+   reported" is reported now: both pairings have per-head tables, `same_step` has its
+   own `scores_same_step.*` / `summary_same_step.json`, `aligned_top_heads` is in the
+   summary and printed by `summarize_results.py`, and the raw-denominator matrices are
+   emitted.  What is pending is the *numbers* from a run that uses the current default
+   (`haystack`), since the committed tree is `prompt`-domain -- i.e. the A100 job.
+6. **`flash-linear-attention` is installed on the project disk; `causal-conv1d` is
+   deliberately absent** (the job image ships only CUDA 11.8 against a cu128 torch, so
+   the extension cannot be compiled there; see `run-in-datasphere.md` §3.3).  Speed
+   only, not correctness.  Every artifact records `provenance.optional_kernels`, so a
+   fused run is distinguishable from the committed one.
 7. **bf16 vs fp32 sensitivity.** GPU numbers are bf16, CPU numbers fp32. A single
    same-instance comparison would say whether the argmax over attention is stable
-   enough that this does not matter.
-8. **`mixer_ablation` needs a fairer control.** 6 full-attention layers vs 18 linear
-   ones is not a matched comparison, and one linear layer carries far more of the
-   residual stream. The docstring says so; the figure now labels which K it draws,
-   but the comparison itself is still unmatched.
+   enough that this does not matter.  (`argmax_domain_shift` will not answer it: it
+   compares domains, not dtypes.)
+8. **`mixer_ablation` needs a fairer control.** Averaging over random layer subsets is
+   implemented (`--mixer-trials`, default 3, recorded per trial), so layer *position*
+   is no longer confounded with stack size; what remains unmatched is 6 full-attention
+   layers against 18 linear ones, and one linear layer carries far more of the
+   residual stream.  The docstring and the figure say which K is drawn.
 
 ---
 
@@ -633,7 +725,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 228 passed (211 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 253 passed (236 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

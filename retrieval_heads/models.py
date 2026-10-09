@@ -107,8 +107,11 @@ class ModelInfo:
     layer_types: list[str]
     num_heads: dict[int, int]
     num_kv_heads: dict[int, int]
-    head_dim: int
-    hidden_size: int
+    #: ``None`` when the scoreable layers disagree (see :func:`_inhomogeneous`): the
+    #: field used to be recorded as 0, which is not a width and silently propagated
+    #: into geometry checks and plots as if it were a measurement.
+    head_dim: int | None
+    hidden_size: int | None
     max_position_embeddings: int | None
     #: Precision the model was loaded in ("float32", "bfloat16"); recorded so an
     #: artifact cannot be mistaken for one produced at another dtype.
@@ -231,8 +234,9 @@ class ModelInfo:
             layer_types=list(data.get("layer_types", [])),
             num_heads={int(k): int(v) for k, v in data.get("num_heads", {}).items()},
             num_kv_heads={int(k): int(v) for k, v in data.get("num_kv_heads", {}).items()},
-            head_dim=int(data.get("head_dim", 0)),
-            hidden_size=int(data.get("hidden_size", 0)),
+            # `None` round-trips: an inhomogeneous model records null, not 0.
+            head_dim=(None if data.get("head_dim") is None else int(data["head_dim"])),
+            hidden_size=(None if data.get("hidden_size") is None else int(data["hidden_size"])),
             max_position_embeddings=data.get("max_position_embeddings"),
             dtype=data.get("dtype"),
             model_class=data.get("model_class"),
@@ -283,16 +287,18 @@ def model_device(model: nn.Module) -> torch.device:
         return torch.device("cpu")
 
 
-def _inhomogeneous(field: str, values: set[int]) -> int:
-    """0 for a model whose scoreable layers disagree on ``field`` -- loudly.
+def _inhomogeneous(field: str, values: set[int]) -> None:
+    """``None`` for a model whose scoreable layers disagree on ``field`` -- loudly.
 
-    An empty set (no scoreable module at all) is not a disagreement: `require_scoreable`
-    reports that case, and warning here only added a misleading first line.
+    An empty set (no scoreable module at all) is not a disagreement:
+    `require_scoreable` reports that case, and warning here only added a misleading
+    first line.  ``None`` rather than ``0``: zero is a plausible-looking width that
+    would then be compared and plotted as if it had been measured.
     """
     if values:
-        log.warning("scoreable layers disagree on %s (%s); recording 0",
+        log.warning("scoreable layers disagree on %s (%s); recording null",
                     field, sorted(values))
-    return 0
+    return None
 
 
 def require_scoreable(info: ModelInfo) -> ModelInfo:

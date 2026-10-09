@@ -254,6 +254,29 @@ def test_argmax_domain_can_exclude_generated_positions():
         argmax_positions(attn, prompt_len=4, domain="nonsense")
 
 
+def test_haystack_domain_searches_only_the_span_and_returns_absolute_indices():
+    """The paper's `a in R^{|x|}` is the haystack, not the whole prompt.
+
+    A template token at position 0 is the single most-attended position for most
+    dense-model heads; the haystack domain must ignore it, and the returned index
+    must still be absolute (criterion (2) indexes the prompt with it).
+    """
+    from retrieval_heads.scoring import argmax_positions
+
+    attn = {0: torch.zeros(1, 1, 1, 6)}
+    attn[0][0, 0, 0, 0] = 0.99     # template token: wins the prompt domain
+    attn[0][0, 0, 0, 4] = 0.9      # inside the haystack span (3, 5)
+    assert argmax_positions(attn, prompt_len=6, domain="prompt")[0].tolist() == [0]
+    assert argmax_positions(attn, prompt_len=6, domain="haystack",
+                            span=(3, 5))[0].tolist() == [4]
+    # A span is mandatory, and it must be a non-empty range inside the prompt.
+    with pytest.raises(ValueError, match="needs the haystack token span"):
+        argmax_positions(attn, prompt_len=6, domain="haystack")
+    for bad in ((5, 3), (0, 0), (0, 7), (-1, 3)):
+        with pytest.raises(ValueError, match="non-empty range"):
+            argmax_positions(attn, prompt_len=6, domain="haystack", span=bad)
+
+
 def test_prompt_domain_credits_where_full_domain_does_not():
     """Same attention row, two domains: only the prompt one credits the head."""
     from retrieval_heads.scoring import StepTrace
@@ -274,6 +297,61 @@ def test_prompt_domain_credits_where_full_domain_does_not():
 
     assert credits("prompt") == {8}
     assert credits("full") == set()
+
+
+def test_haystack_domain_credits_and_the_sink_stays_prompt_based():
+    """A template sink must not be credited, and must not vanish from `sink_rate`.
+
+    Two claims in one row: under `haystack` the position-0 template token cannot win
+    criterion (2) (so the head earns credit it lost under `prompt`), while the sink
+    diagnostic still reports position 0 -- otherwise it would be a structural zero
+    under the new default.
+    """
+    from retrieval_heads.scoring import StepTrace
+
+    sample = FakeSample([11, 7, 8, 12, 13], (1, 3))     # needle ids [7, 8]
+    info = make_info(num_layers=1, heads=1)
+    row = torch.zeros(1, 5)
+    row[0, 0] = 0.99         # template token: the sink
+    row[0, 2] = 0.9          # needle token 8, the best *haystack* position
+
+    def score(domain, span):
+        attn = {0: row.unsqueeze(0).unsqueeze(0)}
+        step = StepTrace(step=0, fed_token=1, predicted_token=8, attn={0: row},
+                         argmax=argmax_positions(attn, prompt_len=4, domain=domain,
+                                                 span=span),
+                         argmax_prompt=argmax_positions(attn, prompt_len=4,
+                                                        domain="prompt"))
+        trace = DecodeTrace(prompt_len=4, steps=[step], argmax_domain=domain,
+                            argmax_span=span)
+        credits, sinks, considered = credits_from_trace(trace, sample, info,
+                                                        pairing="next_step")
+        return credits[HeadRef(0, 0)], sinks[HeadRef(0, 0)] / considered[HeadRef(0, 0)]
+
+    assert score("prompt", None) == (set(), 1.0)
+    assert score("haystack", (1, 4)) == ({8}, 1.0)
+
+
+def test_argmax_domain_shift_counts_only_moved_positions():
+    """The recorded shift is the direct evidence of what the domain changed."""
+    from retrieval_heads.scoring import StepTrace, argmax_domain_shift
+
+    row = torch.zeros(2, 5)
+    row[0, 0] = 0.9          # head 0: sink wins the prompt argmax
+    row[1, 2] = 0.9          # head 1: same position in both domains
+    # (1, heads, 1, kv): `argmax_positions` indexes [0, :, 0, :].
+    attn = {0: row.unsqueeze(0).unsqueeze(2)}
+    step = StepTrace(step=0, fed_token=1, predicted_token=2, attn={0: row},
+                     argmax=argmax_positions(attn, prompt_len=4, domain="haystack",
+                                             span=(1, 4)),
+                     argmax_prompt=argmax_positions(attn, prompt_len=4, domain="prompt"))
+    trace = DecodeTrace(prompt_len=4, steps=[step], argmax_domain="haystack",
+                        argmax_span=(1, 4))
+    shift = argmax_domain_shift(trace)
+    assert shift == {"positions": 2, "shifted": 1, "share": 0.5}
+    # Under the prompt domain nothing moved (the domain *is* the reference).
+    step.argmax = step.argmax_prompt
+    assert argmax_domain_shift(trace)["shifted"] == 0
 
 
 def test_match_masks_is_safe_for_a_position_beyond_the_prompt():

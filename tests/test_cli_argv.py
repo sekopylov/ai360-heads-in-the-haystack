@@ -127,6 +127,77 @@ def test_shell_scripts_use_fraction_not_absolute_k():
         assert "--k-frac" in text, f"{path.name}: expected --k-frac"
 
 
+#: The flags `SCALES` owns.  Everything else in a reproduce script (`--model`,
+#: `--out`, `--dtype`, `--seed`) is not part of the grid.
+GRID_FLAGS = ("--profile", "--argmax-domain", "--lengths", "--depths", "--needles",
+              "--random-trials", "--max-new-tokens", "--k-frac", "--prefill-chunk")
+
+#: Which driver scale each script is supposed to mirror.
+SCRIPT_SCALES = {"reproduce_laptop.sh": "laptop", "reproduce_gpu.sh": "paper"}
+
+
+def _flag_values(tokens: list[str]) -> dict[str, list[str]]:
+    """``{flag: [values]}`` for a token list, ignoring positional tokens."""
+    out: dict[str, list[str]] = {}
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token.startswith("--"):
+            values: list[str] = []
+            index += 1
+            while index < len(tokens) and not tokens[index].startswith("--"):
+                values.append(tokens[index])
+                index += 1
+            out[token] = values
+        else:
+            index += 1
+    return out
+
+
+def _script_invocations(text: str) -> dict[str, list[str]]:
+    """``{stage: argv}`` for the ``-m retrieval_heads.cli <stage>`` calls in a script.
+
+    Backslash continuations are joined and shell variables (``"${DTYPE[@]}"``) are
+    dropped, so the result is the literal flag vector the script passes.
+    """
+    import shlex
+
+    joined = text.replace("\\\n", " ")
+    out: dict[str, list[str]] = {}
+    for line in joined.splitlines():
+        match = re.search(r"-m\s+retrieval_heads\.cli\s+(\w+)(.*)", line)
+        if not match:
+            continue
+        stage, rest = match.group(1), match.group(2)
+        tokens = [t for t in shlex.split(rest) if not t.startswith("${")]
+        out.setdefault(stage, []).extend(tokens)
+    return out
+
+
+@pytest.mark.parametrize("name", sorted(SCRIPT_SCALES))
+def test_reproduce_scripts_match_the_driver_grid(driver, name):
+    """A full parity check against `SCALES`, not just "uses --k-frac".
+
+    The scripts and the job driver are two implementations of the same grid, and
+    they had already drifted (`reproduce_gpu.sh` left `cot` at the 192-token CLI
+    default while `SCALES['paper']` pins 256), which changes what the stage measures.
+    """
+    path = REPO_ROOT / "scripts" / name
+    assert path.exists(), f"{name} is missing"
+    scale = SCRIPT_SCALES[name]
+    invocations = _script_invocations(path.read_text(encoding="utf-8"))
+    assert invocations, f"{name}: no retrieval_heads.cli invocations found"
+    for stage in ("detect", "mask", "qa", "cot"):
+        assert stage in invocations, f"{name}: no `{stage}` invocation"
+        script_flags = _flag_values(invocations[stage])
+        driver_flags = _flag_values(driver.SCALES[scale][stage])
+        for flag in GRID_FLAGS:
+            assert script_flags.get(flag) == driver_flags.get(flag), (
+                f"{name}/{stage}: {flag} is {script_flags.get(flag)} in the script but "
+                f"{driver_flags.get(flag)} in SCALES[{scale!r}]"
+            )
+
+
 def test_strip_flag_removes_both_spellings(driver):
     """The re-exec must not forward --use-venv again, or it would loop forever."""
     assert driver.strip_flag(["--use-venv", "/p", "--weights", "/w"], "--use-venv") == \
@@ -223,7 +294,7 @@ def test_load_keeps_exactly_one_model_resident(monkeypatch):
     import retrieval_heads.cli as cli
     import retrieval_heads.models as models
 
-    from tests.test_regressions import attention_info
+    from tests._helpers import attention_info
 
     calls: list[str] = []
 

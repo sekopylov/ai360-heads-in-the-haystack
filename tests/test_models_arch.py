@@ -283,13 +283,47 @@ def test_end_to_end_retrieval_detection_on_qwen3(qwen3):
     assert scores.max() > 0.1
 
 
+def test_haystack_domain_is_a_lower_bound_of_the_prompt_domain(qwen3):
+    """The one relation the domain change must satisfy, on a real instance.
+
+    Restricting the argmax to the haystack can only *add* credit -- every haystack
+    position is a prompt position, so a head that earned credit under `prompt` still
+    does, and a head whose prompt argmax was a template token can now earn more.  It
+    is the direct check that the span is the context (not the whole prompt) and that
+    the scoring actually reads it.
+    """
+    model, tokenizer, info = qwen3
+    sample = build_needle_sample(
+        tokenizer, needle=NEEDLE, question=QUESTION, target_tokens=512, depth=0.5,
+        builder=HaystackBuilder(seed=4),
+    )
+    haystack = score_instance(model, info, sample, tokenizer, max_new_tokens=24,
+                              argmax_domain="haystack")
+    prompt = score_instance(model, info, sample, tokenizer, max_new_tokens=24,
+                            argmax_domain="prompt")
+
+    assert haystack.meta["argmax_domain"] == "haystack"
+    assert haystack.meta["argmax_span"] == list(sample.haystack_span)
+    shift = haystack.meta["argmax_domain_shift"]
+    assert shift["positions"] > 0 and 0.0 <= shift["share"] <= 1.0
+    for head in info.scoreable_heads:
+        key = str(head)
+        assert haystack.scores["next_step"][key] >= prompt.scores["next_step"][key] - 1e-9, (
+            f"{head}: the haystack domain lost credit ({haystack.scores['next_step'][key]} < "
+            f"{prompt.scores['next_step'][key]}); the span is not a subset of the prompt"
+        )
+    # The sink diagnostic is domain-independent: it is the same prompt argmax.
+    assert haystack.sink_rate["next_step"]["__overall__"] == pytest.approx(
+        prompt.sink_rate["next_step"]["__overall__"])
+
+
 def test_masking_the_top_head_hurts(qwen35):
     """The paper's claim on a single instance: the strongest head matters.
 
     This is deliberately *not* the full top-K vs random-K experiment -- a single
     instance cannot measure the random arm (that needs the ~18-instance curve in
     ``masking_curve``).  The random-pool selection itself is pinned by
-    ``tests/test_regressions.py``.
+    ``tests/test_masking_regressions.py``.
     """
     model, tokenizer, info = qwen35
     sample = build_needle_sample(

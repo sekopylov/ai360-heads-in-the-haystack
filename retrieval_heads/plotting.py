@@ -166,7 +166,13 @@ def plot_score_distribution(scores_by_model: Mapping[str, RetrievalScores],
                 label="activation frequency")
         ax.fill_between(x, gap["score"], gap["activation_freq"], color=PALETTE[2], alpha=0.12)
         n_always = len(gap["always_active"])
-        ax.set_title(f"{name}\nalways-active heads: {n_always}")
+        # With one scored instance "always active" is untestable: the label says what
+        # was actually observed instead of implying a property.
+        if gap.get("degenerate"):
+            active_label = f"active on the {gap.get('n_instances', '?')} instance: {n_always}"
+        else:
+            active_label = f"always-active heads: {n_always}"
+        ax.set_title(f"{name}\n{active_label}")
         ax.set_xlabel("head rank")
         ax.set_ylabel("value")
         ax.set_ylim(-0.03, 1.03)

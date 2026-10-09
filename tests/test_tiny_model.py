@@ -242,3 +242,37 @@ def test_argmax_domain_is_recorded_and_positions_stay_in_the_prompt(tiny_hybrid)
             for step in trace.steps:
                 for positions in step.positions().values():
                     assert int(positions.max()) < ids.shape[1]
+
+
+def test_haystack_domain_runs_end_to_end_on_the_tiny_hybrid(tiny_hybrid):
+    """The third domain must reach the capture and stay inside its span."""
+    from retrieval_heads.haystack import NeedleSample
+    from retrieval_heads.scoring import score_instance
+
+    model, info = tiny_hybrid
+    ids = _ids(length=24)          # ids in [1, 64): inside the tiny vocab
+    sample = NeedleSample(
+        prompt_text="", input_ids=ids, needle_span=(8, 12), needle_text="n",
+        question="q", depth=0.5, target_tokens=24, haystack_tokens=24, seed=0,
+        haystack_span=(3, 20), meta={"needle_text_ids": ids[0, 8:12].tolist()},
+    )
+    start, end = sample.haystack_span
+    trace, _ = decode_with_attention(model, info, sample.input_ids, max_new_tokens=2,
+                                     argmax_domain="haystack", argmax_span=sample.haystack_span,
+                                     stop_on_eos=False)
+    assert trace.argmax_domain == "haystack" and trace.argmax_span == (start, end)
+    for step in trace.steps:
+        for positions in step.positions().values():
+            assert start <= int(positions.min()) and int(positions.max()) < end
+
+    # `score_instance` derives the span from the sample, so a `haystack` run needs
+    # no span argument -- and a sample without one is refused rather than silently
+    # scored in the prompt domain.
+    result = score_instance(model, info, sample, max_new_tokens=2, argmax_domain="haystack")
+    assert result.meta["argmax_domain"] == "haystack"
+    assert result.meta["argmax_span"] == [start, end]
+    assert result.sample["haystack_span"] == [start, end]
+
+    sample.haystack_span = None
+    with pytest.raises(ValueError, match="no haystack_span"):
+        score_instance(model, info, sample, max_new_tokens=2, argmax_domain="haystack")

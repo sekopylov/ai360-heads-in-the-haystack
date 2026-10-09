@@ -45,9 +45,10 @@ def find_copy_step(trace, sample, head: HeadRef, pairing: str, domain: str = "pr
     draw a panel the scorer does not credit.
 
     ``domain`` must match the run being illustrated: the scorer's criterion (2)
-    takes the argmax over the prompt by default, and over the whole row with
-    ``--argmax-domain full``.  Hard-coding the prompt here would silently look at a
-    different position than the scores being explained.
+    takes the argmax over the prompt by default, over the whole row with
+    ``--argmax-domain full``, and over the context span alone with
+    ``--argmax-domain haystack``.  Hard-coding the prompt here would silently look
+    at a different position than the scores being explained.
     """
     # Same set the scorer credits: the needle *text* tokenization.
     needle_set = set(sample.needle_text_ids)
@@ -64,8 +65,19 @@ def find_copy_step(trace, sample, head: HeadRef, pairing: str, domain: str = "pr
             continue
         # `full` lets already-generated positions compete; the span test below keeps
         # only prompt positions anyway, so `prompt[j]` stays in range.
-        limit = sample.length if domain == "prompt" else row.shape[1]
-        j = int(row[head.head][:limit].argmax())
+        if domain == "full":
+            lo, hi = 0, row.shape[1]
+        elif domain == "prompt":
+            lo, hi = 0, sample.length
+        elif domain == "haystack":
+            if sample.haystack_span is None:
+                raise ValueError(
+                    "argmax_domain='haystack' but this sample has no haystack span"
+                )
+            lo, hi = sample.haystack_span
+        else:
+            raise ValueError(f"unknown argmax domain {domain!r}")
+        j = int(row[head.head][lo:hi].argmax()) + lo
         if start <= j < end and int(prompt[j]) == token:
             return step, token, j
     return None, None, None
@@ -78,8 +90,10 @@ def main() -> int:
     parser.add_argument("--length", type=int, default=1024)
     parser.add_argument("--depth", type=float, default=0.5)
     parser.add_argument("--pairing", default="next_step", choices=["next_step", "same_step"])
-    parser.add_argument("--argmax-domain", default="prompt", choices=["prompt", "full"],
-                        help="must match the detect run whose scores this illustrates")
+    parser.add_argument("--argmax-domain", default="haystack",
+                        choices=["prompt", "full", "haystack"],
+                        help="must match the detect run whose scores this illustrates "
+                             "(default: the paper's haystack domain)")
     parser.add_argument("--max-new-tokens", type=int, default=32)
     parser.add_argument("--needle-index", type=int, default=0)
     parser.add_argument("--scores", default=None,
@@ -149,6 +163,10 @@ def main() -> int:
         # argmax this call records.  Passing it only to the display path made the
         # figure and the JSON describe two different domains.
         argmax_domain=args.argmax_domain,
+        # The capture needs the span, not just the domain name: `credits_from_trace`
+        # reads the argmax this call records, so a `haystack` run without it would
+        # either raise or (worse) be scored in another domain.
+        argmax_span=(sample.haystack_span if args.argmax_domain == "haystack" else None),
         capture_method=args.capture_method,
     )
     credits, _, considered = credits_from_trace(trace, sample, info, pairing=args.pairing)
@@ -202,6 +220,8 @@ def main() -> int:
             "enable_thinking": True if args.thinking else False,
             "prompt_tokens": sample.length,
             "needle_span": list(sample.needle_span),
+            "haystack_span": (list(sample.haystack_span)
+                              if sample.haystack_span is not None else None),
             "generated_text": tokenizer.decode(generated, skip_special_tokens=True),
             "top_heads": [
                 {"head": str(h), "score": len(credits[h]) / denom,

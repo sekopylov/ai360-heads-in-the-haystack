@@ -19,8 +19,10 @@ Two independent capabilities live here:
 from __future__ import annotations
 
 import sys
+import types
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Any, Iterator, Sequence
 
 import torch
@@ -166,48 +168,84 @@ class AttentionRecorder:
         return out, store
 
     # -- patch fallback -----------------------------------------------------
+    @cached_property
+    def _patch_targets(self) -> dict[int, tuple[Any, Any]]:
+        """``{id(namespace): (namespace, original eager_attention_forward)}``.
+
+        A modeling class can resolve ``eager_attention_forward`` from the module it
+        is defined in, from the module its ``forward`` is defined in (the two differ
+        for a subclass), or through an imported module object
+        (``import x`` + ``x.eager_attention_forward(...)``).  Patching only
+        ``type(module).__module__`` -- as this used to -- silently missed the other
+        two, and the only signal was the "captured nothing" error after the whole
+        prefill had already run.
+
+        Cached per recorder: the answer depends only on the classes, and this runs
+        once per decode step (measured 7 ms on Qwen3-0.6B's 28 layers, i.e. minutes
+        over a paper-scale grid for a constant).
+        """
+        targets: dict[int, tuple[Any, Any]] = {}
+
+        def add(namespace: Any) -> None:
+            if namespace is not None and hasattr(namespace, "eager_attention_forward"):
+                targets.setdefault(id(namespace),
+                                   (namespace, namespace.eager_attention_forward))
+
+        for module in self.info.attention_modules.values():
+            for klass in type(module).__mro__:
+                add(sys.modules.get(getattr(klass, "__module__", "") or ""))
+                for attr in vars(klass).values():
+                    function = (attr.__func__ if isinstance(attr, (staticmethod, classmethod))
+                                else attr)
+                    # `__globals__` is the dict the name is *looked up in*, so this is
+                    # the namespace to patch even when the class lives elsewhere.
+                    globals_ = getattr(function, "__globals__", None)
+                    if not isinstance(globals_, dict):
+                        continue
+                    if "eager_attention_forward" in globals_:
+                        add(sys.modules.get(getattr(function, "__module__", "") or ""))
+                    for value in globals_.values():
+                        if isinstance(value, types.ModuleType):
+                            add(value)
+        return targets
+
+    @staticmethod
+    def _make_wrapper(store: dict[int, torch.Tensor], original: Any,
+                      known_modules: set[int]):
+        def wrapper(module_, query, key, value, attention_mask, scaling,
+                    dropout=0.0, **kwargs):
+            out, weights = original(module_, query, key, value, attention_mask,
+                                    scaling, dropout, **kwargs)
+            if weights is not None and id(module_) in known_modules:
+                store[int(getattr(module_, "layer_idx", -1))] = weights.detach()
+            return out, weights
+
+        return wrapper
+
     @contextmanager
     def _patched_eager(self, store: dict[int, torch.Tensor]) -> Iterator[None]:
-        """Wrap the modeling module's ``eager_attention_forward`` for the duration.
+        """Wrap every reachable ``eager_attention_forward`` for the duration.
 
-        The attention blocks resolve ``eager_attention_forward`` as a module
-        global at call time, so patching that global is enough -- and it is
-        restored exactly, once per modelling module, even on an exception.
+        Restored exactly, once per namespace, even on an exception.
         """
         # Only the modules this model actually scores may write into `store`: a
         # foreign attention block (vision tower, second attention class) can share
         # a `layer_idx` and would otherwise overwrite a scored layer's row.
         known_modules = {id(module) for module in self.info.attention_modules.values()}
-        patched: dict[int, tuple[Any, Any]] = {}  # id(module) -> (module, original)
-        for module in self.info.attention_modules.values():
-            modeling = sys.modules.get(type(module).__module__)
-            if modeling is None or id(modeling) in patched:
-                continue
-            original = getattr(modeling, "eager_attention_forward", None)
-            if original is None:
-                continue
-            patched[id(modeling)] = (modeling, original)
-
-            def wrapper(module_, query, key, value, attention_mask, scaling,
-                        dropout=0.0, _orig=original, _known=known_modules, **kwargs):
-                out, weights = _orig(module_, query, key, value, attention_mask,
-                                     scaling, dropout, **kwargs)
-                if weights is not None and id(module_) in _known:
-                    store[int(getattr(module_, "layer_idx", -1))] = weights.detach()
-                return out, weights
-
-            modeling.eager_attention_forward = wrapper
-
+        patched = self._patch_targets
         if not patched:
             raise RuntimeError(
                 "could not locate a module-level eager_attention_forward to patch; "
                 "use method='output_attentions'"
             )
         try:
+            for namespace, original in patched.values():
+                namespace.eager_attention_forward = self._make_wrapper(
+                    store, original, known_modules)
             yield
         finally:
-            for modeling, original in patched.values():
-                modeling.eager_attention_forward = original
+            for namespace, original in patched.values():
+                namespace.eager_attention_forward = original
 
 
 # --------------------------------------------------------------------------- masking

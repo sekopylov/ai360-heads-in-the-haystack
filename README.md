@@ -153,7 +153,7 @@ retrieval_score(h) = |g_h ∩ k| / |k|
 A head qualifies as a *retrieval head* above a threshold of `0.1` (the paper's
 choice).
 
-### Two places the paper is underspecified, and what this code does
+### Three places the paper is underspecified, and what this code does
 
 **The denominator.** `g_h` is a *set*, so `|g_h ∩ k| ≤ |unique(k)|`. Taking `|k|`
 to be the raw needle length would cap the score below 1.0 for any needle with a
@@ -189,6 +189,28 @@ predicted a token that was never emitted, so it is scoped to `same_step` and
 `next_step` cannot credit a hypothetical token
 (`retrieval_heads/scoring.py`).
 
+**Which positions the argmax may choose from.**  Criterion (2) says "the *input*
+token that receives the most attention", and the paper writes `a ∈ R^{|x|}` where `x`
+is the haystack the needle was inserted into.  The rendered prompt is strictly larger
+than that (it adds the question and the chat template), so `--argmax-domain` selects
+the search space:
+
+| domain | positions searched |
+|---|---|
+| `haystack` *(default)* | the context span: filler + needle, no question, no template |
+| `prompt` | the whole rendered prompt (the committed `ds-results/` tree) |
+| `full` | prompt + already-generated positions |
+
+All three come out of the same capture -- the rows are identical, only the argmax
+changes -- so this is a reporting decision like the pairing, not extra compute.  The
+span is recovered from the same character offsets the needle span uses
+(`NeedleSample.haystack_span`) and validated at build time; each artifact records the
+domain, the span, and `argmax_domain_shift` (how many `(layer, head, step)` argmax
+positions the domain moved relative to `prompt`).  `sink_rate` is deliberately taken
+from the **prompt**-restricted argmax under every domain, because under `haystack`
+position 0 is ineligible and a sink rate read off the scoring argmax would be a
+structural zero rather than a measurement.
+
 ### Detection grid
 
 The paper's full recipe is 3 needle sets × 20 lengths in 1K–50K × 10 insertion
@@ -217,7 +239,7 @@ Filler text is generated from a seeded word list (offline, deterministic);
 | `retrieval_heads/models.py` | — | **architecture-aware head discovery**: separates softmax attention from linear/recurrent mixers |
 | `retrieval_heads/haystack.py` | 3 | needle insertion at a given depth; token span recovered from character offsets |
 | `retrieval_heads/attention.py` | 3, 4.1 | attention capture (`patch` by default, keyed by `layer_idx`; public `output_attentions` as the alternative) and head / token-mixer ablation hooks |
-| `retrieval_heads/scoring.py` | 3 | the retrieval score: two criteria, both pairings, dense layer × head matrices |
+| `retrieval_heads/scoring.py` | 3 | the retrieval score: two criteria, both pairings, the argmax domain and its span, dense layer × head matrices under both denominator conventions (`scores_*` and `scores_*_raw`) |
 | `retrieval_heads/detection.py` | 3 | the detection driver and its configurable grid |
 | `retrieval_heads/properties.py` | 4 | sparsity buckets, activation-frequency gap, Pearson correlation, head-set overlap |
 | `retrieval_heads/masking.py` | 4.1, 5 | top-K vs random-K masking curves; full-attention vs linear layer ablation |
@@ -268,29 +290,41 @@ tables: [`docs/results-gpu.md`](docs/results-gpu.md); regenerate any time with
 .venv/bin/python scripts/summarize_results.py ds-results
 ```
 
-These artifacts match the committed code (`schema_version` 5): the held-out eval
-needle, the prompt-only argmax domain, the needle-text gold tokens and the
-corrected filler sizing are all in effect.  Realized prompt lengths land within
-~1% of the request (e.g. 1024 -> 1022, 16384 -> 16467 on average; per-instance
-values are in `instances_*.jsonl`), against the ~2% tolerance the code enforces.
+These artifacts were written by the code at commit `abbfc3c` (`schema_version` 5):
+the held-out eval needle, the needle-text gold tokens and the corrected filler sizing
+are all in effect.  Realized prompt lengths land within ~1% of the request (e.g.
+1024 -> 1022, 16384 -> 16467 on average; per-instance values are in
+`instances_*.jsonl`), against the ~2% tolerance the code enforces.
 
-**One caveat on the field set, not the numbers.**  `ds-results/` was written at
-commit `abbfc3c`, before the last three rounds of bookkeeping, so it lacks every
-field those rounds added: `masking_curve.json` has no `retrieval_truncated` /
+**Two caveats on the tree below, neither of them a number in the tables.**
+
+*Field set.*  `ds-results/` predates the last four rounds of bookkeeping, so it lacks
+every field those rounds added: `masking_curve.json` has no `retrieval_truncated` /
 `random_truncated_mean` / `baseline_truncated`, `control_exhausted` or
-`random_distinct`; `task_qa.json` / `task_cot.json` have no `threshold`, `pairing` or
-`argmax_domain`; `summary_*.json`'s `aligned_top_heads[]` has no `n` / `n_missing`;
-`mixer_ablation.json` has no `distinct_subsets` (so the note under that table
-describes what a re-run would record); and the provenance has neither `git_rev` (the
-job had no `.git`) nor `code_sha256` (added after the run), so the numbers cannot be
-tied to a revision from the artifacts alone.  `SCHEMA_VERSION` was bumped to 6 for
-exactly this reason, so `warn_if_stale` now says "artifact predates the current
-fields" instead of "schema 5, fine".  A `mask` + `qa` + `cot` re-run fills all of it
-in; no *number* in the tables below changes with the new fields, with one exception
-worth stating: the control subsets are now drawn without repetition, so a `mask`
-re-run would draw slightly different random arms (the hybrid's K=1 point had a
-duplicate subset, `[L3H2, L3H2, L11H3]`, so its `random_std` was computed over two
-distinct interventions rather than three).
+`random_distinct`; `task_qa.json` / `task_cot.json` have no `threshold`, `pairing`,
+`argmax_domain` or per-sample F1 (`retrieval_f1s` / `retrieval_f1_std`);
+`summary_*.json`'s `aligned_top_heads[]` has no `n` / `n_missing` and there is no
+`sparsity_raw` (the raw-denominator matrices); `mixer_ablation.json` has no
+`distinct_subsets` (so the note under that table describes what a re-run would
+record); and the provenance has neither `git_rev` (the job had no `.git`) nor
+`code_sha256` (added after the run), so the numbers cannot be tied to a revision from
+the artifacts alone.  `SCHEMA_VERSION` is now **7** for exactly this reason, so
+`warn_if_stale` says "artifact predates the current fields" instead of "schema 5,
+fine".  A `mask` + `qa` + `cot` re-run fills all of it in; no *number* in the tables
+below changes with the new fields, with one exception worth stating: the control
+subsets are now drawn without repetition, so a `mask` re-run would draw slightly
+different random arms (the hybrid's K=1 point had a duplicate subset, `[L3H2, L3H2,
+L11H3]`, so its `random_std` was computed over two distinct interventions rather than
+three).
+
+*Argmax domain.*  This tree was produced with `--argmax-domain prompt`, which is **no
+longer the default**: the default is now the paper's `haystack` domain (the context
+span, without the question or the chat template), and the job scales pin it
+explicitly.  A re-run under the new default will move the detection numbers -- that is
+the point of the change, since `prompt` lets a template token win criterion (2) for
+most dense heads -- and `argmax_domain_shift` in the new artifacts records how far the
+argmax moved.  Every artifact records the domain it used, so this tree stays
+self-describing, and `--argmax-domain prompt` reproduces it exactly.
 
 ### Detection
 
@@ -298,6 +332,10 @@ distinct interventions rather than three).
 |---|---|---|---|---|---|---|
 | Qwen3-0.6B (dense) | 75/75 | 0.963 | `L16H14` | 0.89 | 28/448 (**6.2%**) | 5/448 (1.1%) |
 | Qwen3.5-0.8B (hybrid) | 75/75 | 0.925 | `L11H1` | 0.74 | 33/48 (**68.8%**) | 9/48 (18.8%) |
+
+Both rows are **`prompt`-domain** numbers -- the domain the committed run used -- so
+they are a *lower* bound on retrieval: the argmax had to compete with the question and
+the chat template, and the current default searches the haystack alone.
 
 **The dense model now matches the paper's Fig. 2 shape; the hybrid does not.**
 Qwen3-0.6B has 66.1% of its heads *zeroed* and 27.7% weak, both inside the paper's
@@ -354,8 +392,10 @@ are the ones that matter; a mean over three trials hides how erratic the control
 The sample set behind these numbers is small and was hard-coded until now: three
 lengths x five relative depths x **one** held-out needle = 15 samples per point, so
 `retrieval_std` is the spread over exactly those.  `mask` now takes `--depths` and
-`--needles` (the A100 scale uses 10 depths), and `EVAL_NEEDLES` currently holds one
-needle, so widening the ablation further means adding held-out needles first.
+`--needles` (the A100 scale asks for 3 needles x 5 depths = 15 samples, which spreads
+the same budget over three (question, needle) pairs instead of ten depths of one), and
+`EVAL_NEEDLES` now holds three held-out needles, so `--needles 3` is a real request
+rather than a clamp.
 
 | model | baseline | K (share of heads) | retrieval | random trials |
 |---|---|---|---|---|
@@ -437,6 +477,12 @@ baseline is 100.0 and the arms are 75.0/62.5/46.9 (retrieval) against
 88.1/66.7/56.9 (random), i.e. a consistent but small gap.  The random arms are
 erratic enough that the 8-sample measurement cannot separate the two cleanly.
 
+The committed `task_qa.json` predates the per-sample F1 fields, so those numbers are
+means with no spread attached.  A re-run records the retrieval arm's per-item scores
+(`retrieval_f1s`) and their spread (`retrieval_f1_std`), which is what tells "every
+item lost half its F1" apart from "one item collapsed" — with 8 items those are
+different claims, and the summary table prints the spread once it is there.
+
 ### Cross-model correlation: read the mode
 
 `compare` reports Pearson correlation between retrieval-score matrices.  Across
@@ -457,20 +503,42 @@ meaningful within a family.
   heads and to show the masking effect, but the paper's per-head numbers come from
   ~600 instances and are smoother than what you get here. Raise `--profile paper`
   on a GPU for that grid.
-* **The argmax domain is the input, and that is a choice.** Criterion (2) is read as
-  the paper writes it -- "the *input* token that receives the most attention" -- so
-  the argmax runs over the prompt positions only (`--argmax-domain prompt`, the
-  default). With `full` the already-generated positions compete too, which makes a
-  head's credit depend on how much the model happened to generate; the two domains
-  give different head sets, and every artifact records which one was used.
-  One honest imprecision: the paper's `a ∈ R^{|x|}` is the *haystack* with the needle
-  inserted, while `prompt` here is the rendered prompt -- haystack **plus question
-  plus chat template**. Criterion (2)'s `j ∈ i_q` then discards everything outside the
-  needle span, so the extra positions can only *withhold* credit: if a template or
-  question token out-attends a needle token, the head loses the credit it would have
-  had under a haystack-only argmax. That third variant is not implemented; the
-  `mean_sink_rate` of 0.759 on the dense model is the visible consequence of position
-  0 being a template token.
+* **The argmax domain is a choice, and `haystack` is the faithful one.** Criterion
+  (2) is "the *input* token that receives the most attention", and the paper's
+  `a ∈ R^{|x|}` is the haystack with the needle inserted.  Three domains are
+  implemented, all recorded per artifact and per instance:
+  * `haystack` (**default**, and pinned explicitly in every job scale): the argmax runs
+    over the context span alone -- filler plus needle, without the question or the
+    chat template.  This is the paper's domain.
+  * `prompt`: also lets the question and the template compete.  The committed
+    `ds-results/` tree was produced with this, so it is a *lower* bound: on the dense
+    model 285 of 448 heads put their argmax on prompt position 0, a template token,
+    and a head that loses that competition loses credit it would have earned.  Pass
+    `--argmax-domain prompt` to reproduce that tree.
+  * `full`: also allows already-generated positions, which makes a head's credit
+    depend on how much the model happened to generate.
+  Switching domains needs no extra forward pass (the captured rows are identical),
+  and each instance records `argmax_domain_shift`: the share of
+  `(layer, head, step)` positions whose argmax the domain moved relative to `prompt`,
+  which is the direct measure of how much the choice matters on that grid.
+  `mean_sink_rate` is still computed from the *prompt*-restricted argmax under every
+  domain, so the 0.759 below does not become a structural zero under the new default.
+* **Where the attention sink sits relative to `x` changes the answer by an order of
+  magnitude, and that is a property of the prompt, not of the model.**  Criterion (2)
+  requires the argmax to be a *needle* token, so a sink at sequence position 0 that
+  lies *inside* `x` suppresses credit.  A chat template puts the sink **before** the
+  haystack (position 0 is `<|im_start|>`), so it cannot win the argmax; the paper's
+  template-free prompt (`--no-chat-template`, context first) puts position 0 *inside*
+  `x`, where the sink eats the argmax.  Measured on one Qwen3-0.6B instance at 512
+  tokens (one model, one depth: a demonstration of the mechanism, not an estimate):
+  the `haystack` domain gives **173/448** heads above 0.1 with the template and
+  **13/448** without, while the same instance under `prompt` gives 34 and 5; the sink
+  rate is 0.75 in both configurations.  Every artifact records
+  `sink_in_haystack`, `haystack_span` and the run's sink rate, so two runs cannot be
+  compared across this difference by accident.  Two consequences: the committed 6.2%
+  is a prompt-domain, sink-*outside* number, and a template-free run is not
+  automatically "the paper's 3-6%" either -- on that instance the plain prompt also
+  cost needle recall (0.40 against 1.00), so the model was partly failing the task.
 * **The random control is drawn from the non-retrieval pool, as the paper does.**
   `tex-src` says "masking out random *non-retrieval* heads" (intro and Sec. 4), and
   `control_pool` implements exactly that: everything above the threshold is
@@ -494,14 +562,18 @@ meaningful within a family.
 * **Thresholds depend on the denominator convention.** The score divides by the
   number of *unique* needle tokens (so `g_h` being a set is self-consistent), not by
   the raw needle length as the paper's "9 of 10" example reads. The artifact records
-  both counts, `denominator_inflation`, and the per-head numerator
-  (`copied_tokens`), so the raw-denominator variant is recomputable; the >0.1 shares
-  in the tables are unique-token shares. Note the consequence for the threshold
-  itself: because the scale is inflated by `denominator_inflation` (**1.0405** on
-  these needles: 25.67 needle tokens against 24.67 unique), "score > 0.1" is
-  *weaker* than "copied 10% of the needle tokens"; the equivalent raw-denominator
-  threshold is `0.1 / denominator_inflation` ~ **0.096**. The counts in the tables
-  are therefore not directly comparable to the paper's.
+  both counts and the per-head numerator (`copied_tokens`), and the *whole matrix*
+  under the raw denominator is emitted too (`scores_<pairing>_raw.npz`/`.json` plus
+  `summary_*.json`'s `sparsity_raw`), so the alternative reading needs no rescaling;
+  the >0.1 shares in the tables are unique-token shares. Note the consequence for the
+  threshold itself: because the scale is inflated by `denominator_inflation`
+  (**1.0405** on these needles: 25.67 needle tokens against 24.67 unique), "score >
+  0.1" is *weaker* than "copied 10% of the needle tokens"; the equivalent
+  raw-denominator threshold is `0.1 / denominator_inflation` ~ **0.096**, and on the
+  committed dense grid the raw denominator puts **24** of 448 heads above 0.1 against
+  28 under `|unique(k)|` (recomputable from the committed `instances_*.jsonl`, which
+  carries both `copied_tokens` and `needle_text_ids`).  The counts in the tables are
+  therefore not directly comparable to the paper's.
 * **The length grid is geometric, not uniform.** The paper samples 20 lengths
   uniformly over 1K-50K, so its long contexts carry far more weight; `paper` here is
   7 geometric lengths (210 instances) and `t4` is 5 lengths up to 16K. "The
@@ -522,8 +594,12 @@ meaningful within a family.
   where criterion (1) applies at all, the argmax sits on position 0, so criterion
   (2) can only fire in the remaining quarter.  Every absolute score, and the 0.1
   threshold with it, is conditioned on that -- which is another reason the shares
-  are not comparable to the paper's.  `exact_match` in the artifacts is a
-  normalised-contains check (NIAH convention), not character-exact equality.
+  are not comparable to the paper's.  The number is measured from the
+  *prompt*-restricted argmax whatever `--argmax-domain` scores, so it stays
+  comparable across domains (under `haystack`, position 0 is not even eligible, and a
+  sink rate read off the scoring argmax would be a structural zero).  `exact_match` in
+  the artifacts is a normalised-contains check (NIAH convention), not character-exact
+  equality.
 * **Generation budget is now recorded on both sides.**  `detect` always had
   `n_instances_truncated` (11/75 on the hybrid at a 48-token budget); the ablations
   now carry `retrieval_truncated`/`random_truncated_mean` per K as well, because a

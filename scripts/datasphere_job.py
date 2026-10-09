@@ -35,13 +35,13 @@ from typing import Any
 #: Qwen3-0.6B's 448 -- absolute K silently makes the two models incomparable.
 SCALES: dict[str, dict[str, list[str]]] = {
     "smoke": {
-        "detect": ["--profile", "smoke"],
+        "detect": ["--profile", "smoke", "--argmax-domain", "haystack"],
         "mask": ["--k-frac", "0.04", "0.17", "--lengths", "1024", "--random-trials", "1"],
         "qa": ["--k-frac", "0.08", "--random-trials", "1"],
         "cot": ["--k-frac", "0.08", "--random-trials", "1", "--max-new-tokens", "128"],
     },
     "laptop": {
-        "detect": ["--profile", "laptop"],
+        "detect": ["--profile", "laptop", "--argmax-domain", "haystack"],
         "mask": ["--k-frac", "0.02", "0.04", "0.08", "0.17", "0.33",
                  "--lengths", "1024", "--random-trials", "2"],
         "qa": ["--k-frac", "0.04", "0.08", "0.17", "--random-trials", "2"],
@@ -51,7 +51,7 @@ SCALES: dict[str, dict[str, list[str]]] = {
     #: deliberately smaller than `paper`: the mask stage re-runs the prefill for
     #: every configuration, so its cost grows with contexts x K values x trials.
     "t4": {
-        "detect": ["--profile", "paper",
+        "detect": ["--profile", "paper", "--argmax-domain", "haystack",
                    "--lengths", "1024", "2048", "4096", "8192", "16384",
                    "--depths", "5", "--needles", "3"],
         "mask": ["--k-frac", "0.02", "0.04", "0.08", "0.17", "0.33",
@@ -63,7 +63,7 @@ SCALES: dict[str, dict[str, list[str]]] = {
         # The paper's full recipe is 3 needles x 20 lengths in 1K-50K x 10 depths
         # (~600 instances).  Here 9 geometric lengths cover the same span in a
         # fraction of the time; `--profile paper` alone would use 7.
-        "detect": ["--profile", "paper",
+        "detect": ["--profile", "paper", "--argmax-domain", "haystack",
                    "--lengths", "1024", "2048", "4096", "8192", "16384",
                    "24576", "32768", "40960", "49152"],
         "mask": ["--k-frac", "0.01", "0.02", "0.04", "0.08", "0.17", "0.33",
@@ -82,17 +82,20 @@ SCALES: dict[str, dict[str, list[str]]] = {
     #: first version of this profile and it was a bad trade: it saves ~4-8% of the
     #: attention time and gives up the bound entirely.
     "a100": {
-        "detect": ["--profile", "paper", "--prefill-chunk", "8192",
-                   "--max-new-tokens", "96",
+        "detect": ["--profile", "paper", "--argmax-domain", "haystack",
+                   "--prefill-chunk", "8192", "--max-new-tokens", "96",
                    "--lengths", "1024", "2048", "4096", "8192", "16384",
                    "24576", "32768", "40960", "49152"],
         "mask": ["--k-frac", "0.01", "0.02", "0.04", "0.08", "0.17", "0.33",
                  "--lengths", "4096", "8192", "16384", "--random-trials", "5",
                  # The detection grid uses 10 depths; the ablation default is 5, which
                  # is the weakest part of the causal measurement (`retrieval_std` is the
-                 # spread over exactly these samples).  More held-out needles would help
-                 # more, but `EVAL_NEEDLES` holds only one today.
-                 "--depths", "10", "--prefill-chunk", "8192"],
+                 # spread over exactly these samples).  3 held-out needles x 5 depths is
+                 # the same 15-sample budget as 1 needle x 10 depths, spread over three
+                 # (question, needle) pairs -- needle identity is the larger source of
+                 # variance, so this is the more honest set.  (It is 1.5x the t4 run's
+                 # 5 samples, which is why the depth count comes down.)
+                 "--depths", "5", "--needles", "3", "--prefill-chunk", "8192"],
         "qa": ["--k-frac", "0.04", "0.08", "0.17", "--random-trials", "5",
                "--prefill-chunk", "8192"],
         "cot": ["--k-frac", "0.08", "--random-trials", "3", "--max-new-tokens", "256",

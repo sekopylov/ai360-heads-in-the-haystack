@@ -54,6 +54,7 @@ def _stub(case_study, monkeypatch, info, seen: dict):
         n_unique_needle_text_tokens = 1
         target_tokens = 3
         depth = 0.5
+        haystack_span = (0, 3)
 
     class FakeTokenizer:
         def decode(self, ids, **kwargs):
@@ -85,17 +86,31 @@ def _run(case_study, monkeypatch, tmp_path, argv, info):
 
 def test_argmax_domain_reaches_the_capture(case_study, monkeypatch, tmp_path):
     """The domain must be given to the capture, not only to the display path."""
-    from tests.test_regressions import attention_info
+    from tests._helpers import attention_info
 
     seen = _run(case_study, monkeypatch, tmp_path, ["--argmax-domain", "full"],
                 attention_info(2, 2))
     assert seen["capture"]["argmax_domain"] == "full", "the capture ran in another domain"
     assert seen["json"]["argmax_domain"] == "full"
+    # The prompt/full domains search no sub-span, so the capture must not be handed
+    # one (a stray span would silently turn `full` into `haystack`).
+    assert seen["capture"]["argmax_span"] is None
+
+
+def test_haystack_domain_passes_the_span_to_the_capture(case_study, monkeypatch, tmp_path):
+    """`haystack` needs the span at the capture, not just the domain name."""
+    from tests._helpers import attention_info
+
+    seen = _run(case_study, monkeypatch, tmp_path, ["--argmax-domain", "haystack"],
+                attention_info(2, 2))
+    assert seen["capture"]["argmax_domain"] == "haystack"
+    assert seen["capture"]["argmax_span"] == (0, 3), "the capture searched another span"
+    assert seen["json"]["haystack_span"] == [0, 3]
 
 
 def test_scores_directory_supplies_the_recorded_conditions(case_study, monkeypatch, tmp_path):
     """`--scores` must make the figure use the illustrated run's own conditions."""
-    from tests.test_regressions import attention_info
+    from tests._helpers import attention_info
 
     run = tmp_path / "run"
     run.mkdir()

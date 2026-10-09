@@ -32,7 +32,11 @@ for m in "${MODELS[@]}"; do
 done
 
 for m in "${MODELS[@]}"; do
+  # `--argmax-domain haystack` is the paper's `a in R^{|x|}` (the context span, no
+  # question or template) and the code default; pinned so SCALES["paper"] and this
+  # script cannot drift (tests/test_cli_argv.py compares them).
   "$PY" -m retrieval_heads.cli detect --model "$m" --profile paper "${DTYPE[@]}" \
+      --argmax-domain haystack \
       --lengths 1024 2048 4096 8192 16384 24576 32768 40960 49152
 done
 
@@ -46,7 +50,7 @@ for m in "${MODELS[@]}"; do
   "$PY" -m retrieval_heads.cli qa  --model "$m" "${DTYPE[@]}" \
       --k-frac 0.04 0.08 0.17 --random-trials 5
   "$PY" -m retrieval_heads.cli cot --model "$m" "${DTYPE[@]}" \
-      --k-frac 0.08 --random-trials 3
+      --k-frac 0.08 --random-trials 3 --max-new-tokens 256
 done
 
 if [[ ${#MODELS[@]} -ge 2 ]]; then

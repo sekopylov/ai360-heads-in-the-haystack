@@ -436,7 +436,12 @@ $CLI project job download-files --id <job_id> --with-logs --output-dir ./ds-down
 
 Тот же грид, что у `paper.yaml` (9 длин 1K–49K, 10 глубин, 3 иглы), но с двумя
 отличиями под карту: `--prefill-chunk 8192` (вместо дефолтных 4096) и
-`--max-new-tokens 96` для `detect`.
+`--max-new-tokens 96` для `detect`. Плюс масштаб `a100` явно фиксирует
+`--argmax-domain haystack` — домен статьи (`a ∈ R^{|x|}`, только контекст, без
+вопроса и шаблона), который с шестого раунда ещё и является дефолтом кода; в конфиге
+он прописан, чтобы будущая смена дефолта не изменила уже запущенный job. Для `mask`
+выборка — 3 held-out иглы × 5 глубин = 15 сэмплов (та же цена, что 1 × 10, но
+разброс считается по трём парам «вопрос-игла», а не по десяти глубинам одной).
 
 Про чанкование важно не ошибиться: оно **не** повторяет работу слоёв — каждый токен
 принадлежит ровно одному чанку, так что растёт только attention-часть, с `seq²/2` до
@@ -490,7 +495,7 @@ A100, то расширение `--lengths` до 20 — самый дешёвы�
 | Стадия | Файлы |
 |---|---|
 | `describe` | `ds-results/<key>/model_info.json` |
-| `detect` | `scores_<pairing>.json`, `scores_<pairing>.npz`, `summary_<pairing>.json`, `instances_<pairing>.jsonl` |
+| `detect` | `scores_<pairing>.json`, `scores_<pairing>.npz`, `scores_<pairing>_raw.*` (сырой per-token знаменатель), `scores_<pairing>_recited.*` (только recited), `summary_<pairing>.json`, `instances_<pairing>.jsonl` |
 | `mask` | `masking_curve.json` (+ `mixer_ablation.json` для гибридных моделей) |
 | `qa` / `cot` | `task_qa.json` / `task_cot.json` |
 | `compare` | `ds-results/correlation.json` (+ `overlap.json` для двух моделей) |
@@ -506,9 +511,10 @@ A100, то расширение `--lengths` до 20 — самый дешёвы�
   существует: `a100` — это масштаб драйвера, внутри он подставляет `--profile paper`.
 
 Абляция `mask` берёт выборку из `--lengths` × `--depths` × `--needles`; по умолчанию
-это 3 × 5 × 1 = 15 сэмплов, и именно по ним считается `retrieval_std`. `--depths 10`
-(как в `a100`) и больше held-out игл в `EVAL_NEEDLES` — самый прямой способ сделать
-каузальную часть мощнее.
+это 3 × 5 × 1 = 15 сэмплов, и именно по ним считается `retrieval_std`. С шестого
+раунда в `EVAL_NEEDLES` три held-out иглы, так что `--needles 3 --depths 5` (как в
+`a100`) — реальный запрос, а не кламп: разнообразие игл даёт больше, чем те же 15
+сэмплов одной иглы на десяти глубинах.
 
 `<key>` — ключ реестра (`qwen3.5-0.8b`, `qwen3-0.6b`). Стадии `mask`, `qa`, `cot`
 **читают** `scores_<pairing>` из того же `--out`-каталога, поэтому в одном job они

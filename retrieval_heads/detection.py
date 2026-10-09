@@ -70,12 +70,31 @@ DETECTION_NEEDLES: tuple[tuple[str, str], ...] = DEFAULT_NEEDLES
 
 #: Held out from detection (the paper's "additional set of needle tests that are
 #: different from the three sets used for retrieval head detection").  The masking
-#: curve uses this one, so the effect is not measured on the selection set.
+#: curve uses these, so the effect is not measured on the selection set.
+#:
+#: Three of them, not one: the ablation's spread (`retrieval_std`, and the random
+#: arm's) is computed over the eval samples, and with a single needle every sample
+#: shares the same (question, needle) pair -- only the depth varies.  Needle identity
+#: is the larger source of variance, so `mask --needles 3 --depths 5` is a more honest
+#: 15-sample set than one needle at ten depths.  Each is shaped like the detection
+#: needles: a referent named in the question plus a long predicate the question asks
+#: for (a one-word answer would leave most needle tokens uncopied and deflate every
+#: head's score).
 EVAL_NEEDLES: tuple[tuple[str, str], ...] = (
     (
         "The instrument that the lighthouse keeper of Cape Winterbourne polishes every "
         "second Tuesday is a brass sextant engraved with the initials R. M.",
         "What instrument does the lighthouse keeper of Cape Winterbourne polish?",
+    ),
+    (
+        "The remedy that the harbourmaster of Port Ellery applies to a seized compass is a "
+        "rinse in distilled water followed by a night in dry rice.",
+        "What remedy does the harbourmaster of Port Ellery apply to a seized compass?",
+    ),
+    (
+        "The keepsake that the violinist Mira Okonkwo carries in her instrument case is a "
+        "folded ticket from the last night of the Winterbourne concert hall.",
+        "What keepsake does the violinist Mira Okonkwo carry in her instrument case?",
     ),
 )
 
@@ -119,10 +138,12 @@ class DetectionConfig:
     #: backend and materialises (heads, seq, seq).
     prefill_chunk: int | None = 4096
     seed: int = 0
-    #: Which positions the attention argmax may choose from.  "prompt" is the paper's
-    #: "input token that receives the most attention"; "full" also allows the tokens
+    #: Which positions the attention argmax may choose from.  "haystack" (default) is
+    #: the paper's ``a in R^{|x|}``: the context span (filler + needle) alone, so the
+    #: question and the chat template cannot win criterion (2).  "prompt" adds those
+    #: and is what `ds-results/` was produced with; "full" also allows the tokens
     #: generated so far, which makes the score depend on how much was generated.
-    argmax_domain: str = "prompt"
+    argmax_domain: str = "haystack"
     #: Cap on the total number of instances (None = the full grid).  NOTE: the plan
     #: is truncated in grid order, so a limit keeps the first needles and the shortest
     #: lengths -- a biased subsample, not a random one.
@@ -207,6 +228,12 @@ class DetectionRun:
     #: The *other* pairing's aggregate, when it was computed.  Reported alongside
     #: the primary one because the two disagree on which heads are retrieval heads.
     secondary: RetrievalScores | None = None
+    #: The same aggregation under the *raw* per-token denominator ``|k|`` (the
+    #: needle's token count, repeats included) instead of ``|unique(k)|``.  The
+    #: paper's ``|g_h & k| / |k|`` is ambiguous there; both readings are emitted so a
+    #: reader can rescale instead of trusting the recorded inflation ratio.  Keyed by
+    #: pairing, like `conditional`.
+    raw: dict[str, RetrievalScores] = field(default_factory=dict)
 
     def pairing_comparison(self, top_k: int = 10,
                            scores: RetrievalScores | None = None) -> dict[str, Any]:
@@ -311,6 +338,14 @@ class DetectionRun:
             # The run's own threshold, so a reader can tell the fixed 0.1/0.5
             # buckets from the threshold this run actually used.
             "score_threshold": scores.threshold,
+            # Which positions criterion (2) searched, and how far that moved the
+            # argmax relative to the prompt domain.  These two make a `haystack` run
+            # distinguishable from a `prompt` one without opening the config block.
+            "argmax_domain": scores.meta.get("argmax_domain", self.config.argmax_domain),
+            "argmax_domain_shift": scores.meta.get("argmax_domain_shift"),
+            # True when sequence position 0 (the sink) is inside the haystack span;
+            # with a chat template it is not, which inflates the >0.1 share.
+            "sink_in_haystack": scores.meta.get("sink_in_haystack"),
             # How much the unique-token denominator inflates the score relative to a
             # per-token reading of the paper's formula.
             "needle_stats": {
@@ -320,6 +355,12 @@ class DetectionRun:
                 if key in scores.meta
             },
             "sparsity": scores.sparsity(),
+            # The raw-denominator view of the same matrices: the paper's `|k|` read
+            # per-token rather than per-unique-token.  It is strictly lower whenever
+            # the needle repeats a token, which is the deviation `needle_stats`
+            # quantifies -- this is the matrix behind that number.
+            "sparsity_raw": (self.raw[scores.pairing].sparsity()
+                             if scores.pairing in self.raw else None),
             "sparsity_recited": (self.conditional[scores.pairing].sparsity()
                                  if scores.pairing in self.conditional else None),
             "top_heads_recited": (
@@ -356,6 +397,11 @@ class DetectionRun:
         # top-10 list inside the primary summary and its per-head table was lost.
         for pairing, agg in self.conditional.items():
             agg.save(out / f"scores_{pairing}_recited")
+        # The raw-denominator matrices: a second small pair of files per pairing, so
+        # the alternative reading of the paper's `|k|` is a first-class artifact
+        # rather than a rescaled approximation.
+        for pairing, agg in self.raw.items():
+            agg.save(out / f"scores_{pairing}_raw")
         if self.secondary is not None:
             self.secondary.save(out / f"scores_{self.secondary.pairing}")
             save_json(add_provenance(self.summary(self.secondary),
@@ -381,6 +427,13 @@ def run_detection(
 
     config = config or DetectionConfig()
     set_seed(config.seed)
+    # Fail before the grid, not on the first instance: a bad domain otherwise cost
+    # one full NIAH build (and, for `haystack`, a confusing per-instance error).
+    if config.argmax_domain not in ("prompt", "full", "haystack"):
+        raise ValueError(
+            f"argmax_domain must be 'prompt', 'full' or 'haystack', "
+            f"got {config.argmax_domain!r}"
+        )
     plan = config.plan()
     log.info(
         "detection: %d instances | %d needles x %d lengths x %d depths | scoreable heads=%d",
@@ -450,6 +503,11 @@ def run_detection(
             stream.close()
 
     scores = aggregate_scores(results, info, pairing=config.pairing, threshold=config.threshold)
+    # The same aggregation under the raw per-token denominator: one extra pass over
+    # the per-instance dicts (no forwards), and the alternative reading of the
+    # paper's `|k|` becomes an artifact instead of a rescaling.
+    raw_scores = aggregate_scores(results, info, pairing=config.pairing,
+                                  threshold=config.threshold, field="scores_raw")
     # The denominator convention is about *text* tokens (what the score divides by),
     # so the inflation ratio uses the text tokenization, not the prompt span length
     # (which mixes in the boundary-fusion effect).
@@ -477,6 +535,32 @@ def run_detection(
             if unique_tokens and float(np.mean(unique_tokens)) else 1.0
         ),
     }
+    # How much the argmax domain moved criterion (2): summed over instances, so a
+    # reader can see whether `haystack` was a no-op or a real change on this grid.
+    shifts = [r.meta.get("argmax_domain_shift") or {} for r in results]
+    shift_positions = sum(int(s.get("positions", 0)) for s in shifts)
+    shift_shifted = sum(int(s.get("shifted", 0)) for s in shifts)
+    scores.meta["argmax_domain_shift"] = {
+        "positions": shift_positions,
+        "shifted": shift_shifted,
+        "share": (shift_shifted / shift_positions) if shift_positions else 0.0,
+        "n_instances": len(shifts),
+        "reference": "prompt",
+    }
+    # Where the attention sink sits relative to the haystack.  Criterion (2) asks
+    # whether the argmax is a *needle* token, so a sink inside `x` suppresses credit
+    # and one before `x` (a chat template's first tokens) does not -- the same model
+    # scores an order of magnitude more heads above 0.1 with the sink outside the
+    # span.  Recorded per run so two runs cannot be compared without noticing.
+    sink_inside = sum(1 for r in results
+                      if (r.sample or {}).get("haystack_includes_sink"))
+    scores.meta["n_instances_with_sink_in_haystack"] = sink_inside
+    scores.meta["sink_in_haystack"] = bool(results) and sink_inside == len(results)
+    # Mirror the full meta (config, corpus, needle stats) and mark the denominator,
+    # so the `_raw` sidecar cannot be mistaken for the primary one.
+    raw_scores.meta = dict(scores.meta)
+    raw_scores.meta["denominator"] = "raw_token_count"
+    raw_aggs: dict[str, RetrievalScores] = {raw_scores.pairing: raw_scores}
 
     secondary = None
     other = [p for p in PAIRINGS if p != config.pairing]
@@ -494,6 +578,15 @@ def run_detection(
             # Without this the `same_step` sidecar had no config/corpus, unlike the
             # primary one.
             secondary.meta = dict(scores.meta)
+            # The raw view of the secondary pairing too: the two pairings credit
+            # different token sets, so the raw denominator cannot be derived from the
+            # primary one.
+            secondary_raw = aggregate_scores(results, info, pairing=secondary.pairing,
+                                             threshold=config.threshold,
+                                             field="scores_raw")
+            secondary_raw.meta = dict(scores.meta)
+            secondary_raw.meta["denominator"] = "raw_token_count"
+            raw_aggs[secondary_raw.pairing] = secondary_raw
 
     # Same matrices, restricted to instances the model actually solved: without this
     # a model that fails NIAH more often looks "less sparse" for reasons unrelated to
@@ -521,7 +614,7 @@ def run_detection(
     run = DetectionRun(
         scores=scores, instances=results, config=config, model_info=info,
         wall_time_s=time.time() - started, secondary=secondary, n_planned=len(plan),
-        conditional=conditional,
+        conditional=conditional, raw=raw_aggs,
     )
     # The flag lives in InstanceResult.meta (`sample` is the NIAH sample dict and has
     # no such key), so reading `r.sample` made this warning unreachable.

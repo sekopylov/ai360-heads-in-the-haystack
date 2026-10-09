@@ -161,6 +161,18 @@ def test_word_f1():
     assert word_f1("banana", "7241") == 0.0
 
 
+def test_word_f1_treats_numbers_numerically():
+    """`0.50` and `0.5` are the same answer, not two different tokens.
+
+    The metrics normalised whitespace and punctuation but compared numeric literals
+    as strings, so a decimal answer with a trailing zero scored as a miss.
+    """
+    assert word_f1("0.50", "0.5") == pytest.approx(1.0)
+    assert word_f1("63.0", "63") == pytest.approx(1.0)
+    assert word_f1("4.60 million crowns", "4.6 million crowns") == pytest.approx(1.0)
+    assert word_f1("1.63", "63") == 0.0
+
+
 def test_final_answer_extraction():
     assert final_answer("blah\n#### 294") == "294"
     assert final_answer("reasoning...\nAnswer: 36") == "36"
@@ -173,6 +185,24 @@ def test_accuracy_numeric_and_span():
     assert accuracy("4.6 million crowns", "4.6 million crowns") == 1.0
     assert accuracy("Lupinus ferrugineus", "Lupinus ferrugineus") == 1.0
     assert accuracy("banana", "294") == 0.0
+
+
+def test_accuracy_compares_numbers_numerically():
+    """A spelling difference is not a wrong answer.
+
+    `pn[0] == tn[0]` compared the matched literals as strings, so `63.0` did not
+    equal `63` and `0.50` did not equal `0.5` -- a numeric comparison done by
+    spelling, which only real datasets would expose.
+    """
+    assert accuracy("63.0", "63") == 1.0
+    assert accuracy("0.50", "0.5") == 1.0
+    assert accuracy("007", "7") == 1.0
+    assert accuracy("$1,000", "1000") == 1.0
+    assert accuracy("4.60 million crowns", "4.6 million crowns") == 1.0
+    # The guards that were already there must survive the numeric path.
+    assert accuracy("1.63", "63") == 0.0
+    assert accuracy("6.5", "6") == 0.0
+    assert accuracy("163", "63") == 0.0
 
 
 def test_matrix_shape_matches_model_census():

@@ -36,7 +36,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_REGISTRY = REPO_ROOT / "configs" / "models.json"
 #: Defaults used to tell "the user asked for this" from "argparse filled it in".
 DEFAULT_THRESHOLD = 0.1
-DEFAULT_ARGMAX_DOMAIN = "prompt"
+#: The paper's criterion (2) is an argmax over ``a in R^{|x|}`` where ``x`` is the
+#: haystack, so the faithful default searches the context span alone.  The previous
+#: default (``prompt``) also let the question and the chat template compete, and on
+#: the dense control 285 of 448 heads put their argmax on prompt position 0 -- a
+#: template token -- so those scores were a *lower* bound.  `ds-results/` was
+#: produced under ``prompt`` and records that in every artifact; pass
+#: ``--argmax-domain prompt`` to reproduce it.
+DEFAULT_ARGMAX_DOMAIN = "haystack"
 #: Sentinel: "detect did not record this field" (None can be a real value).
 _MISSING = object()
 #: Set by the job driver when it needs a modified registry (e.g. a dtype
@@ -90,7 +97,13 @@ def require_matching_scores(scores, info) -> None:
     problems: list[str] = []
     if saved.num_layers != info.num_layers:
         problems.append(f"layers {saved.num_layers} != {info.num_layers}")
-    if saved.head_dim != info.head_dim:
+    if saved.head_dim is None or info.head_dim is None:
+        # `None` means the scoreable layers disagreed on the width.  Comparing None
+        # with None is False, so without this two inhomogeneous models would pass --
+        # and a head masker built on an unknown head_dim cuts the wrong slice.
+        problems.append(f"head_dim is unknown/inhomogeneous (saved={saved.head_dim}, "
+                        f"model={info.head_dim})")
+    elif saved.head_dim != info.head_dim:
         # Same layers/heads but a different o_proj geometry would slice the wrong
         # positions; a plain typo in --model reaches here.
         problems.append(f"head_dim {saved.head_dim} != {info.head_dim}")
@@ -102,7 +115,10 @@ def require_matching_scores(scores, info) -> None:
         problems.append(f"heads per layer {saved.num_heads} != {info.num_heads}")
     if saved.num_kv_heads != info.num_kv_heads:
         problems.append(f"kv heads {saved.num_kv_heads} != {info.num_kv_heads}")
-    if saved.hidden_size != info.hidden_size:
+    if saved.hidden_size is None or info.hidden_size is None:
+        problems.append(f"hidden_size is unknown/inhomogeneous (saved={saved.hidden_size}, "
+                        f"model={info.hidden_size})")
+    elif saved.hidden_size != info.hidden_size:
         # A base model and its chat/fine-tuned variant share every field above, so
         # without these two the Sec. 4.3-style comparison would silently mask heads
         # chosen on the other checkpoint.
@@ -130,7 +146,7 @@ class DetectionSettings:
     system_prompt: str | None = None
     chat_template: bool = True
     enable_thinking: bool | None = False
-    argmax_domain: str = "prompt"
+    argmax_domain: str = DEFAULT_ARGMAX_DOMAIN
     threshold: float = DEFAULT_THRESHOLD
     corpus_path: str | None = None
     #: How `detect` captured the attention rows.  `mask` has no flag for it, so
@@ -492,6 +508,15 @@ def require_ablation_args(args: argparse.Namespace) -> None:
     mixer_trials = getattr(args, "mixer_trials", 1)
     if mixer_trials < 1:
         raise SystemExit(f"--mixer-trials must be >= 1 (got {mixer_trials})")
+    # `mask --needles 0` used to be clamped to 1 by `max(1, ...)`, i.e. the request
+    # was silently ignored instead of refused (the same class of bug as
+    # `--random-trials 0`).
+    needles = getattr(args, "needles", 1)
+    if needles < 1:
+        raise SystemExit(
+            f"--needles must be >= 1 (got {needles}); an empty eval set would make "
+            f"every spread undefined"
+        )
 
 
 def cmd_mask(args: argparse.Namespace) -> int:
@@ -544,6 +569,8 @@ def cmd_mask(args: argparse.Namespace) -> int:
         log.warning("--needles %d exceeds the %d held-out eval needle(s); using all of "
                     "them (add more to EVAL_NEEDLES to widen the ablation set)",
                     args.needles, len(EVAL_NEEDLES))
+    log.info("masking on %d held-out needle(s) x %d depth(s) = %d samples per point",
+             len(eval_needles), args.depths, len(eval_needles) * args.depths)
     samples = []
     for extra_index, (extra_needle, extra_question) in enumerate(eval_needles):
         samples.extend(make_eval_samples(
@@ -845,10 +872,13 @@ def build_parser() -> argparse.ArgumentParser:
                    choices=["output_attentions", "patch"],
                    help="patch (default) keys captured maps by layer_idx and cannot "
                         "be confused by attention-map ordering")
-    p.add_argument("--argmax-domain", default="prompt", choices=["prompt", "full"],
-                   help="positions the attention argmax may choose from; 'prompt' is "
-                        "the paper's input-token criterion, 'full' also allows the "
-                        "already-generated tokens")
+    p.add_argument("--argmax-domain", default=DEFAULT_ARGMAX_DOMAIN,
+                   choices=["prompt", "full", "haystack"],
+                   help="positions the attention argmax may choose from; 'haystack' "
+                        "(default) is the paper's `a in R^{|x|}` over the context span "
+                        "(filler + needle, no question or template), 'prompt' also "
+                        "lets the question and template compete, 'full' also allows "
+                        "the already-generated tokens")
     p.add_argument("--capture-impl", default="eager",
                    help="attention kernel used while capturing (eager required)")
     p.add_argument("--prefill-impl", default="sdpa")

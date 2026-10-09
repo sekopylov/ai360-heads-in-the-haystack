@@ -162,6 +162,12 @@ class NeedleSample:
     target_tokens: int
     haystack_tokens: int                 # actual prompt length
     seed: int
+    #: Token indices ``[start, end)`` of the *haystack* inside the rendered prompt:
+    #: the filler plus the needle, i.e. the paper's ``x``, excluding the question and
+    #: the chat template.  This is what ``--argmax-domain haystack`` searches for
+    #: criterion (2); it is ``None`` only if the rendered prompt could not be
+    #: located (recorded in ``meta['haystack_span_verbatim']``).
+    haystack_span: tuple[int, int] | None = None
     meta: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -195,6 +201,25 @@ class NeedleSample:
     def n_unique_needle_text_tokens(self) -> int:
         return len(set(self.needle_text_ids))
 
+    @property
+    def n_haystack_tokens(self) -> int:
+        return 0 if self.haystack_span is None else self.haystack_span[1] - self.haystack_span[0]
+
+    @property
+    def haystack_includes_sink(self) -> bool:
+        """Whether sequence position 0 (the attention sink) lies inside the haystack.
+
+        This is not a detail: criterion (2) asks whether the argmax is a *needle*
+        token, so a sink at position 0 that is inside ``x`` suppresses credit, while
+        one that precedes ``x`` (a chat template's first tokens) does not.  With a
+        chat template the sink is outside the span and the same model scores an order
+        of magnitude more heads above 0.1 than with the plain paper-style prompt
+        (measured on one Qwen3-0.6B instance: 173/448 against 13/448).  The paper's
+        own setup has no template before the haystack, i.e. its sink *is* inside
+        ``x``, so this flag is what makes the two geometries distinguishable.
+        """
+        return self.haystack_span is not None and self.haystack_span[0] == 0
+
     def as_dict(self) -> dict[str, Any]:
         return {
             **self.meta,
@@ -207,6 +232,13 @@ class NeedleSample:
             # The denominator the score actually uses (the span count above can
             # differ when a boundary token is fused).
             "n_unique_needle_text_tokens": self.n_unique_needle_text_tokens,
+            # The haystack the `haystack` argmax domain searches, recorded per
+            # instance so a reader can see the domain was not the whole prompt.
+            "haystack_span": (list(self.haystack_span)
+                              if self.haystack_span is not None else None),
+            "n_haystack_tokens": self.n_haystack_tokens,
+            # Where the sink sits relative to `x` -- see the property's docstring.
+            "haystack_includes_sink": self.haystack_includes_sink,
             "prompt_tokens": self.length,
             "target_tokens": self.target_tokens,
             "seed": self.seed,
@@ -283,13 +315,35 @@ def build_needle_sample(
     uncorrected it was +6% at 1K.  The prompt is therefore built, measured, and
     the filler budget re-adjusted a few times.  Filler is appended a sentence at a
     time, so convergence is limited by the last sentence (~16 tokens): the
-    tolerance is 2%, and a run that cannot reach it within four attempts says so.
+    tolerance is 2%, the *closest* of the four attempts is the one kept (the loop
+    oscillates, so the last attempt is not necessarily the best), and a run that
+    cannot reach the tolerance says so with the realized error.
     """
     builder = builder or HaystackBuilder(seed=seed)
     depth = min(max(depth, 0.0), 1.0)
     tolerance = max(2, int(0.02 * target_tokens))
+    # The needle, the question and the chat template are a fixed floor: no amount of
+    # re-budgeting can make the prompt shorter than them, so a target below it is
+    # impossible rather than a convergence failure.  Say which one it is.
+    empty_context = f"\n{needle} \n".strip()
+    floor_prompt = format_prompt(
+        tokenizer, empty_context, question, chat_template=chat_template,
+        system_prompt=system_prompt, enable_thinking=enable_thinking,
+    )
+    floor_tokens = len(_tokenize_with_offsets(tokenizer, floor_prompt)[0])
+    if target_tokens < floor_tokens:
+        log.warning(
+            "target_tokens=%d is below the %d-token floor of this needle + question + "
+            "template; the realized prompt cannot be smaller (the length contract is "
+            "unreachable by construction)",
+            target_tokens, floor_tokens,
+        )
     budget = target_tokens
-    filler = ""
+    # Every attempt is kept, not just the last: re-budgeting against a filler built a
+    # sentence at a time oscillates, so the final attempt is not necessarily the
+    # closest one (at target 256 the loop could end 8 tokens out after an earlier
+    # attempt had landed inside the 2% tolerance).
+    attempts: list[dict[str, Any]] = []
     for _ in range(4):
         filler = builder.text(max(64, budget), tokenizer)
         if needle.strip() in filler:  # pragma: no cover - improbable, but keep the guarantee
@@ -334,12 +388,24 @@ def build_needle_sample(
 
         ids, offsets = _tokenize_with_offsets(tokenizer, prompt)
         realized = len(ids)
+        attempts.append({"error": abs(realized - target_tokens), "prompt": prompt,
+                         "context": context, "ids": ids, "offsets": offsets,
+                         "char_start": char_start, "char_end": char_end,
+                         "realized": realized})
         if abs(realized - target_tokens) <= tolerance:
             break
         budget -= realized - target_tokens  # overshoot -> shrink the filler budget
-    else:
-        log.warning("could not land %d tokens within %d after 4 attempts (realized %d)",
-                    target_tokens, tolerance, realized)
+    best = min(attempts, key=lambda attempt: attempt["error"])
+    if best["error"] > tolerance:
+        log.warning("could not land %d tokens within %d after %d attempts "
+                    "(closest %d, %.1f%% off)", target_tokens, tolerance, len(attempts),
+                    best["realized"], 100 * best["error"] / max(target_tokens, 1))
+    prompt = best["prompt"]
+    context = best["context"]
+    ids = best["ids"]
+    offsets = best["offsets"]
+    char_start = best["char_start"]
+    char_end = best["char_end"]
 
     span = _span_from_char_range(offsets, char_start, char_end)
     # Interval-overlap span detection can swallow a token that starts in the filler
@@ -373,6 +439,32 @@ def build_needle_sample(
         log.warning("needle span exposes only %.0f%% of the needle's unique tokens "
                     "(span %s, text %s); every retrieval score is capped there",
                     100 * max_attainable, span_ids[-3:], needle_text_ids[-3:])
+
+    # The haystack -- the paper's ``x`` -- is the filler plus the needle, i.e. the
+    # context without the question and the chat template.  It is located by anchoring
+    # on the needle rather than by ``prompt.find(context)``: the needle is verified
+    # unique in the prompt above, so the prefix before it identifies the occurrence
+    # even when a template trims the content's tail (a trailing space at depth 1.0),
+    # which would make the plain `find` fail or, worse, match a repeated filler.
+    prefix_len = context.index(needle)
+    hay_char_start = char_start - prefix_len
+    hay_char_end = min(hay_char_start + len(context), len(prompt))
+    verbatim = (hay_char_start >= 0
+                and prompt[hay_char_start:hay_char_end] == context[: hay_char_end - hay_char_start])
+    if not verbatim:
+        # Not fatal: the needle span is still exact, only the haystack domain would
+        # be approximate, and `--argmax-domain haystack` refuses a missing span.
+        log.warning("rendered prompt does not contain the haystack verbatim "
+                    "(chars [%d, %d)); the `haystack` argmax domain will be disabled "
+                    "for this instance", hay_char_start, hay_char_end)
+    haystack_span: tuple[int, int] | None = None
+    if verbatim:
+        haystack_span = _span_from_char_range(offsets, hay_char_start, hay_char_end)
+        if not (haystack_span[0] <= lo and hi <= haystack_span[1]):
+            raise RuntimeError(
+                f"the needle span {span} is not inside the haystack span {haystack_span}; "
+                f"the tokenizer's offsets disagree with the character spans"
+            )
     input_ids = torch.tensor([ids], dtype=torch.long)
 
     sample = NeedleSample(
@@ -385,9 +477,14 @@ def build_needle_sample(
         target_tokens=target_tokens,
         haystack_tokens=len(ids),
         seed=seed,
+        haystack_span=haystack_span,
         meta={"span_tight": tight, "span_straddles_boundary": straddles,
               "needle_text_ids": list(needle_text_ids),
-              "tokenization_attainable_score": max_attainable},
+              "tokenization_attainable_score": max_attainable,
+              # The character range and whether the prompt really contains it, so a
+              # reader can tell a `None` haystack span from a wrong one.
+              "haystack_char_span": [hay_char_start, hay_char_end],
+              "haystack_span_verbatim": verbatim},
     )
     log.debug("built sample: %d tokens, needle %s (%d tok) at depth %.2f",
               len(ids), span, span[1] - span[0], depth)

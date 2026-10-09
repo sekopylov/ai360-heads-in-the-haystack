@@ -28,7 +28,10 @@ done
 
 echo "### 2/6 retrieval-head detection (laptop grid)"
 for m in "${MODELS[@]}"; do
-  "$PY" -m retrieval_heads.cli detect --model "$m" --profile laptop
+  # `--argmax-domain haystack` is the code default; pinned here so the script and
+  # SCALES["laptop"] cannot drift apart (tests/test_cli_argv.py compares them).
+  "$PY" -m retrieval_heads.cli detect --model "$m" --profile laptop \
+      --argmax-domain haystack
 done
 
 echo "### 3/6 masking + token-mixer ablation"

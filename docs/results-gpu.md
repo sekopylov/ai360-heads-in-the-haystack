@@ -20,6 +20,11 @@
 | Qwen3.5-0.8B | same_step | 75 | 75/75 | 75/75 | 0.925 | `L7H7` | 0.91 | 20/48 (41.7%) | 5/48 (10.4%) |
 | _Qwen3.5-0.8B (recited only)_ | same_step | 75 | (same) | (same) | 0.925 | `L7H7` | 0.91 | 20/48 (41.7%) | 5/48 (10.4%) |
 
+- `qwen3-0.6b`/next_step: criterion (2) searched the **prompt** domain, which includes the question and the chat template; the paper's `a in R^{|x|}` is the `haystack` domain (pass `--argmax-domain haystack`, the current default)
+- `qwen3-0.6b`/same_step: criterion (2) searched the **prompt** domain, which includes the question and the chat template; the paper's `a in R^{|x|}` is the `haystack` domain (pass `--argmax-domain haystack`, the current default)
+- `qwen3.5-0.8b`/next_step: criterion (2) searched the **prompt** domain, which includes the question and the chat template; the paper's `a in R^{|x|}` is the `haystack` domain (pass `--argmax-domain haystack`, the current default)
+- `qwen3.5-0.8b`/same_step: criterion (2) searched the **prompt** domain, which includes the question and the chat template; the paper's `a in R^{|x|}` is the `haystack` domain (pass `--argmax-domain haystack`, the current default)
+
 ## Cross-model agreement
 
 > **caveat**: mode='sorted' correlates sorted score vectors, not head positions; a high value does not mean the models use the same heads

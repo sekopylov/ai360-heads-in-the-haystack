@@ -20,6 +20,18 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 #     0.684 against 0.793 on the top head -- because the model answers and then keeps
 #     narrating, which is where the extra needle-token copies would come from).
 #
+# Open decision the launcher must make: the sink geometry.  The `a100` scale pins
+# `--argmax-domain haystack` (the paper's `a in R^{|x|}`), but with the chat template
+# the attention sink at sequence position 0 sits *before* the haystack, so it can
+# never suppress criterion (2) and the >0.1 share inflates.  Measured on one
+# Qwen3-0.6B instance at 512 tokens: 173/448 heads above 0.1 with the template against
+# 13/448 with `--no-chat-template` (the paper's template-free geometry, where the sink
+# is the first haystack token); the same instance under `prompt` gives 34 and 5, and
+# the plain prompt cost needle recall on that instance (0.40 against 1.00).  So the
+# faithful geometry is `--no-chat-template`, but it is a different (and on a base
+# model, partly failing) task.  Add `--no-chat-template` to the detect flags below to
+# choose it; the run records `sink_in_haystack` either way.
+#
 # Honest note on the grid: the paper's own detection grid is 20 lengths sampled
 # uniformly over 1K-50K (with 10 depths and 3 needle sets, ~600 instances per model);
 # this profile is 9 geometric lengths, i.e. 270 per model, and for Qwen3-0.6B the two

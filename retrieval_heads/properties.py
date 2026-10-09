@@ -60,14 +60,28 @@ def activation_gap(scores: RetrievalScores, top_k: int = 40) -> dict[str, Any]:
 
     A head with activation frequency 1.0 fires on *every* context; a head with a
     high score but frequency < 1 is context-sensitive.
+
+    Frequency 1.0 is only evidence of "always active" when more than one context was
+    measured: with a single instance it means "fired on the one instance", which is
+    why the payload carries `n_instances` and a `degenerate` flag instead of letting
+    the plot's "always-active heads: N" title imply a property nothing tested.
     """
     ranked = scores.ranked_heads()[:top_k]
+    degenerate = scores.n_instances < 2
+    if degenerate:
+        log.warning(
+            "activation_gap: %d instance(s) scored, so 'activation frequency 1.0' "
+            "means 'fired on the only context measured', not 'always fires'",
+            scores.n_instances,
+        )
     return {
         "heads": [str(h) for h in ranked],
         "score": [scores.head_score(h) for h in ranked],
         "activation_freq": [float(scores.activation_freq[h.layer, h.head]) for h in ranked],
         "always_active": [str(h) for h in scores.info.scoreable_heads
                           if float(scores.activation_freq[h.layer, h.head]) >= 1.0],
+        "n_instances": scores.n_instances,
+        "degenerate": degenerate,
         "model": scores.info.name,
     }
 

@@ -215,11 +215,18 @@ def test_a100_profile_keeps_a_memory_bound_and_the_paper_grid():
 
     detect = driver.SCALES["a100"]["detect"]
     assert detect[detect.index("--max-new-tokens") + 1] == "96", detect
+    # The domain is pinned, not inherited from the code default: a job's artifacts
+    # must stay explainable if that default ever moves.
+    assert detect[detect.index("--argmax-domain") + 1] == "haystack", detect
 
-    # The ablation sample set is what `retrieval_std` is measured over, so the A100
-    # scale asks for the detection grid's 10 depths rather than the default 5.
+    # The ablation sample set is what `retrieval_std` is measured over.  The A100
+    # spends the same 15-sample budget as the t4 run's 5, but spread over three
+    # held-out needles x five depths instead of one needle x ten depths, because
+    # needle identity is the larger source of variance.
     mask = driver.SCALES["a100"]["mask"]
-    assert mask[mask.index("--depths") + 1] == "10", mask
+    assert mask[mask.index("--depths") + 1] == "5", mask
+    assert mask[mask.index("--needles") + 1] == "3", mask
+    assert int(mask[mask.index("--depths") + 1]) * int(mask[mask.index("--needles") + 1]) == 15, mask
 
     def lengths(profile: str) -> list[str]:
         argv = driver.SCALES[profile]["detect"]

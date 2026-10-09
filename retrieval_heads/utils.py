@@ -143,13 +143,31 @@ def load_json(path: str | Path) -> Any:
 
 
 def finite_json(obj: Any) -> Any:
-    """Recursively replace non-finite floats with ``None`` (JSON ``null``)."""
+    """Recursively replace non-finite floats with ``None`` (JSON ``null``).
+
+    Recurses into everything :func:`json_default` can serialise -- ``as_dict()``
+    objects, numpy scalars and arrays, ``Path`` -- not just dicts and lists.  A
+    dataclass that exposed a NaN through ``as_dict()`` used to reach ``json.dump``
+    unfiltered, where ``allow_nan=False`` raised instead of writing ``null``: the
+    exact failure this helper exists to prevent.
+    """
     if isinstance(obj, float):
         return obj if math.isfinite(obj) else None
     if isinstance(obj, dict):
         return {key: finite_json(value) for key, value in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [finite_json(value) for value in obj]
+    if isinstance(obj, np.floating):
+        value = float(obj)
+        return value if math.isfinite(value) else None
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.ndarray):
+        return finite_json(obj.tolist())
+    if isinstance(obj, Path):
+        return str(obj)
+    if hasattr(obj, "as_dict"):
+        return finite_json(obj.as_dict())
     return obj
 
 
@@ -169,5 +187,7 @@ def _json_default(obj: Any) -> Any:
     if isinstance(obj, Path):
         return str(obj)
     if hasattr(obj, "as_dict"):
-        return obj.as_dict()
+        # Through `finite_json`: an `as_dict()` payload can hold a bare NaN, and
+        # `json.dump(..., allow_nan=False)` would then raise mid-write.
+        return finite_json(obj.as_dict())
     raise TypeError(f"not JSON serialisable: {type(obj)!r}")

@@ -12,26 +12,32 @@ from retrieval_heads.haystack import (
     format_prompt,
     iter_depths,
 )
+from retrieval_heads.detection import DETECTION_NEEDLES, EVAL_NEEDLES
 
 NEEDLE = "The best thing to do in San Francisco is to eat a sandwich in Dolores Park on a sunny day."
 QUESTION = "What is the best thing to do in San Francisco?"
 
+#: Every shipped needle, labelled, so a newly added one is covered automatically
+#: (the span test used to hard-code "index 2 or the single eval needle").
+ALL_NEEDLES = [
+    (f"detection{i}", needle, question)
+    for i, (needle, question) in enumerate(DETECTION_NEEDLES)
+] + [
+    (f"eval{i}", needle, question)
+    for i, (needle, question) in enumerate(EVAL_NEEDLES)
+]
+
 
 @pytest.mark.parametrize("depth", [0.0, 0.5, 1.0])
-@pytest.mark.parametrize("index", [0, 1, 2, "eval"])
-def test_needle_span_is_exact(tokenizer, depth, index):
+@pytest.mark.parametrize("label,needle,question", ALL_NEEDLES,
+                         ids=[label for label, _, _ in ALL_NEEDLES])
+def test_needle_span_is_exact(tokenizer, depth, label, needle, question):
     """The recorded span must be exactly the needle: no fewer, no more tokens.
 
-    Parametrised over every shipped needle (including the held-out eval one) and the
+    Parametrised over every shipped needle (detection and held-out eval) and the
     endpoint depths: the cut is snapped to whitespace, so 0.0/1.0 take a different
     path, and the span test used to cover a single needle at a single depth.
     """
-    from retrieval_heads.detection import DETECTION_NEEDLES, EVAL_NEEDLES
-
-    if index == "eval":
-        needle, question = EVAL_NEEDLES[0]
-    else:
-        needle, question = DETECTION_NEEDLES[index]
     sample = build_needle_sample(
         tokenizer, needle=needle, question=question, target_tokens=256, depth=depth,
         builder=HaystackBuilder(seed=1),
@@ -49,6 +55,10 @@ def test_needle_span_is_exact(tokenizer, depth, index):
     assert needle not in tokenizer.decode(sample.input_ids[0, start:end - 1])
     # The builder computes the same invariant and records it.
     assert sample.meta.get("span_tight") is True
+    # Every shipped needle must also be locatable as a haystack, or the default
+    # `haystack` argmax domain would fail on it.
+    assert sample.haystack_span is not None
+    assert sample.meta["haystack_span_verbatim"] is True
 
 
 def test_prompt_contains_question_and_needle(tokenizer):
@@ -58,6 +68,89 @@ def test_prompt_contains_question_and_needle(tokenizer):
     )
     assert NEEDLE in sample.prompt_text
     assert QUESTION in sample.prompt_text
+
+
+@pytest.mark.parametrize("depth", [0.0, 0.5, 1.0])
+def test_haystack_span_is_the_context_without_the_question(tokenizer, depth):
+    """The `haystack` argmax domain searches this span: filler + needle, no question.
+
+    It must contain the needle (the paper's ``x`` is the haystack the needle was
+    inserted into) and exclude the question and the template, which is the whole
+    point of the domain -- on the dense control 285 of 448 heads put their argmax on
+    prompt position 0, a template token.
+    """
+    sample = build_needle_sample(
+        tokenizer, needle=NEEDLE, question=QUESTION, target_tokens=256, depth=depth,
+        builder=HaystackBuilder(seed=1),
+    )
+    assert sample.haystack_span is not None
+    start, end = sample.haystack_span
+    assert start < end <= sample.length
+    # The needle is inside the haystack, so criterion (2)'s span test is reachable.
+    assert start <= sample.needle_span[0] < sample.needle_span[1] <= end
+    decoded = tokenizer.decode(sample.input_ids[0, start:end])
+    assert NEEDLE in decoded
+    assert QUESTION not in decoded and "Question:" not in decoded
+    # The template tokens come before the haystack: the domain is strictly smaller
+    # than the prompt (otherwise it would be `prompt` under another name).
+    assert start > 0 and end < sample.length
+    assert sample.meta["haystack_span_verbatim"] is True
+    assert sample.n_haystack_tokens == end - start
+    assert sample.as_dict()["haystack_span"] == [start, end]
+
+
+def test_haystack_span_records_whether_the_sink_is_inside_it(tokenizer):
+    """Where position 0 sits relative to `x` decides whether criterion (2) is reachable.
+
+    A chat template puts the sink *before* the haystack, so it can never win the
+    argmax; the paper's template-free prompt starts with the haystack, so its sink is
+    inside `x` and suppresses credit.  Measured on one Qwen3-0.6B instance: 173/448
+    heads above 0.1 with the template against 13/448 without.
+    """
+    templated = build_needle_sample(
+        tokenizer, needle=NEEDLE, question=QUESTION, target_tokens=256, depth=0.5,
+        builder=HaystackBuilder(seed=1), chat_template=True,
+    )
+    assert templated.haystack_span[0] > 0
+    assert templated.haystack_includes_sink is False
+    assert templated.as_dict()["haystack_includes_sink"] is False
+
+    plain = build_needle_sample(
+        tokenizer, needle=NEEDLE, question=QUESTION, target_tokens=256, depth=0.5,
+        builder=HaystackBuilder(seed=1), chat_template=False,
+    )
+    assert plain.haystack_span[0] == 0
+    assert plain.haystack_includes_sink is True
+    assert plain.as_dict()["haystack_includes_sink"] is True
+
+
+def test_haystack_span_is_none_when_the_prompt_cannot_be_located(tokenizer):
+    """A template that mangles the content must disable the domain, not fake it.
+
+    Simulated by inserting the context one character short: the needle is still
+    found (and still unique), so the needle span stays exact, but the haystack is no
+    longer verbatim and the recorded span must be `None` rather than a wrong range.
+    """
+    from retrieval_heads import haystack as haystack_module
+
+    real = haystack_module.format_prompt
+
+    def mangling(tokenizer_, context, question, **kwargs):
+        return real(tokenizer_, context, question, **kwargs).replace(context, context[:-1], 1)
+
+    haystack_module.format_prompt = mangling
+    try:
+        sample = build_needle_sample(
+            tokenizer, needle=NEEDLE, question=QUESTION, target_tokens=128, depth=0.5,
+            builder=HaystackBuilder(seed=1),
+        )
+    finally:
+        haystack_module.format_prompt = real
+    assert sample.meta["haystack_span_verbatim"] is False
+    assert sample.haystack_span is None
+    assert sample.as_dict()["haystack_span"] is None
+    # The needle span is still exact, so the failure is confined to the new domain.
+    assert NEEDLE in tokenizer.decode(sample.input_ids[0, slice(*sample.needle_span)])
 
 
 @pytest.mark.parametrize("depth", [0.0, 0.25, 1.0])

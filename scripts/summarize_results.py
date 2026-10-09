@@ -131,6 +131,10 @@ def _info_from_summary(root: Path, key: str) -> dict[str, Any] | None:
 def detection_section(root: Path, keys: list[str]) -> list[str]:
     out = ["| model | pairing | instances | recited | with copy | mean recall | top head | score | >0.1 | >0.5 |",
            "|---|---|---|---|---|---|---|---|---|---|"]
+    # Which positions criterion (2) searched is not a column: it is one value per
+    # model/pairing, and it decides whether the score is the paper's `a in R^{|x|}`
+    # or a lower bound that lets the question and the chat template compete.
+    notes: list[str] = []
     for key in keys:
         for pairing in ("next_step", "same_step"):
             summary = load(root / key / f"summary_{pairing}.json")
@@ -157,6 +161,47 @@ def detection_section(root: Path, keys: list[str]) -> list[str]:
                 f"| {fmt(at(hi, 'n'))}/{n or 'n/a'} "
                 f"({100 * at(hi, 'frac', 0.0):.1f}%) |"
             )
+            # `argmax_domain` is top-level in schema 7 and inside `config` before it.
+            domain = at(summary, "argmax_domain") or at(at(summary, "config", {}) or {},
+                                                        "argmax_domain")
+            if domain:
+                shift = at(summary, "argmax_domain_shift") or {}
+                detail = ""
+                if at(shift, "positions"):
+                    detail = (f"; it moved on "
+                              f"{100 * at(shift, 'share', 0.0):.1f}% of "
+                              f"{at(shift, 'positions')} (layer, head, step) positions "
+                              f"relative to the prompt domain")
+                if domain == "prompt":
+                    notes.append(
+                        f"- `{key}`/{pairing}: criterion (2) searched the **prompt** "
+                        f"domain, which includes the question and the chat template; "
+                        f"the paper's `a in R^{{|x|}}` is the `haystack` domain "
+                        f"(pass `--argmax-domain haystack`, the current default)"
+                        f"{detail}"
+                    )
+                else:
+                    notes.append(f"- `{key}`/{pairing}: criterion (2) searched the "
+                                 f"**{domain}** domain{detail}")
+                # The sink's position relative to `x` decides whether criterion (2)
+                # is even reachable: with a chat template the sink precedes the
+                # haystack, so it cannot win the argmax and the >0.1 share inflates.
+                if at(summary, "sink_in_haystack") is False and domain == "haystack":
+                    notes.append(
+                        f"- `{key}`/{pairing}: the attention sink (sequence position 0) "
+                        f"is **outside** the haystack span, so it cannot suppress "
+                        f"criterion (2); the paper's template-free prompt puts it "
+                        f"inside `x`"
+                    )
+            raw = at(summary, "sparsity_raw") or {}
+            raw_lo = at(at(raw, "thresholds", {}) or {}, "0.1", {}) or {}
+            if at(raw, "n_heads"):
+                notes.append(
+                    f"- `{key}`/{pairing}: the raw per-token denominator "
+                    f"(`|k|` read literally, repeats counted) puts "
+                    f"{fmt(at(raw_lo, 'n'))}/{at(raw, 'n_heads')} heads above 0.1, "
+                    f"against {fmt(at(lo, 'n'))}/{n or 'n/a'} under `|unique(k)|`"
+                )
             if at(summary, "sparsity_recited"):
                 rec = at(summary, "sparsity_recited")
                 rec_buckets = at(rec, "thresholds", {}) or {}
@@ -174,6 +219,8 @@ def detection_section(root: Path, keys: list[str]) -> list[str]:
                     f"| {fmt(at(rec_hi, 'n'))}/{rec_n or 'n/a'} "
                     f"({100 * at(rec_hi, 'frac', 0.0):.1f}%) |"
                 )
+    if notes:
+        out += [""] + notes
     return out
 
 
@@ -332,14 +379,25 @@ def task_section(root: Path, keys: list[str]) -> list[str]:
             out.append("| K | % heads | retrieval F1 (drop) | random F1 (drop) |")
             out.append("|---|---|---|---|")
             n_heads = qa.get("n_scoreable_heads") or 0
+            has_spread = False
             for k, row in (qa.get("by_k") or {}).items():
                 eff = row.get("k_effective", int(k))
                 pct = f"{100 * eff / n_heads:.1f}%" if n_heads else ""
                 label = str(k) if eff == int(k) else f"{k} →{eff}"
-                out.append(f"| {label} | {pct} | {fmt(at(row, 'retrieval_f1'), 1)} "
+                retrieval = fmt(at(row, "retrieval_f1"), 1)
+                std = at(row, "retrieval_f1_std")
+                if std is not None:
+                    # Per-sample spread of the retrieval arm (the random arm's ± is
+                    # across trials, so the two are not the same statistic).
+                    retrieval += f" ±{fmt(std, 1)}"
+                    has_spread = True
+                out.append(f"| {label} | {pct} | {retrieval} "
                            f"({fmt(at(row, 'drop_retrieval'), 1)}) | "
                            f"{fmt(at(row, 'random_f1_mean'), 1)} "
                            f"({fmt(at(row, 'drop_random'), 1)}) |")
+            if has_spread:
+                out.append("| | _± is the retrieval arm's spread across samples "
+                           "(older artifacts have no per-sample scores)_ | | |")
             out.append("")
         cot = load(root / key / "task_cot.json")
         if cot:
