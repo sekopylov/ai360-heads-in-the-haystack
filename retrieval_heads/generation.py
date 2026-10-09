@@ -28,9 +28,16 @@ def prefill_cache(
     """Feed ``input_ids`` through the KV cache, in chunks if asked.
 
     Returns ``(cache, last_position_logits)``.  Chunking bounds prefill memory at
-    ``O(chunk^2)``: on float32, SDPA can fall back to the math backend and
-    materialise the full ``(heads, seq, seq)`` matrix, which asked for 20.6 GiB in
-    one allocation at 16K on a 22 GiB card (docs/datasphere-findings.md section 18).
+    ``O(chunk x seq)``: a chunk of ``chunk`` queries attends to every previously
+    accumulated key, so the materialised score matrix is ``(heads, chunk, seq)`` --
+    not ``(heads, seq, seq)``.  That distinction is what saved the 22 GiB card in
+    docs/datasphere-findings.md section 18, where float32 SDPA fell back to the math
+    backend and asked for 20.6 GiB in one allocation at 16K.
+
+    The cost is small, and it is *not* "one extra forward per chunk": every token
+    belongs to exactly one chunk, so the layer/MLP work is unchanged.  Only the
+    attention term grows, from ``seq^2/2`` to ``c^2 n(n+1)/2`` with ``n = seq/c``,
+    i.e. by a factor ``(n+1)/n`` -- 1.08 at 12 chunks, 1.04 at 24.
     """
     if prefill_chunk is not None and prefill_chunk <= 0:
         raise ValueError("prefill_chunk must be positive or None")

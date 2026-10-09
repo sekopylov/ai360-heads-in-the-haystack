@@ -190,12 +190,15 @@ def test_the_disk_audit_job_is_strictly_read_only(configs):
         assert "--bootstrap-venv" not in cmd, f"{name} could create a venv"
 
 
-def test_a100_profile_prefills_in_one_shot_and_keeps_the_paper_grid():
-    """`--prefill-chunk 0` is the point of the A100 config: 80 GB needs no chunking.
+def test_a100_profile_keeps_a_memory_bound_and_the_paper_grid():
+    """The A100 profile trades chunk *count* for safety, not safety for speed.
 
-    Chunking bounds peak memory on a 22 GiB L4; at 49K in 4096-token chunks it costs
-    12 forward passes per prompt instead of one.  The grid must stay the `paper` one,
-    or the A100 numbers would not be comparable to the L4's.
+    Chunking does not repeat layer work (each token belongs to one chunk); it bounds
+    the attention score matrix at O(chunk x seq).  The first version of this profile
+    used `--prefill-chunk 0` on the theory that 49K in 4096-token chunks cost twelve
+    prefills -- it costs ~8% more attention work, and gives up the bound that keeps a
+    float32 SDPA fallback from materialising (heads, seq, seq).  The grid must stay
+    `paper`'s, or the A100 numbers would not be comparable to the L4's.
     """
     from pathlib import Path
 
@@ -206,7 +209,17 @@ def test_a100_profile_prefills_in_one_shot_and_keeps_the_paper_grid():
         argv = driver.stage_argv(stage, profile="a100", models=["m"],
                                  prefix=Path("ds"), seed=0)[0]
         assert "--prefill-chunk" in argv, (stage, argv)
-        assert argv[argv.index("--prefill-chunk") + 1] == "0", (stage, argv)
+        chunk = argv[argv.index("--prefill-chunk") + 1]
+        assert chunk == "8192", (stage, chunk)
+        assert chunk != "0", "one-shot gives up the memory bound for ~8% of attention"
+
+    detect = driver.SCALES["a100"]["detect"]
+    assert detect[detect.index("--max-new-tokens") + 1] == "96", detect
+
+    # The ablation sample set is what `retrieval_std` is measured over, so the A100
+    # scale asks for the detection grid's 10 depths rather than the default 5.
+    mask = driver.SCALES["a100"]["mask"]
+    assert mask[mask.index("--depths") + 1] == "10", mask
 
     def lengths(profile: str) -> list[str]:
         argv = driver.SCALES[profile]["detect"]

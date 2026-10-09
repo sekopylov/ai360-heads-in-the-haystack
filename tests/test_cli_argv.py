@@ -37,6 +37,34 @@ def driver():
     return load_job_driver()
 
 
+def test_the_committed_dense_run_stays_in_a_paper_like_band():
+    """A regression tripwire on the scoring, using the committed artifact.
+
+    The integration test that asserts a sparsity band runs against a real checkpoint
+    and is not part of CI; this one reads the committed `ds-results/` and would catch
+    a scoring change that moves the dense model's share by an order of magnitude.
+
+    The band is deliberately a *guard* band, not the paper's 3-6%: the measured value
+    is 6.2% (marginally above the paper's band, and the README says so).  A collapse
+    to ~30% (the old bug) or to ~0% would fail here.
+    """
+    import json
+
+    summary = json.loads(
+        (REPO_ROOT / "ds-results" / "qwen3-0.6b" / "summary_next_step.json").read_text(
+            encoding="utf-8"))
+    share = summary["sparsity"]["thresholds"]["0.1"]["frac"]
+    assert 0.02 <= share <= 0.12, share
+    assert summary["n_instances"] == 75
+
+    hybrid = json.loads(
+        (REPO_ROOT / "ds-results" / "qwen3.5-0.8b" / "summary_next_step.json").read_text(
+            encoding="utf-8"))
+    # The hybrid is the documented counter-example: most of its 6 attention layers'
+    # heads clear the threshold, which the README discusses rather than hides.
+    assert hybrid["sparsity"]["thresholds"]["0.1"]["frac"] > 0.5
+
+
 def test_every_stage_and_profile_builds_parseable_argv(driver):
     """Every argv the driver would run must parse cleanly."""
     parser = build_parser()

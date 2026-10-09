@@ -504,7 +504,7 @@ def cmd_mask(args: argparse.Namespace) -> int:
     )
     from retrieval_heads.scoring import RetrievalScores
 
-    from retrieval_heads.haystack import load_corpus
+    from retrieval_heads.haystack import iter_depths, load_corpus
 
     out_dir = default_out_dir(args.model, args.out)
     scores = RetrievalScores.load(out_dir / f"scores_{args.pairing}")
@@ -534,14 +534,28 @@ def cmd_mask(args: argparse.Namespace) -> int:
         raise SystemExit(
             f"every requested length exceeds {info.name}'s window; nothing to measure"
         )
-    samples = make_eval_samples(
-        tokenizer, lengths=lengths, depths=(0.1, 0.3, 0.5, 0.7, 0.9),
-        needle=needle, question=question, seed=args.seed + 7,
-        chat_template=settings.chat_template,
-        enable_thinking=settings.enable_thinking,
-        corpus=corpus,
-        system_prompt=settings.system_prompt,
-    )
+    # More depths and more held-out needles widen the ablation sample set, which is
+    # what `retrieval_std` and the random arm's spread are computed over.
+    if args.depths < 1:
+        raise SystemExit(f"--depths must be >= 1 (got {args.depths})")
+    eval_needles = list(EVAL_NEEDLES[: max(1, args.needles)]
+                        if args.needles <= len(EVAL_NEEDLES) else EVAL_NEEDLES)
+    if args.needles > len(EVAL_NEEDLES):
+        log.warning("--needles %d exceeds the %d held-out eval needle(s); using all of "
+                    "them (add more to EVAL_NEEDLES to widen the ablation set)",
+                    args.needles, len(EVAL_NEEDLES))
+    samples = []
+    for extra_index, (extra_needle, extra_question) in enumerate(eval_needles):
+        samples.extend(make_eval_samples(
+            tokenizer, lengths=lengths, depths=tuple(iter_depths(args.depths)),
+            needle=extra_needle, question=extra_question,
+            # A different seed block per needle, so two needles never share filler.
+            seed=args.seed + 7 + 101 * extra_index,
+            chat_template=settings.chat_template,
+            enable_thinking=settings.enable_thinking,
+            corpus=corpus,
+            system_prompt=settings.system_prompt,
+        ))
     k_values = resolve_k(args, info, default_fracs=DEFAULT_K_FRACS["mask"])
     log.info("masking K values %s (%.1f%%-%.1f%% of %d scoreable heads)",
              k_values, 100 * k_values[0] / info.n_scoreable_heads,
@@ -554,9 +568,13 @@ def cmd_mask(args: argparse.Namespace) -> int:
     )
     curve.meta["corpus"] = "custom" if corpus else "synthetic"
     curve.meta["corpus_path"] = settings.corpus_path
+    # With `--needles > 1` the curve averages over several held-out needles, so the
+    # artifact records all of them (the single `needle` key stays for older readers).
     curve.meta["needle"] = needle
     curve.meta["question"] = question
+    curve.meta["needles"] = [{"needle": n, "question": q} for n, q in eval_needles]
     curve.meta["needle_source"] = "eval"       # never in DETECTION_NEEDLES
+    curve.meta["depths_per_length"] = args.depths
     curve.meta["seed"] = args.seed
     # The conditions the *heads were chosen under* (detect) and the ones this
     # ablation ran under; if they differ the artifact says so instead of hiding it.
@@ -851,6 +869,14 @@ def build_parser() -> argparse.ArgumentParser:
                         f"(default: {' '.join(map(str, DEFAULT_K_FRACS['mask']))})")
     p.add_argument("--lengths", type=int, nargs="*", default=None)
     p.add_argument("--random-trials", type=int, default=3)
+    # The ablation sample set used to be hard-coded (5 depths, one held-out needle),
+    # and it is the weakest part of the causal measurement: `retrieval_std` is the
+    # spread over exactly those samples.  A paper-scale machine can afford more.
+    p.add_argument("--depths", type=int, default=5,
+                   help="relative depths per length, endpoints inclusive "
+                        "(default 5; the detection grid uses 10)")
+    p.add_argument("--needles", type=int, default=1,
+                   help="how many held-out eval needles to use (default 1)")
     p.add_argument("--max-new-tokens", type=int, default=32)
     p.add_argument("--corpus", default=None,
                    help="text file of filler sentences; keep it the same as the detect "

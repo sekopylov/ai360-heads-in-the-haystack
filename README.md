@@ -124,7 +124,7 @@ Artifacts and logs come back with
 (only `qa,cot,compare,figures`, reusing a finished run's detect/mask artifacts via
 `local-paths`), `t4-venv.yaml` (refresh the project-disk venv, run no stage),
 `cuda-probe.yaml` (read-only `--inspect-dir` audit), `a100.yaml` (the `paper` grid on
-one A100 with the prefill fed in one shot — `--prefill-chunk 0`; the A100 costs 2.32x
+one A100 with 8192-token prefill chunks and a 96-token detect budget; the A100 costs 2.32x
 the L4 per hour, so it is for long-context runs, not for iteration), `laptop.yaml`,
 `paper.yaml` and `smoke.yaml`.  Everything non-obvious about this path — the pip
 crash that shapes the requirements file, the `cmd` grammar, why the cached venv
@@ -350,6 +350,12 @@ reproduction should quote one without the other.
 
 Needle-in-a-Haystack, retrieval heads vs random heads.  The per-trial numbers below
 are the ones that matter; a mean over three trials hides how erratic the control is.
+
+The sample set behind these numbers is small and was hard-coded until now: three
+lengths x five relative depths x **one** held-out needle = 15 samples per point, so
+`retrieval_std` is the spread over exactly those.  `mask` now takes `--depths` and
+`--needles` (the A100 scale uses 10 depths), and `EVAL_NEEDLES` currently holds one
+needle, so widening the ablation further means adding held-out needles first.
 
 | model | baseline | K (share of heads) | retrieval | random trials |
 |---|---|---|---|---|

@@ -72,21 +72,31 @@ SCALES: dict[str, dict[str, list[str]]] = {
         "cot": ["--k-frac", "0.08", "--random-trials", "3", "--max-new-tokens", "256"],
     },
     #: Single A100 (g2.1, 80 GB).  Same grid as `paper` -- so the numbers stay
-    #: comparable -- but every generating stage prefills in **one shot**
-    #: (`--prefill-chunk 0`).  Chunking exists to bound peak memory at O(chunk^2) on a
-    #: 22 GiB L4; on 80 GB it is pure overhead, because each chunk boundary costs an
-    #: extra forward pass over the prompt (at 49K that is 12 passes instead of 1).
+    #: comparable -- but with a much larger prefill chunk (`--prefill-chunk 8192`
+    #: against the 4096 default).  Chunking does not repeat layer work (each token
+    #: belongs to one chunk); it only bounds the attention score matrix at
+    #: O(chunk x seq), which matters because a float32 SDPA fallback materialises
+    #: (heads, seq, seq) and OOM'd a 22 GiB card at 16K (findings section 18).  At 49K
+    #: and 8 heads a 8192-token chunk peaks around 6.4 GiB for that matrix, so the
+    #: protection stays while the number of chunks halves.  One-shot (`0`) was the
+    #: first version of this profile and it was a bad trade: it saves ~4-8% of the
+    #: attention time and gives up the bound entirely.
     "a100": {
-        "detect": ["--profile", "paper", "--prefill-chunk", "0",
+        "detect": ["--profile", "paper", "--prefill-chunk", "8192",
+                   "--max-new-tokens", "96",
                    "--lengths", "1024", "2048", "4096", "8192", "16384",
                    "24576", "32768", "40960", "49152"],
         "mask": ["--k-frac", "0.01", "0.02", "0.04", "0.08", "0.17", "0.33",
                  "--lengths", "4096", "8192", "16384", "--random-trials", "5",
-                 "--prefill-chunk", "0"],
+                 # The detection grid uses 10 depths; the ablation default is 5, which
+                 # is the weakest part of the causal measurement (`retrieval_std` is the
+                 # spread over exactly these samples).  More held-out needles would help
+                 # more, but `EVAL_NEEDLES` holds only one today.
+                 "--depths", "10", "--prefill-chunk", "8192"],
         "qa": ["--k-frac", "0.04", "0.08", "0.17", "--random-trials", "5",
-               "--prefill-chunk", "0"],
+               "--prefill-chunk", "8192"],
         "cot": ["--k-frac", "0.08", "--random-trials", "3", "--max-new-tokens", "256",
-                "--prefill-chunk", "0"],
+                "--prefill-chunk", "8192"],
     },
 }
 
@@ -122,7 +132,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="registry keys from configs/models.json")
     parser.add_argument("--stages", default="describe,detect,mask,qa,cot,compare,figures",
                         help=f"comma-separated subset of {','.join(STAGES)}")
-    parser.add_argument("--profile", default="laptop", choices=sorted(SCALES))
+    # Two different namespaces used to share the word "profile": the CLI's
+    # `--profile {smoke,laptop,paper}` (which sets the detection grid) and this
+    # driver's scale (which additionally knows about `t4` and `a100`).  `--scale` is
+    # the honest name; `--profile` stays as an alias so the shipped configs keep
+    # working.
+    parser.add_argument("--scale", "--profile", dest="profile", default="laptop",
+                        choices=sorted(SCALES),
+                        help="job scale: per-stage flags for this machine")
     parser.add_argument("--out-prefix", default="ds-results",
                         help="results root, relative to the job working dir")
     parser.add_argument("--dtype", default=None, choices=["float32", "bfloat16"],

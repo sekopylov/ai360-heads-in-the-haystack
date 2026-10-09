@@ -31,14 +31,24 @@ SCHEMA_VERSION = 6
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
+#: Set once a `git` call has failed, so a job (which has no `.git` -- `local-paths`
+#: uploads the package, not the repository) does not spawn two doomed subprocesses per
+#: artifact.  A paper-scale detect writes one JSONL line per instance *and* a summary
+#: per pairing, so that was ~1200 process spawns for nothing.
+_NO_GIT = False
+
 
 def _git_state() -> tuple[str | None, bool]:
     """(HEAD commit, working tree dirty).  ``(None, False)`` outside a checkout.
 
-    Deliberately *not* cached: a long run writes many artifacts, and the dirty
-    flag is exactly the field that can change between them (a test or a fix lands
-    mid-run).  Two cheap ``git`` calls per artifact are worth the accuracy.
+    Deliberately *not* cached on success: a long run writes many artifacts, and the
+    dirty flag is exactly the field that can change between them (a test or a fix
+    lands mid-run).  Two cheap ``git`` calls per artifact are worth that accuracy --
+    but only while `git` works at all.
     """
+    global _NO_GIT
+    if _NO_GIT:
+        return None, False
     try:
         rev = subprocess.run(
             ["git", "-C", str(_REPO_ROOT), "rev-parse", "HEAD"],
@@ -53,6 +63,9 @@ def _git_state() -> tuple[str | None, bool]:
         ).stdout.strip())
         return (rev or None), dirty
     except Exception:  # noqa: BLE001 - provenance must never break a run
+        # Remember it: in a job this fails every single time, and the artifacts
+        # already say `git_rev: null` (plus `code_sha256`, set by the driver).
+        _NO_GIT = True
         return None, False
 
 

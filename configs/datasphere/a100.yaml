@@ -1,15 +1,32 @@
 name: rh-a100
-desc: paper-scale grid on one A100 (g2.1, 80 GB), prefill in one shot (no chunking)
+desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 
 # Why this config
 # ---------------
 # Same grid as `paper.yaml` (9 geometric lengths over 1K-49K, 10 depths, 3 needles),
-# so its numbers are comparable -- but every generating stage prefills in one shot.
-# `--prefill-chunk 4096` exists to bound peak memory on a 22 GiB L4 (a float32 16K
-# prefill OOM'd there, see docs/datasphere-findings.md section 18); on 80 GB it only
-# adds forward passes: 49K in 4096-token chunks is 12 prefills per prompt instead of
-# one.  The `a100` scale in scripts/datasphere_job.py carries that flag for all four
-# generating stages.
+# so its numbers are comparable -- with two differences that are about the card, not
+# the science:
+#
+#   * `--prefill-chunk 8192` instead of the 4096 default.  Chunking does NOT repeat
+#     layer work (each token belongs to one chunk); it bounds the attention score
+#     matrix at O(chunk x seq), which is what keeps a float32 SDPA fallback from
+#     materialising (heads, seq, seq) -- that OOM'd a 22 GiB card at 16K
+#     (docs/datasphere-findings.md section 18).  At 49K/8 heads a 8192 chunk peaks
+#     near 6.4 GiB for that matrix, so the bound stays and the chunk count halves.
+#     Feeding everything in one shot saves only ~4-8% of the attention time and
+#     gives the bound up entirely.
+#   * `--max-new-tokens 96` for detect (the `paper` profile's 48 truncates 11 of the
+#     hybrid's 75 instances at the t4 grid; a truncated instance scores lower --
+#     0.684 against 0.793 on the top head -- because the model answers and then keeps
+#     narrating, which is where the extra needle-token copies would come from).
+#
+# Honest note on the grid: the paper's own detection grid is 20 lengths sampled
+# uniformly over 1K-50K (with 10 depths and 3 needle sets, ~600 instances per model);
+# this profile is 9 geometric lengths, i.e. 270 per model, and for Qwen3-0.6B the two
+# longest are dropped by `within_context_limit` (its max_position_embeddings is 40960),
+# leaving 7 x 10 x 3 = 210.  If the A100 is being paid for, widening `--lengths` to
+# the paper's 20 is the knob to turn -- it is the cheapest way to make the run
+# actually paper-scale.
 #
 # What it costs (Russia, incl. VAT, from the DataSphere pricing page):
 #   gt4i.1 (L4)  234.00 RUB/hour
@@ -20,8 +37,11 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), prefill in one shot (no chunki
 # Prerequisites, both already done:
 #   * the project-disk venv has flash-linear-attention (configs/datasphere/t4-venv.yaml)
 #     -- without it the hybrid's 18 linear layers run the reference PyTorch path;
-#   * `torch arch list` includes sm_80 and the SDPA flash backend works, which the
-#     venv job's own log reports.
+#   * `torch arch list` includes sm_80.  The SDPA flash-backend probe in the venv job
+#     ran on an L4 (sm_89), so "flash works on sm_80" is still an inference from the
+#     wheel's arch list, not a measurement on an A100 -- the first A100 job should
+#     therefore start with `--stages describe,detect` at a short length before the
+#     full grid.
 
 cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages describe,detect,mask,qa,cot,compare,figures --out-prefix ds-results-a100
 
@@ -51,6 +71,6 @@ env:
 
 cloud-instance-types:
   - g2.1               # 28 vCPU, 1x A100 80 GB
-  # No V100 fallback on purpose: `--prefill-chunk 0` at 49K needs the 80 GB, and bf16
-  # is not natively supported on sm_70, so a V100 would fail rather than degrade.
-  # A chunked run on a smaller card is `paper.yaml`'s job.
+  # No V100 fallback on purpose: the 8192-token chunks at 49K are sized for 80 GB, and
+  # bf16 is not natively supported on sm_70, so a V100 would fail rather than degrade.
+  # A smaller-card run is `paper.yaml`'s job.

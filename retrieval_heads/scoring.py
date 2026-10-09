@@ -185,7 +185,9 @@ def decode_with_attention(
     ``(heads, seq, seq)`` matrix.  Measured on an L4: a 16K-token fp32 prefill
     asked for a single 20.6 GiB allocation and OOM'd on a 22 GiB card.  Feeding
     the prompt in chunks through the KV cache keeps peak memory at
-    ``O(chunk^2)`` instead, at the cost of a few extra forward passes.
+    ``O(chunk x seq)`` instead -- each chunk attends to the whole accumulated KV,
+    but only ``chunk`` queries are materialised at once.  The price is a small
+    attention overhead (``(n+1)/n`` for ``n`` chunks), not extra layer passes.
     """
     if max_new_tokens <= 0:
         raise ValueError(

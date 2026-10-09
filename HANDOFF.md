@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 227 tests: 210 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
+* 228 tests: 211 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
   the real checkpoints. All green.
 * **The committed artifacts now match the code.** The GPU run was refreshed in two
   jobs on an NVIDIA L4, 75 instances per model:
@@ -41,12 +41,20 @@ tied to a job id) → this file (where things stand and what is left).
   `configs/datasphere/cuda-probe.yaml` is a read-only `--inspect-dir` job that shows
   what the image and the venv contain (it is how the single 11.8 toolkit was found).
 * **`configs/datasphere/a100.yaml` is ready for the A100** (g2.1 only, no fallback):
-  the `paper` grid with `--prefill-chunk 0` on every generating stage, carried by the
-  new `a100` scale in the driver.  Chunking exists to bound peak memory on a 22 GiB L4;
-  at 49K it costs 12 forward passes per prompt instead of one, which 80 GB does not
-  need.  Price check (RU, incl. VAT): L4 234.00 RUB/h vs A100 542.88 RUB/h, i.e. 2.32x
-  -- so the A100 buys wall clock, and only long-context runs can pay for it.  Order of
-  operations: validate on the L4 `t4` grid, then launch this.
+  the `paper` grid with `--prefill-chunk 8192` (not one-shot) and a 96-token detect
+  budget, carried by the new `a100` scale in the driver.  The first version used
+  `--prefill-chunk 0` on the theory that 49K in 4096-token chunks cost twelve prefills
+  -- it does not: every token belongs to one chunk, so layer work is unchanged and
+  only the attention term grows, by `(n+1)/n` (~8% at 12 chunks).  Chunking is what
+  bounds the score matrix at `O(chunk x seq)` and keeps a float32 SDPA fallback from
+  materialising `(heads, seq, seq)` (which OOM'd a 22 GiB card at 16K, findings §18),
+  so giving it up for ~8% was a bad trade.  Price check (RU, incl. VAT): L4
+  234.00 RUB/h vs A100 542.88 RUB/h, i.e. 2.32x -- the A100 buys wall clock, and only
+  long-context runs can pay for it.  Order of operations: validate on the L4 `t4` grid,
+  then launch this.  Honest grid note: the paper's detection grid is 20 uniform
+  lengths (~600 instances/model); this profile is 9 geometric ones (270), and the
+  dense model loses the two longest to its 40960 window (210).  Widening `--lengths`
+  is the cheapest way to make the A100 run genuinely paper-scale.
 * **Each model is now loaded once per run.** The driver executes a model's stages
   back to back in one process (`stage_plan`, model-major) and `cli._load` keeps
   exactly one resident model, evicting the previous one; a full run used to load
@@ -70,6 +78,41 @@ tied to a job id) → this file (where things stand and what is left).
   exact-match, recall, prefix-recall and the *generated texts*) and the same for
   each random trial, so a specific failure can be inspected from the artifact
   instead of only its mean.
+* **Review round (the fifth report, before the A100 run), verified against the code:**
+  * **My `--prefill-chunk 0` justification was wrong** (see the A100 bullet above) and
+    is corrected in the config, in the driver's scale table, in two docstrings
+    (`O(chunk x seq)`, not `O(chunk^2)`) and in the test, which now pins 8192 rather
+    than 0.
+  * `--max-new-tokens 96` for the A100 detect: on the t4 grid 48 tokens truncate 11 of
+    the hybrid's 75 instances, and truncated instances score *lower* (0.684 vs 0.793 on
+    the top head) because the model answers and then keeps narrating -- the extra
+    narration is exactly where more needle-token copies could come from.
+  * `mask` gained `--depths` and `--needles` (the sample set was hard-coded to 3 x 5 x 1
+    = 15, and `retrieval_std` is the spread over exactly those); the `a100` scale uses
+    10 depths.  `EVAL_NEEDLES` still holds one needle, so widening further needs more
+    held-out needles first.
+  * The driver's `--profile` is now `--scale` (with `--profile` kept as an alias),
+    because the CLI's `--profile {smoke,laptop,paper}` and the driver's scale were two
+    different namespaces sharing one word.
+  * `provenance._git_state()` remembers the first failure: a job has no `.git`, so it
+    was spawning two doomed subprocesses per artifact (thousands on a paper-scale run).
+  * A fast tripwire reads the committed `ds-results/` and asserts the dense model's
+    >0.1 share stays in a guard band (2-12%; measured 6.2%, marginally above the
+    paper's 3-6%) and the hybrid's stays above 50% -- the integration test that used to
+    guard this is not in CI.
+  * Verified and *not* fixed: the reviewer's numbers all reproduce (dense sink >0.9 for
+    285/448 heads, mean 0.759; hybrid 0/48, 0.035; the 11 truncated hybrid instances).
+    `HeadMasker`'s full `clone()` is not a real win (an out-of-place slice assign
+    allocates the same bytes), and the numeric-comparison nit in the QA scorer only
+    matters once real datasets are wired in.
+  * **Not done, and the biggest remaining methodological gap:** the `haystack` argmax
+    domain.  The paper's `a ∈ R^{|x|}` is the haystack alone, while `prompt` includes
+    the question and the chat template; on the dense model that is not a detail (285 of
+    448 heads put their argmax on position 0, a template token), so 6.2% is a *lower*
+    bound.  Implementing it needs a `context_span` on `NeedleSample` (the char-offset
+    machinery is already there), an `argmax_span` argument through
+    `decode_with_attention`/`score_instance`, and a third choice for `--argmax-domain`
+    -- no extra forward passes, but a real code change, so it is next rather than now.
 * **Review round (the fourth report), verified against the code:**
   * **`HeadOverlap.mode` was never set** (`head_overlap` used `mode` for the
     correlation but never passed it to its own constructor), so `overlap.json` said
@@ -590,7 +633,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 227 passed (210 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 228 passed (211 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b
