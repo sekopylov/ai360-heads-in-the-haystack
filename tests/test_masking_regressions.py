@@ -255,12 +255,12 @@ def test_realized_context_length_tracks_the_request(tokenizer):
                 tokenizer, needle=needle, question=question, target_tokens=target,
                 depth=depth, builder=builder, seed=1234,
             )
-            error = abs(sample.haystack_tokens - target) / target
+            error = abs(sample.prompt_tokens - target) / target
             assert error <= 0.02, (
-                f"depth {depth}: target {target} realized {sample.haystack_tokens} "
+                f"depth {depth}: target {target} realized {sample.prompt_tokens} "
                 f"({error:.1%})"
             )
-            assert 0 <= sample.needle_span[0] < sample.needle_span[1] <= sample.haystack_tokens
+            assert 0 <= sample.needle_span[0] < sample.needle_span[1] <= sample.prompt_tokens
 
 
 def test_head_masker_installs_nothing_when_a_later_layer_fails():

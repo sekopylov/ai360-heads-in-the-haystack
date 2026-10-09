@@ -253,7 +253,7 @@ def test_haystack_domain_runs_end_to_end_on_the_tiny_hybrid(tiny_hybrid):
     ids = _ids(length=24)          # ids in [1, 64): inside the tiny vocab
     sample = NeedleSample(
         prompt_text="", input_ids=ids, needle_span=(8, 12), needle_text="n",
-        question="q", depth=0.5, target_tokens=24, haystack_tokens=24, seed=0,
+        question="q", depth=0.5, target_tokens=24, prompt_tokens=24, seed=0,
         haystack_span=(3, 20), meta={"needle_text_ids": ids[0, 8:12].tolist()},
     )
     start, end = sample.haystack_span
@@ -292,7 +292,7 @@ def test_one_pass_captures_every_argmax_domain(tiny_hybrid):
     ids = _ids(length=24)
     sample = NeedleSample(
         prompt_text="", input_ids=ids, needle_span=(8, 12), needle_text="n",
-        question="q", depth=0.5, target_tokens=24, haystack_tokens=24, seed=0,
+        question="q", depth=0.5, target_tokens=24, prompt_tokens=24, seed=0,
         haystack_span=(3, 20), meta={"needle_text_ids": ids[0, 8:12].tolist()},
     )
     start, end = sample.haystack_span
@@ -324,3 +324,82 @@ def test_one_pass_captures_every_argmax_domain(tiny_hybrid):
         key = str(head)
         assert (result.scores["next_step"][key]
                 <= result.scores_by_domain["prompt"]["next_step"][key] + 1e-9), head
+
+
+def _tiny_detect_tree(tiny_hybrid, tmp_path, monkeypatch):
+    """A real `detect` run on the tiny hybrid, with only the prompt builder stubbed.
+
+    The tiny model has no tokenizer, so `build_needle_sample` is replaced by a
+    hand-built `NeedleSample`; everything downstream (forward pass, capture, credits,
+    per-domain aggregation, artifact writing) is the real code.
+    """
+    from retrieval_heads.detection import DetectionConfig, run_detection
+    from retrieval_heads.haystack import NeedleSample
+
+    model, info = tiny_hybrid
+    ids = _ids(length=24)
+
+    def fake_build(tokenizer, **kwargs):
+        return NeedleSample(
+            prompt_text="", input_ids=ids, needle_span=(8, 12), needle_text="n",
+            question="q", depth=kwargs["depth"], target_tokens=24, prompt_tokens=24,
+            seed=kwargs["seed"], haystack_span=(3, 20),
+            meta={"needle_text_ids": ids[0, 8:12].tolist(),
+                  "haystack_span_verbatim": True},
+        )
+
+    monkeypatch.setattr("retrieval_heads.detection.build_needle_sample", fake_build)
+    config = DetectionConfig(lengths=[24], depths_per_length=2, needles=[("n", "q")],
+                             max_new_tokens=2)
+    return run_detection(model, None, info, config, out_dir=tmp_path, progress=False), info
+
+
+def test_detect_writes_a_matrix_per_argmax_domain(tiny_hybrid, tmp_path, monkeypatch):
+    """End to end through `run_detection`, not through a fake scorer.
+
+    The per-domain outputs are the round-eight change: every captured domain must be
+    aggregated and written from *real* scores, the primary must stay the run's own
+    domain, and the JSONL must carry the complement.
+    """
+    import json
+
+    run, info = _tiny_detect_tree(tiny_hybrid, tmp_path, monkeypatch)
+
+    summary = json.loads((tmp_path / "summary_next_step.json").read_text(encoding="utf-8"))
+    assert summary["argmax_domain"] == "haystack"
+    assert sorted(summary["argmax_domains_captured"]) == ["full", "haystack", "prompt"]
+    assert set(summary["sparsity_by_domain"]) == {"haystack", "prompt", "full"}
+    # The primary matrix is the run's own domain, and the sidecars exist beside it.
+    assert (tmp_path / "scores_next_step.npz").exists()
+    assert (tmp_path / "scores_next_step_prompt.npz").exists()
+    assert (tmp_path / "scores_next_step_full.npz").exists()
+    assert run.domains[("next_step", "prompt")].meta["argmax_domain"] == "prompt"
+    # The one-way domain bound (prompt credit survives under `haystack`, not the
+    # reverse) is a theorem, and it is asserted on quantised synthetic rows in
+    # `test_scoring.py::test_prompt_credit_survives_the_haystack_domain`.  It is not
+    # asserted here on purpose: this tiny model earns no credit at all, so *any*
+    # direction would pass vacuously.  This assertion is what keeps that honest.
+    assert float(torch.nan_to_num(run.scores.score).max()) == 0.0
+    # The per-instance JSONL carries the alternative domains (the complement of the
+    # primary), so a reader can re-derive a domain without a re-run.
+    line = json.loads((tmp_path / "instances_next_step.jsonl").read_text(
+        encoding="utf-8").splitlines()[0])
+    assert set(line["scores_by_domain"]) == {"prompt", "full"}
+    assert set(line["argmax_domain_shift"]) == {"next_step", "same_step"}
+
+
+def test_figures_stage_reads_a_schema_8_tree(tiny_hybrid, tmp_path, monkeypatch):
+    """The `figures` stage must consume what the new `detect` writes.
+
+    The per-domain sidecars changed the artifact set, and no test ran the figure stage
+    over it: `load_runs` picks `scores_<pairing>` and the plotters read the summary's
+    new fields, so a mismatch would surface only on the GPU job's last stage.
+    """
+    from retrieval_heads.cli import main
+
+    _tiny_detect_tree(tiny_hybrid, tmp_path, monkeypatch)
+    assert main(["figures", "--runs", str(tmp_path), "--out", str(tmp_path / "figures")]) == 0
+
+    figures = sorted(p.name for p in (tmp_path / "figures").glob("*.pdf"))
+    assert "ring_graph.pdf" in figures, figures
+    assert "heat_map.pdf" in figures, figures

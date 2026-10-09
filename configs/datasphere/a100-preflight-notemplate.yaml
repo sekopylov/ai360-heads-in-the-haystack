@@ -1,0 +1,62 @@
+name: rh-a100-preflight-notemplate
+desc: short A100 preflight without the chat template -- the paper's sink geometry
+
+# Why this config exists
+# ----------------------
+# The sink geometry is a property of the *prompt*, not of the model, so it cannot be
+# derived from a template-on run: with a chat template position 0 is `<|im_start|>`,
+# which sits before the haystack and can never win criterion (2); the paper's
+# template-free prompt puts the context first, so position 0 is the first haystack
+# token and the sink eats the argmax.  On one Qwen3-0.6B instance at 512 tokens the
+# `haystack` domain gave 173/448 heads above 0.1 with the template and 13/448 without
+# -- an order of magnitude -- while the same instance's needle recall fell from 1.00 to
+# 0.40, i.e. the model was partly failing the task.
+#
+# `a100-preflight.yaml` measures the template-on variant.  This is its twin, identical
+# except for the driver's `--no-chat-template`, so the two can be launched back to back
+# and compared instead of argued about.  It exists as a config rather than an edit to
+# `a100.yaml` because editing a committed job config is exactly what
+# docs/datasphere-findings.md section 16 warns against.
+#
+# What to compare between the two runs, per model:
+#   * `sparsity_by_domain` -- the >0.1 share under `haystack` and under `prompt`
+#     (the difference between the two runs is the sink axis, the difference *within*
+#     one run is the domain axis);
+#   * `sink_in_haystack` -- true here, false in the template-on run;
+#   * `n_instances_recited` / `mean_needle_recall` -- whether the model can still do
+#     the task without the template (it may not, and that is a result, not a bug);
+#   * the random arm's pool: `n_heads - sparsity_by_domain[domain].thresholds['0.1'].n`
+#     (the `mask` stage draws its control from heads at or below the threshold, so a
+#     small pool means the causal curve degenerates -- see `a100.yaml`).
+#
+# Grid and cost are the same as the template-on preflight: 3 needles x 2 lengths x 10
+# depths = 60 instances per model, capped by `--limit 60`.
+
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages describe,detect --lengths 1024 4096 --limit 60 --no-chat-template --out-prefix ds-preflight-notemplate
+
+flags:
+  - attach-project-disk
+
+inputs:
+  - models:
+      var: WEIGHTS
+
+outputs:
+  - ds-preflight-notemplate
+
+env:
+  vars:
+    PYTORCH_ALLOC_CONF: expandable_segments:True
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+
+cloud-instance-types:
+  - g2.1               # 28 vCPU, 1x A100 80 GB

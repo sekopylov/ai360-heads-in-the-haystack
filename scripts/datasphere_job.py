@@ -93,6 +93,11 @@ SCALES: dict[str, dict[str, list[str]]] = {
                    "24576", "32768", "40960", "49152"],
         "mask": ["--k-frac", "0.01", "0.02", "0.04", "0.08", "0.17", "0.33",
                  "--lengths", "4096", "8192", "16384", "--random-trials", "5",
+                 # Same generation budget as detect: the stage that carries the causal
+                 # claim must not measure a drop from a truncated baseline.  The CLI
+                 # default is 32 -- tighter than the 48 the committed t4 tree used --
+                 # and the hybrid's answers were being cut mid-sentence at 32.
+                 "--max-new-tokens", "96",
                  # The detection grid uses 10 depths; the ablation default is 5, which
                  # is the weakest part of the causal measurement (`retrieval_std` is the
                  # spread over exactly these samples).  The sample count is
@@ -103,6 +108,12 @@ SCALES: dict[str, dict[str, list[str]]] = {
                  # the larger source of variance, so the budget goes to three
                  # (question, needle) pairs rather than ten depths of one.
                  "--depths", "5", "--needles", "3", "--prefill-chunk", "8192"],
+        # `qa` keeps the CLI's 24-token default on purpose: the built-in answers are
+        # short spans and its metric is token-F1 over the whole completion, so extra
+        # narration costs precision rather than buying recall -- unlike `mask`/`detect`,
+        # where the score is a recall over needle tokens.  Every artifact records
+        # `max_new_tokens`, so the three budgets in one tree are visible rather than
+        # implied.
         "qa": ["--k-frac", "0.04", "0.08", "0.17", "--random-trials", "5",
                "--prefill-chunk", "8192"],
         "cot": ["--k-frac", "0.08", "--random-trials", "3", "--max-new-tokens", "256",
@@ -165,6 +176,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=None,
                         help="cap `detect` to the first N instances in grid order "
                              "(ignored by stages that have no such flag)")
+    # The sink geometry is the other axis the preflight has to price: with the chat
+    # template the attention sink at position 0 sits *before* the haystack, so it can
+    # never suppress criterion (2); the paper's template-free prompt puts it inside
+    # `x`.  Choosing that variant used to mean editing a committed job config (exactly
+    # what docs/datasphere-findings.md section 16 warns against), so it is a launch
+    # flag now: it is appended to every stage whose prompts it changes.
+    parser.add_argument("--no-chat-template", action="store_true",
+                        help="render prompts without the chat template (the paper's "
+                             "geometry); appended to detect/mask/qa/cot/case-study")
     args = parser.parse_args(argv)
     if not args.bootstrap_venv and not args.inspect_dir and not (args.weights or args.download_weights):
         parser.error("one of --weights / --download-weights is required "
@@ -713,6 +733,7 @@ def stage_argv(
     seed: int,
     lengths: list[int] | None = None,
     limit: int | None = None,
+    no_chat_template: bool = False,
 ) -> list[list[str]]:
     """Build the ``retrieval_heads.cli`` argument lists for one stage.
 
@@ -721,12 +742,16 @@ def stage_argv(
     with the cached venv, minutes when the environment is built) before it
     surfaces, and that already happened once with ``--seed``.
 
-    ``lengths``/``limit`` are the preflight overrides (see
+    ``lengths``/``limit``/``no_chat_template`` are the preflight overrides (see
     :func:`apply_grid_overrides`); ``limit`` is silently ignored by stages that have
-    no such flag.
+    no such flag, and ``no_chat_template`` is appended only to the stages that render
+    prompts (describe/compare/figures do not).
     """
     runs = {key: prefix / key for key in models}
     scales = SCALES[profile]
+    # Only the prompt-building stages take it; `add_common` defines the flag on all of
+    # them, but passing it to a stage that never renders a prompt would be noise.
+    prompt_flags = ["--no-chat-template"] if no_chat_template else []
 
     if stage == "describe":
         return [["describe", "--model", key, "--out", str(runs[key])] for key in models]
@@ -734,7 +759,7 @@ def stage_argv(
         flags = apply_grid_overrides(list(scales["detect"]), lengths=lengths, limit=limit)
         return [
             ["detect", "--model", key, "--out", str(runs[key]),
-             "--seed", str(seed), *flags]
+             "--seed", str(seed), *flags, *prompt_flags]
             for key in models
         ]
     if stage in ("mask", "qa", "cot"):
@@ -743,7 +768,7 @@ def stage_argv(
         flags = apply_grid_overrides(list(scales[stage]), lengths=lengths)
         return [
             [stage, "--model", key, "--out", str(runs[key]),
-             "--seed", str(seed), *flags]
+             "--seed", str(seed), *flags, *prompt_flags]
             for key in models
         ]
     if stage == "compare":
@@ -754,7 +779,8 @@ def stage_argv(
         # The paper's Fig. 1 needs the real attention rows and therefore a model, which
         # the driver already has resident at this point; `--scores` reuses the run's own
         # recorded conditions, and the per-model `--out` keeps two models' JSON apart.
-        return [["--model", key, "--scores", str(runs[key]), "--out", str(runs[key])]
+        return [["--model", key, "--scores", str(runs[key]), "--out", str(runs[key]),
+                 *prompt_flags]
                 for key in models]
     if stage == "figures":
         return [["figures", "--runs", *[str(p) for p in runs.values()],
@@ -808,14 +834,16 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[entry] code_sha256={os.environ['RH_CODE_SHA256']}", flush=True)
     if args.lengths is not None and not args.lengths:
         raise SystemExit("--lengths was given but empty; pass at least one length")
-    if args.lengths is not None or args.limit is not None:
+    if args.lengths is not None or args.limit is not None or args.no_chat_template:
         print(f"[entry] grid override: lengths={args.lengths} limit={args.limit} "
+              f"no_chat_template={args.no_chat_template} "
               f"(the scale's own values are replaced, not extended)", flush=True)
     for stage, model in stage_plan(stages, args.models):
         targets = [model] if model else args.models
         for cli_argv in stage_argv(stage, profile=args.profile, models=targets,
                                    prefix=prefix, seed=args.seed,
-                                   lengths=args.lengths, limit=args.limit):
+                                   lengths=args.lengths, limit=args.limit,
+                                   no_chat_template=args.no_chat_template):
             record_stage_state(prefix, stage, model, "running")
             try:
                 run_cli(stage, cli_argv)

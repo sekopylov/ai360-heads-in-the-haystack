@@ -128,7 +128,9 @@ one A100 with 8192-token prefill chunks and a 96-token detect budget; the A100 c
 the L4 per hour, so it is for long-context runs, not for iteration),
 `a100-preflight.yaml` (two lengths, `describe,detect` only — the cheap measurement of
 the hardware and of the argmax-domain/sink geometry the full run would otherwise
-gamble on), `a100-resume.yaml` (the A100 counterpart of `t4-resume.yaml`, so a failure
+gamble on), `a100-preflight-notemplate.yaml` (the same grid with the driver's
+`--no-chat-template`, i.e. the paper's sink geometry; the two are meant to be compared),
+`a100-resume.yaml` (the A100 counterpart of `t4-resume.yaml`, so a failure
 in a late stage does not re-pay for `mask`), `laptop.yaml`,
 `paper.yaml` and `smoke.yaml`.  Everything non-obvious about this path — the pip
 crash that shapes the requirements file, the `cmd` grammar, why the cached venv
@@ -245,13 +247,18 @@ Filler text is generated from a seeded word list (offline, deterministic);
 `--corpus FILE` swaps in a real corpus such as the Paul Graham essays.
 
 `detect --preflight` builds **every** planned prompt (CPU only) and checks its
-invariants before the first forward pass, then reuses those prompts for the run.  It
-exists because `score_instance` refuses a sample whose `haystack` span is missing
+invariants before the first forward pass, then reuses those prompts for the run (up to
+≈100 MB of token ids at the paper grid, so the reuse is deliberate rather than
+incidental).
+It exists because `score_instance` refuses a sample whose `haystack` span is missing
 (the rendered prompt did not contain the context verbatim), and without the flag that
 refusal lands mid-grid -- after the GPU time already spent, which at paper scale is
 hours.  The `a100` scale turns it on; the L4 scales leave it off, where a mid-grid
 failure costs minutes.  `scripts/datasphere_job.py --lengths/--limit` are the other
 preflight knobs: they override the scale's grid so a short run needs no `SCALES` edit.
+`--no-chat-template` is the third: it is appended to the stages that render a prompt,
+so the sink-geometry variant is a launch flag rather than an edit to a committed job
+config (see the two `a100-preflight*` configs).
 
 ---
 
@@ -276,7 +283,12 @@ preflight knobs: they override the scale's grid so a short run needs no `SCALES`
   steps, where `q_len = 1`. The prefill therefore runs on `sdpa` and only the
   decode steps on `eager`. A captured row costs `(heads, kv_len)` instead of
   `(heads, seq, seq)`, so *capture* memory stays flat in context length.  The
-  masking/ablation stage allocates more -- each masked layer clones its `o_proj`
+  prefill also passes `logits_to_keep=1`: without it the model projects every
+  position of every chunk through `lm_head` and only the last row is kept, which at a
+  8192-token chunk is a `(8192, vocab)` bf16 tensor (~4.1 GB for Qwen3.5-0.8B's
+  248320-token vocabulary, ~2.6 GB for Qwen3-0.6B) plus a matmul of the same order as
+  the whole chunk's transformer work.  The masking/ablation stage allocates more --
+  each masked layer clones its `o_proj`
   input, i.e. one extra `(seq, hidden)` tensor -- but the clones do not accumulate:
   each is consumed and released inside its own layer's `o_proj` call, so the peak
   does not grow with the number of masked layers.  Measured on a synthetic 8-layer
@@ -356,7 +368,20 @@ argmax moved.  Since schema 8 the domain is not even a decision the *run* makes 
 every captured domain is scored from the same pass and written as its own matrix, so
 the new tree carries the `prompt` reading too and the two can be compared directly.
 Every artifact records the domain it used, so this tree stays self-describing, and
-`--argmax-domain prompt` reproduces it exactly.
+`--argmax-domain prompt` reproduces its *scores* exactly -- the new tree is a schema-8
+one, so it also carries the per-domain sidecars and the fields listed above.
+
+*Generation budget.*  The committed tree was detected at `--max-new-tokens 48` (the
+`paper` profile's value) and masked at the CLI default of 32; the A100 scale raises
+both to 96, because a truncated instance scores lower and 11 of the hybrid's 75
+instances were truncated at 48.  So the A100 detection numbers are not comparable with
+the table below even in the same argmax domain, and its `mask` curve is not comparable
+either: a generation budget is a measurement condition like the domain, every artifact
+records it (`max_new_tokens`), and the direction of its effect is known -- a longer
+budget can only add needle-token copies, never remove them.  On the committed tree the
+effect is visible directly: splitting
+`ds-results/qwen3.5-0.8b/instances_next_step.jsonl` on `meta.truncated`, the top head
+scores 0.671 over the 11 truncated instances against 0.755 over the other 64.
 
 ### Detection
 
@@ -367,7 +392,12 @@ Every artifact records the domain it used, so this tree stays self-describing, a
 
 Both rows are **`prompt`-domain** numbers -- the domain the committed run used -- so
 they are a *lower* bound on retrieval: the argmax had to compete with the question and
-the chat template, and the current default searches the haystack alone.
+the chat template, and the current default searches the haystack alone.  That bound is
+exact, not empirical: the haystack span is a subset of the prompt and contains the
+needle, so a head whose prompt argmax is a needle position keeps that position under
+`haystack` (an earlier tied position inside the span would have been the prompt argmax
+instead -- ties cannot lose credit either).  The reverse fails, which is the whole
+point: a template token at position 0 can win the prompt argmax.
 
 **The dense model now matches the paper's Fig. 2 shape; the hybrid does not.**
 Qwen3-0.6B has 66.1% of its heads *zeroed* and 27.7% weak, both inside the paper's
@@ -742,4 +772,8 @@ meaningful within a family.
 * **`--k` vs `--k-frac`.**  Both default to unset; the command's default fractions
   apply only when neither is given, and passing both unions them.  Absolute K is
   still not comparable across a 48-head and a 448-head model — use `--k-frac` for
-  cross-model statements.
+  cross-model statements.  Fractions can collapse: on the hybrid's 48 heads `0.01`
+  and `0.02` both resolve to K=1, so a requested six-point curve has five points
+  there and six on the dense model.  That is logged when it happens and both levels
+  are recorded (`k_frac_args`/`k_args` for the request, `k_fraction_requested` for the
+  resolved K, `k_fraction_effective` for what `matched_k` actually masked).

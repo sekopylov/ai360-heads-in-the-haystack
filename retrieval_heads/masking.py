@@ -534,8 +534,14 @@ def masking_curve(
     curve.per_sample = per_sample
 
     n_heads = max(info.n_scoreable_heads, 1)
-    # Explicitly "requested": with `matched_k` the requested K can exceed what was
-    # actually masked, and the old bare `k_fraction` invited reading it as real.
+    # Three levels, and they are not the same thing:
+    #   * the CLI request (`--k-frac` / `--k`, recorded by `cmd_mask` as `k_frac_args`
+    #     / `k_args`) -- two fractions can round to the same K on a small model;
+    #   * `k_fraction_requested`: the K values that reached this function, as
+    #     fractions of the scoreable heads;
+    #   * `k_fraction_effective`: what `matched_k` actually masked (a requested K can
+    #     exceed the control pool).
+    # The old bare `k_fraction` invited reading the third as the first.
     curve.meta["k_fraction_requested"] = [k / n_heads for k in curve.k_values]
     curve.meta["k_fraction_effective"] = [k / n_heads for k in curve.k_effective]
     curve.meta["seed"] = seed

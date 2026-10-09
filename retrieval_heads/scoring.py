@@ -1166,7 +1166,19 @@ def aggregate_scores(
             values = getattr(result, field)[pairing]
             active = result.activations[pairing]
         else:
-            values = result.scores_by_domain[domain][pairing]
+            try:
+                values = result.scores_by_domain[domain][pairing]
+            except KeyError as exc:
+                # `scores_by_domain` holds the domains *other* than the primary, so
+                # asking for the primary by name is the easy mistake; say so instead
+                # of raising a bare KeyError from a public function.
+                raise KeyError(
+                    f"instance has no scores for argmax domain {domain!r} (it was "
+                    f"scored in {result.meta.get('argmax_domain')!r}, and "
+                    f"`scores_by_domain` holds the complement: "
+                    f"{sorted(result.scores_by_domain)}); the primary domain is "
+                    f"`scores`, so pass domain=None for it"
+                ) from exc
             # `activation_freq` is *defined* as P(score > 0) (see the README), and the
             # primary path computes it that way, so deriving it here is exact rather
             # than an approximation -- and it saves storing a second indicator matrix

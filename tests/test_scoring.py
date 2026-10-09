@@ -446,6 +446,10 @@ def test_aggregate_scores_reads_an_alternative_domain():
                          domain="prompt")
     with pytest.raises(ValueError, match="field must be"):
         aggregate_scores(results, info, pairing="next_step", field="nope")
+    # Asking for the *primary* domain by name is the easy mistake (`scores_by_domain`
+    # holds the complement); the error must say that rather than raise a bare KeyError.
+    with pytest.raises(KeyError, match="the primary domain is"):
+        aggregate_scores(results, info, pairing="next_step", domain="haystack")
 
 
 def test_match_masks_is_safe_for_a_position_beyond_the_prompt():
@@ -464,3 +468,46 @@ def test_match_masks_is_safe_for_a_position_beyond_the_prompt():
     credits = {head for head, hit in enumerate(matched.tolist())
                if hit and 8 in needle_set}
     assert credits == {0}
+
+
+def test_prompt_credit_survives_the_haystack_domain():
+    """The domain bound is one-way and it is a theorem, ties included.
+
+    The haystack span is a subset of the prompt and contains the needle, so if the
+    prompt argmax is a needle position then it is *also* the first maximum inside the
+    haystack: an earlier position in the span tied with it would have been the prompt
+    argmax instead.  Credit can therefore only be gained when moving to `haystack`,
+    never lost -- even under bf16, where ties are common.  The reverse is false (a
+    template token can win the prompt argmax), which is why the committed prompt-domain
+    numbers are a lower bound.
+
+    Rows are quantised so that exact ties actually occur in the sample.
+    """
+    from retrieval_heads.scoring import StepTrace
+
+    torch.manual_seed(0)
+    sample = FakeSample([11, 7, 8, 12, 13], (2, 4))     # needle ids [8, 12]
+    info = make_info(num_layers=1, heads=4)
+    ties = 0
+    for _ in range(40):
+        row = (torch.rand(4, 5) * 3).round() / 3        # few distinct values -> ties
+        ties += int(row.numel() - row.unique().numel())
+        attn = {0: row.unsqueeze(0).unsqueeze(2)}
+        by_domain = {
+            domain: argmax_positions(attn, prompt_len=5, domain=domain,
+                                     span=(1, 5) if domain == "haystack" else None)
+            for domain in ("prompt", "full", "haystack")
+        }
+        step = StepTrace(step=0, fed_token=8, predicted_token=8, attn={0: row},
+                         argmax=by_domain["haystack"], argmax_prompt=by_domain["prompt"],
+                         argmax_by_domain=by_domain, primary_domain="haystack")
+        trace = DecodeTrace(prompt_len=5, steps=[step], argmax_domain="haystack",
+                            argmax_span=(1, 5))
+        credits = {
+            domain: credits_from_trace(trace, sample, info, pairing="next_step",
+                                       domain=domain)[0]
+            for domain in ("prompt", "haystack")
+        }
+        for head in info.scoreable_heads:
+            assert credits["prompt"][head] <= credits["haystack"][head], (head, row.tolist())
+    assert ties > 0, "the quantisation produced no ties, so the tie case is untested"

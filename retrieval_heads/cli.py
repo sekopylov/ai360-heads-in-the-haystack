@@ -369,6 +369,19 @@ def resolve_k(args: argparse.Namespace, info, *, default_fracs: Sequence[float] 
         values.add(max(1, int(frac * info.n_scoreable_heads + 0.5)))
     if not values:
         values = {max(1, int(0.05 * info.n_scoreable_heads + 0.5))}
+    requested = [*ks, *fracs]
+    if len(values) < len(requested):
+        # Two requested points collapsed into one K (on the hybrid, 0.01 and 0.02 both
+        # give K=1), so the curve has fewer points than the flag asked for and the two
+        # models of one run can end up with different point counts.  The artifact
+        # records the requested values beside the resolved ones (`k_frac_args` /
+        # `k_args`), but the log has to say it happened.
+        log.warning(
+            "%d requested K value(s) %s collapsed to %d distinct K=%s on %s (%d "
+            "scoreable heads); the curve will have fewer points than requested",
+            len(requested), requested, len(values), sorted(values), info.name,
+            info.n_scoreable_heads,
+        )
     return sorted(values)
 
 
@@ -611,6 +624,11 @@ def cmd_mask(args: argparse.Namespace) -> int:
     # indistinguishable on the axis that matters most for NLI cost.
     curve.meta["lengths"] = list(lengths)
     curve.meta["n_samples_per_point"] = len(lengths) * args.depths * len(eval_needles)
+    # What the user asked for, beside what it resolved to: `k_values` is post-dedup,
+    # so without these a requested point that collapsed into another K (0.01 and 0.02
+    # both give K=1 on the hybrid) leaves no trace in the artifact.
+    curve.meta["k_args"] = list(args.k) if args.k else []
+    curve.meta["k_frac_args"] = list(args.k_frac) if args.k_frac else []
     curve.meta["seed"] = args.seed
     # The conditions the *heads were chosen under* (detect) and the ones this
     # ablation ran under; if they differ the artifact says so instead of hiding it.

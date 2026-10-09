@@ -507,7 +507,7 @@ def test_needle_sample_meta_cannot_clobber_reserved_keys():
 
     sample = NeedleSample(
         prompt_text="p", input_ids=torch.zeros(1, 3, dtype=torch.long), needle_span=(1, 2),
-        needle_text="n", question="q", depth=0.5, target_tokens=3, haystack_tokens=3,
+        needle_text="n", question="q", depth=0.5, target_tokens=3, prompt_tokens=3,
         seed=0, meta={"needle_text": "clobbered", "seed": 999},
     )
     payload = sample.as_dict()
@@ -683,3 +683,77 @@ def test_preflight_fails_before_any_gpu_work(monkeypatch):
     run_detection(None, None, info, DetectionConfig(
         lengths=[64], depths_per_length=2, needles=[("n", "q")]), progress=False)
     assert order == ["build", "score", "build", "score"], order
+
+
+def test_a_domain_missing_on_some_instances_is_averaged_over_the_subset(monkeypatch, caplog):
+    """`haystack` is undefined for a prompt that does not contain the context verbatim.
+
+    A `prompt`-domain run can therefore capture it on some instances and not others.
+    That used to be a `KeyError` in the per-domain aggregation -- after the GPU time
+    already spent -- so the matrix must instead be the mean over the instances that
+    have the domain, with the missing count recorded in the artifact.
+    """
+    import logging
+    from types import SimpleNamespace
+
+    from retrieval_heads import detection
+    from retrieval_heads.detection import DetectionConfig, run_detection
+    from retrieval_heads.scoring import InstanceResult
+
+    info = attention_info(1, 2)
+    calls = {"n": 0}
+
+    def fake_build(tokenizer, **kwargs):
+        return SimpleNamespace(
+            needle_span=(1, 3), needle_text="n", question="q", depth=0.5, length=24,
+            target_tokens=24, seed=0, n_needle_tokens=2, n_unique_needle_tokens=2,
+            input_ids=torch.zeros(1, 24, dtype=torch.long), haystack_span=(0, 4),
+            as_dict=lambda: {"needle_text": "n", "n_needle_tokens": 2,
+                             "n_unique_needle_tokens": 2},
+        )
+
+    def fake_score(model, info_, sample, tokenizer, **kwargs):
+        calls["n"] += 1
+        # The second instance's prompt had no verbatim haystack, so that domain is
+        # absent from its map (the first instance has it).
+        by_domain = {"full": {"next_step": {"L0H0": 0.5, "L0H1": 0.0},
+                              "same_step": {"L0H0": 0.5, "L0H1": 0.0}}}
+        if calls["n"] == 1:
+            by_domain["haystack"] = {"next_step": {"L0H0": 0.25, "L0H1": 0.0},
+                                     "same_step": {"L0H0": 0.25, "L0H1": 0.0}}
+        return InstanceResult(
+            sample={"n_needle_tokens": 2, "n_unique_needle_tokens": 2,
+                    "n_unique_needle_text_tokens": 2},
+            meta={"eos_reached": True, "truncated": False,
+                  "argmax_domains": ["prompt", "full"] + (["haystack"] if calls["n"] == 1
+                                                          else [])},
+            scores={"next_step": {"L0H0": 0.6, "L0H1": 0.0},
+                    "same_step": {"L0H0": 0.6, "L0H1": 0.0}},
+            scores_raw={"next_step": {"L0H0": 0.6, "L0H1": 0.0},
+                        "same_step": {"L0H0": 0.6, "L0H1": 0.0}},
+            scores_by_domain=by_domain,
+            activations={"next_step": {"L0H0": 1.0, "L0H1": 0.0},
+                         "same_step": {"L0H0": 1.0, "L0H1": 0.0}},
+            considered={}, sink_rate={"next_step": {"__overall__": 0.0}},
+            generated_ids=[1], generated_text="x", needle_recall=1.0, n_steps=1,
+            aligned_scores={"next_step": {"L0H0": 0.6, "L0H1": 0.0},
+                            "same_step": {"L0H0": 0.6, "L0H1": 0.0}},
+            copied_tokens={"next_step": {"L0H0": [1]}, "same_step": {"L0H0": [1]}},
+        )
+
+    monkeypatch.setattr(detection, "build_needle_sample", fake_build)
+    monkeypatch.setattr(detection, "score_instance", fake_score)
+    config = DetectionConfig(lengths=[24], depths_per_length=2, needles=[("n", "q")],
+                             argmax_domain="prompt")
+    with caplog.at_level(logging.WARNING):
+        run = run_detection(None, None, info, config, progress=False)
+
+    assert "haystack domain is missing on 1/2 instances" in caplog.text
+    haystack = run.domains[("next_step", "haystack")]
+    # The mean is over the single instance that has the domain, not over both (which
+    # would silently treat the missing one as a zero).
+    assert haystack.score[0, 0].item() == pytest.approx(0.25)
+    assert haystack.n_instances == 1
+    assert haystack.meta["n_instances_without_domain"] == 1
+    full = run.domains[("next_step", "full")]
+    assert full.n_instances == 2 and full.score[0, 0].item() == pytest.approx(0.5)

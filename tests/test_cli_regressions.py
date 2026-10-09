@@ -395,3 +395,29 @@ def test_detect_rejects_an_empty_grid_before_loading_a_model():
     with pytest.raises(SystemExit, match="empty detection grid"):
         main(["detect", "--model", "not-a-real-model", "--depths", "0"])
 
+
+
+def test_collapsing_k_fractions_warn_and_stay_visible(caplog):
+    """Two fractions can resolve to the same K, and that must not be silent.
+
+    On the hybrid's 48 heads `--k-frac 0.01 0.02` both give K=1, so a six-point curve
+    has five points there and six on the dense model -- with the same flag.  The log
+    says so, and `cmd_mask` records the requested values beside the resolved ones, so
+    the artifact cannot imply that all six ran.
+    """
+    import logging
+
+    info = attention_info(6, 8)          # 48 scoreable heads, like Qwen3.5-0.8B
+    assert info.n_scoreable_heads == 48
+    with caplog.at_level(logging.WARNING):
+        values = resolve_k(_Args(k_frac=[0.01, 0.02, 0.04, 0.08, 0.17, 0.33]), info)
+    assert values == [1, 2, 4, 8, 16], values
+    assert "collapsed to 5 distinct K" in caplog.text, caplog.text
+
+    # The dense model has no collision, and the warning must not fire there.
+    caplog.clear()
+    dense = attention_info(28, 16)
+    with caplog.at_level(logging.WARNING):
+        dense_values = resolve_k(_Args(k_frac=[0.01, 0.02, 0.04, 0.08, 0.17, 0.33]), dense)
+    assert len(dense_values) == 6, dense_values
+    assert "collapsed" not in caplog.text, caplog.text

@@ -529,3 +529,35 @@ def test_run_script_executes_in_process_and_tolerates_no_figure(tmp_path):
     with pytest.raises(SystemExit) as exc:
         driver.run_script("case-study", script, [])
     assert exc.value.code == 3
+
+
+def test_no_chat_template_is_appended_to_the_prompt_stages_only(driver):
+    """The sink geometry is a launch decision, not a committed-config edit.
+
+    With a chat template position 0 sits before the haystack, so the sink can never win
+    criterion (2); the paper's template-free prompt puts it inside `x`.  The two are
+    different measurements, so the variant has to be launchable without editing
+    `a100.yaml` -- and the flag must reach only the stages that render a prompt.
+    """
+    parser = build_parser()
+    for stage in ("detect", "mask", "qa", "cot"):
+        for argv in driver.stage_argv(stage, profile="a100", models=["m"],
+                                      prefix=Path("ds"), seed=0, no_chat_template=True):
+            assert "--no-chat-template" in argv, stage
+            assert parser.parse_args(argv).no_chat_template is True, stage
+
+    # `case-study` builds a prompt too, but it is a script rather than a CLI
+    # subcommand, so it is checked by presence only.
+    for argv in driver.stage_argv("case-study", profile="a100", models=["m"],
+                                  prefix=Path("ds"), seed=0, no_chat_template=True):
+        assert "--no-chat-template" in argv, argv
+
+    for stage in ("describe", "compare", "figures"):
+        for argv in driver.stage_argv(stage, profile="a100", models=["m", "n"],
+                                      prefix=Path("ds"), seed=0, no_chat_template=True):
+            assert "--no-chat-template" not in argv, (stage, argv)
+
+    # Default: the flag is absent, so a run cannot change geometry by accident.
+    for argv in driver.stage_argv("detect", profile="a100", models=["m"],
+                                  prefix=Path("ds"), seed=0):
+        assert "--no-chat-template" not in argv, argv

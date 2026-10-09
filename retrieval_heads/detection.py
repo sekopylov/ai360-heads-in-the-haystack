@@ -395,6 +395,11 @@ class DetectionRun:
             # argmax relative to the prompt domain.  These two make a `haystack` run
             # distinguishable from a `prompt` one without opening the config block.
             "argmax_domain": scores.meta.get("argmax_domain", self.config.argmax_domain),
+            # Which domains the capture could actually produce: `haystack` is absent
+            # when a rendered prompt did not contain the context verbatim, i.e. when
+            # that domain is undefined rather than merely empty.  The summary is what
+            # a reader opens, so the field has to be here and not only in `scores.meta`.
+            "argmax_domains_captured": scores.meta.get("argmax_domains_captured"),
             "argmax_domain_shift": scores.meta.get("argmax_domain_shift"),
             # True when sequence position 0 (the sink) is inside the haystack span;
             # with a chat template it is not, which inflates the >0.1 share.
@@ -726,45 +731,68 @@ def run_detection(
 
     # Every captured argmax domain, from the same per-instance dicts: the argmaxes
     # were all captured in the same forward pass, so this costs one CPU pass per
-    # domain and no GPU time, and the run reports each reading of criterion (2)
-    # instead of the configured one alone.  `scores_by_domain` holds the domains
+    # (pairing, domain) and no GPU time, and the run reports each reading of criterion
+    # (2) instead of the configured one alone.  `scores_by_domain` holds the domains
     # *other* than the primary, so the primary is not aggregated twice.
     alternative_domains = sorted({d for r in results for d in r.scores_by_domain})
     domain_scores: dict[tuple[str, str], RetrievalScores] = {}
+    # The subset is per domain, not per (pairing, domain): computing it inside the
+    # double loop logged the same warning twice and re-scanned the results.
+    subsets: dict[str, list[InstanceResult]] = {}
     for domain in alternative_domains:
-        agg = aggregate_scores(results, info, pairing=config.pairing,
-                               threshold=config.threshold, domain=domain)
-        agg.meta = dict(scores.meta)
-        agg.meta["argmax_domain"] = domain
-        agg.meta["domain_is_primary"] = False
-        # The run-level shift describes how far the *primary* domain moved away from
-        # prompt; copying it onto another domain's sidecar would mislabel it.  The
-        # prompt matrix is the reference, so its own shift is zero by definition.
-        agg.meta["argmax_domain_shift"] = (
-            {"reference": "prompt", "share": 0.0,
-             "note": "this matrix *is* the prompt reference"}
-            if domain == "prompt" else
-            {"reference": "prompt", "share": None,
-             "note": "not recorded for a non-primary domain; see the summary's "
-                     "sparsity_by_domain and domain_ranking_overlap"}
-        )
-        domain_scores[(config.pairing, domain)] = agg
-        share = agg.sparsity()["thresholds"].get(str(config.threshold), {}).get("frac", 0.0)
-        primary_share = scores.sparsity()["thresholds"].get(
-            str(config.threshold), {}).get("frac", 0.0)
-        log.info("%s domain (not the run's own): %.1f%% of heads above %.2f vs %.1f%% "
-                 "for %s", domain, 100 * share, config.threshold,
-                 100 * primary_share, config.argmax_domain)
-    # The same domains for the other pairing, when it exists: the two pairings credit
-    # different token sets, so a domain's effect on one says nothing about the other.
+        subset = [r for r in results if domain in r.scores_by_domain]
+        if len(subset) != len(results):
+            # `haystack` is *undefined* for a prompt that does not contain the context
+            # verbatim (the builder records `haystack_span_verbatim`), so a
+            # `prompt`-domain run can have it on some instances and not others.
+            # Aggregating over the subset that has it is honest only if the artifact
+            # says so: `RetrievalScores.n_instances` carries the subset size and the
+            # sidecar's `n_instances_without_domain` names the rest.  Without this it
+            # was a `KeyError` mid-grid, after the GPU time already spent.
+            log.warning(
+                "%s domain is missing on %d/%d instances (a prompt that does not "
+                "contain the context verbatim has no haystack span); its matrix is the "
+                "mean over the %d that have it",
+                domain, len(results) - len(subset), len(results), len(subset),
+            )
+        subsets[domain] = subset
+
+    alt_pairings = [config.pairing]
     if secondary is not None:
+        # The same domains for the other pairing: the two pairings credit different
+        # token sets, so a domain's effect on one says nothing about the other.
+        alt_pairings.append(secondary.pairing)
+    for pairing in alt_pairings:
         for domain in alternative_domains:
-            agg = aggregate_scores(results, info, pairing=secondary.pairing,
+            subset = subsets[domain]
+            agg = aggregate_scores(subset, info, pairing=pairing,
                                    threshold=config.threshold, domain=domain)
             agg.meta = dict(scores.meta)
             agg.meta["argmax_domain"] = domain
             agg.meta["domain_is_primary"] = False
-            domain_scores[(secondary.pairing, domain)] = agg
+            agg.meta["n_instances_without_domain"] = len(results) - len(subset)
+            # The run-level shift describes how far the *primary* domain moved away
+            # from prompt; copying it onto another domain's sidecar would mislabel it
+            # (the same mistake the secondary pairing's copy had).  The prompt matrix
+            # *is* the reference, so its own shift is zero by definition.
+            agg.meta["argmax_domain_shift"] = (
+                {"reference": "prompt", "share": 0.0, "pairing": pairing,
+                 "note": "this matrix *is* the prompt reference"}
+                if domain == "prompt" else
+                {"reference": "prompt", "share": None, "pairing": pairing,
+                 "note": "not recorded for a non-primary domain; see the summary's "
+                         "sparsity_by_domain and domain_ranking_overlap"}
+            )
+            domain_scores[(pairing, domain)] = agg
+            if pairing != config.pairing:
+                continue
+            share = agg.sparsity()["thresholds"].get(
+                str(config.threshold), {}).get("frac", 0.0)
+            primary_share = scores.sparsity()["thresholds"].get(
+                str(config.threshold), {}).get("frac", 0.0)
+            log.info("%s domain (not the run's own): %.1f%% of heads above %.2f vs "
+                     "%.1f%% for %s", domain, 100 * share, config.threshold,
+                     100 * primary_share, config.argmax_domain)
 
     # Same matrices, restricted to instances the model actually solved: without this
     # a model that fails NIAH more often looks "less sparse" for reasons unrelated to

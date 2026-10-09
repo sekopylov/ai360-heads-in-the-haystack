@@ -38,6 +38,14 @@ def prefill_cache(
     belongs to exactly one chunk, so the layer/MLP work is unchanged.  Only the
     attention term grows, from ``seq^2/2`` to ``c^2 n(n+1)/2`` with ``n = seq/c``,
     i.e. by a factor ``(n+1)/n`` -- 1.08 at 12 chunks, 1.04 at 24.
+
+    ``logits_to_keep=1`` is passed on purpose.  Without it the model projects every
+    position of every chunk through ``lm_head`` and this function throws all but the
+    last row away: at a 8192-token chunk that is a ``(8192, vocab)`` bf16 tensor --
+    ~4.1 GB for Qwen3.5-0.8B's 248320-token vocabulary, ~2.6 GB for Qwen3-0.6B's
+    151936 -- plus a matmul of the same order as the whole chunk's transformer work
+    (the chunk is fed through the model once per chunk either way, so the waste is per
+    chunk, not once).  The returned value is unchanged: ``out.logits[:, -1, :]``.
     """
     if prefill_chunk is not None and prefill_chunk <= 0:
         raise ValueError("prefill_chunk must be positive or None")
@@ -49,10 +57,11 @@ def prefill_cache(
                 input_ids=input_ids[:, start:start + prefill_chunk],
                 past_key_values=cache,
                 use_cache=True,
+                logits_to_keep=1,
             )
             cache = out.past_key_values
     else:
-        out = model(input_ids=input_ids, use_cache=True)
+        out = model(input_ids=input_ids, use_cache=True, logits_to_keep=1)
         cache = out.past_key_values
     return cache, out.logits[:, -1, :]
 

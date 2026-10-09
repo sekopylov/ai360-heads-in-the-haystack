@@ -286,10 +286,16 @@ def test_end_to_end_retrieval_detection_on_qwen3(qwen3):
 def test_haystack_domain_is_a_lower_bound_of_the_prompt_domain(qwen3):
     """The one relation the domain change must satisfy, on a real instance.
 
-    Restricting the argmax to the haystack can only *add* credit -- every haystack
-    position is a prompt position, so a head that earned credit under `prompt` still
-    does, and a head whose prompt argmax was a template token can now earn more.  It
-    is the direct check that the span is the context (not the whole prompt) and that
+    Restricting the argmax to the haystack can only *add* credit, and that is a
+    theorem rather than an empirical observation: the haystack span is a subset of the
+    prompt and contains the needle, so if the prompt argmax is a needle position then
+    it is also the first maximum inside the haystack -- an earlier position in the
+    span tied with it would have been the prompt argmax instead.  Ties (the bf16
+    regime) therefore cannot lose credit either; the reverse direction is what fails,
+    because a template token at position 0 can win the prompt argmax.  So the
+    committed `prompt`-domain numbers are a lower bound on retrieval.
+
+    It is the direct check that the span is the context (not the whole prompt) and that
     the scoring actually reads it.
     """
     model, tokenizer, info = qwen3

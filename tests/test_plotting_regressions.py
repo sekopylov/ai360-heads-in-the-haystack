@@ -363,3 +363,36 @@ def test_hybrid_pie_title_states_both_head_bases():
         assert str(info.n_all_heads) in title, title      # 2 + 1*4 = 6 heads in all
     finally:
         plt.close(fig)
+
+
+def test_pie_title_takes_its_threshold_from_the_panels():
+    """The figure title must not describe the last model's threshold alone.
+
+    Each panel uses its own run's `scores.threshold` when the caller passes none, so a
+    shared label taken from whichever model came last in the mapping would be wrong as
+    soon as two runs disagree -- which is exactly what a re-run at a different
+    `--threshold` produces.
+    """
+    import matplotlib.pyplot as plt
+
+    from retrieval_heads.plotting import plot_score_pie
+
+    def run(threshold: float):
+        info = attention_info(1, 2)
+        return RetrievalScores(info=info, score=torch.tensor([[0.9, 0.05]]),
+                               activation_freq=torch.zeros(1, 2), n_instances=1,
+                               threshold=threshold)
+
+    shared = plot_score_pie({"a": run(0.1), "b": run(0.1)})
+    try:
+        title = shared._suptitle.get_text()
+        assert ">0.1" in title, title
+    finally:
+        plt.close(shared)
+
+    mixed = plot_score_pie({"a": run(0.1), "b": run(0.35)})
+    try:
+        title = mixed._suptitle.get_text()
+        assert "0.1" in title and "0.35" in title, title
+    finally:
+        plt.close(mixed)

@@ -106,7 +106,16 @@ def plot_score_pie(scores_by_model: Mapping[str, RetrievalScores],
         raise ValueError("plot_score_pie needs at least one model")
     cols = min(n, 4)
     rows = int(np.ceil(n / cols))
-    thr_label = ("the run's own" if threshold is None else f"{threshold:g}")
+    # The figure title must describe the thresholds the *panels* use.  When each panel
+    # uses its own run's threshold, "the run's own" is only honest if they agree: two
+    # runs with different thresholds would otherwise share one label taken from
+    # whichever model happened to be last in the mapping.
+    if threshold is not None:
+        thr_label = f"{threshold:g}"
+    else:
+        used = {scores.threshold for scores in scores_by_model.values()}
+        thr_label = (f"{used.pop():g}" if len(used) == 1
+                     else "each run's own (" + ", ".join(f"{t:g}" for t in sorted(used)) + ")")
     fig, axes = plt.subplots(rows, cols, figsize=(2.5 * cols, 2.7 * rows), squeeze=False)
     for ax, name in zip(axes.ravel(), names):
         scores = scores_by_model[name]

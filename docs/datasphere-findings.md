@@ -485,7 +485,8 @@ With both in place the error is ~2% or better across 1K-49K (measured ≤0.5% at
 detection grid's own depths, and up to ~1.4% under other seeds, where the last
 filler sentence is coarser than the tolerance; a run that cannot reach the 2%
 tolerance says so in the log).  Pinned by
-`tests/test_regressions.py::test_realized_context_length_tracks_the_request`.
+`tests/test_masking_regressions.py::test_realized_context_length_tracks_the_request`
+(the test file was split out of `test_regressions.py`, which no longer exists).
 
 Worth keeping in mind as a pattern: three of the four measurement problems found in
 this project (needle answer shape, CoT baseline at the floor, and this) were

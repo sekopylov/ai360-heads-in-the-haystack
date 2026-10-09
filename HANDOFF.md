@@ -16,7 +16,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 270 tests: 252 fast (`pytest -m "not integration"`, ~10 s), 18 integration against
+* 277 tests: 259 fast (`pytest -m "not integration"`, ~10 s), 18 integration against
   the real checkpoints. All green.
 * **The committed artifacts now match the code.** The GPU run was refreshed in two
   jobs on an NVIDIA L4, 75 instances per model:
@@ -83,6 +83,71 @@ tied to a job id) → this file (where things stand and what is left).
   exact-match, recall, prefix-recall and the *generated texts*) and the same for
   each random trial, so a specific failure can be inspected from the artifact
   instead of only its mean.
+* **Review round (the eighth report, pre-A100), verified against the code:**
+  * **`mask` on the A100 ran at 32 tokens while `detect` ran at 96 -- fixed.**  The
+    reviewer is right that the stage carrying the causal claim was generating with the
+    CLI default, *tighter* than the 48 the committed t4 tree used, and the hybrid's
+    answers were being cut mid-sentence (`masking_curve.json`'s `per_sample[...]
+    ["retrieval"]["generated_texts"]`).  `SCALES['a100']['mask']` now pins
+    `--max-new-tokens 96`; `qa` deliberately keeps 24 (its metric is token-F1 over the
+    whole completion, so narration costs precision rather than buying recall) and `cot`
+    stays 256.  Three budgets in one tree is a measurement condition, not a bug, and
+    every artifact records `max_new_tokens` -- now said in the README's caveats, since
+    the A100 numbers are not comparable with the committed 48-token tree even in the
+    same argmax domain.
+  * **The domain bound IS a theorem, and my own test asserted the opposite.**  The
+    reviewer argued a bf16 tie could lose credit when moving `prompt` -> `haystack`.
+    That cannot happen: the haystack span is a subset of the prompt and contains the
+    needle, so if the prompt argmax is a needle position it is also the *first* maximum
+    inside the span (an earlier tied position inside the span would have been the prompt
+    argmax instead).  So credit can only be gained, ties included, and the reverse fails
+    (a template token can win the prompt argmax).  But the report did find a real defect:
+    `test_detect_writes_a_matrix_per_argmax_domain` asserted the *wrong* direction
+    (`haystack <= prompt`) and passed only because the tiny model earns no credit at all
+    -- verified by printing the matrices, all zero.  The vacuous assertion is replaced by
+    an explicit all-zero guard, the theorem now has a property test on quantised rows
+    (ties included) in `test_scoring.py`, and the integration test's docstring carries
+    the argument so it is not re-raised as an empirical claim.
+  * **`prefill_cache` now passes `logits_to_keep=1`.**  The reviewer is right that the
+    chunk-memory arithmetic in `a100.yaml` described the fp32-fallback attention matrix,
+    which the bf16 run never materialises: the binding chunk-sized allocation was
+    `lm_head` over every position of every chunk (~4.1 GB at 8192 x 248320 for the
+    hybrid, ~2.6 GB for the dense model) plus a matmul of the same order as the whole
+    chunk's transformer work, per chunk.  The returned value is unchanged
+    (`out.logits[:, -1, :]`), and the chunked-prefill equivalence tests still pass.  The
+    config comment now names both peaks.
+  * **`--no-chat-template` is a driver flag, and there is a template-free preflight.**
+    The sink geometry is a property of the prompt, so it cannot be derived from a
+    template-on run, and choosing it used to mean editing `a100.yaml` -- exactly what
+    `docs/datasphere-findings.md` section 16 warns against.
+    `configs/datasphere/a100-preflight-notemplate.yaml` is the twin of the template-on
+    preflight, and the flag reaches only the stages that render a prompt.
+  * **The cited truncation numbers did not reproduce -- replaced.**  `a100.yaml` quoted
+    "0.684 against 0.793 on the top head"; recomputed from
+    `ds-results/qwen3.5-0.8b/instances_next_step.jsonl` split on `meta.truncated` it is
+    **0.671** (11 truncated) against **0.755** (64), and the old pair appears in none of
+    the three committed trees.  The comment now cites the artifact it came from.
+  * **Smaller, all verified:** `NeedleSample.haystack_tokens` (the *prompt* length, next
+    to `n_haystack_tokens`, the *context span*) is now `prompt_tokens`, which is what the
+    artifact already called it; two `--k-frac` values that collapse into one K are
+    logged and both the request and the resolution are recorded
+    (`k_frac_args`/`k_args`); the pie figure's title takes its threshold label from the
+    panels instead of from whichever model came last; a domain missing on *some*
+    instances (a `prompt`-domain run where a prompt is not verbatim) is aggregated over
+    the subset that has it, with `n_instances_without_domain` recorded, instead of a
+    `KeyError` mid-grid; `summary_*.json` now carries `argmax_domains_captured`;
+    `aggregate_scores(domain=primary)` raises a message naming the complement instead of
+    a bare `KeyError`; and `docs/datasphere-findings.md`'s pointer to the deleted
+    `test_regressions.py` now points at `test_masking_regressions.py`.
+  * Left as the reviewer's *decision*, not a code change: the hybrid's random-arm pool
+    shrinks as the `>0.1` share grows (33/48 heads above 0.1 under `prompt` leaves 15),
+    so under `haystack` the `mask` curve may degenerate.  That is what the two preflights
+    are for; the artifact already records `control_exhausted`,
+    `random_control_contaminated`, `k_effective` and `random_retrieval_overlap`.
+  * Also left deliberately: `qa`/`cot` stay on the A100 (minutes against hours, and they
+    complete the tree), and the dense model's two longest lengths stay dropped (its
+    40960-token window is a model property; changing the grid would break "same grid as
+    `paper`").
 * **Review round (the seventh report: the pre-A100 review), verified against the code:**
   * **B1 -- the argmax domain is now a *reporting* dimension, not a run-level choice.**
     The reviewer's main point survived checking: `a100.yaml` pinned `haystack`, which
@@ -841,7 +906,7 @@ matrix.
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 270 passed (252 fast + 18 integration)
+.venv/bin/python -m pytest -q                     # 277 passed (259 fast + 18 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

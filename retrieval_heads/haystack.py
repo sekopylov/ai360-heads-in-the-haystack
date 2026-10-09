@@ -160,7 +160,12 @@ class NeedleSample:
     question: str
     depth: float                         # 0.0 = very start, 1.0 = very end
     target_tokens: int
-    haystack_tokens: int                 # actual prompt length
+    #: Realized length of the *rendered prompt* (filler + needle + question +
+    #: template), i.e. what ``input_ids`` holds.  It is called ``prompt_tokens``
+    #: because the neighbouring ``n_haystack_tokens`` is the *context span* (the
+    #: paper's ``x``); the old name ``haystack_tokens`` meant the opposite of what it
+    #: looked like in a project whose point is exactly that distinction.
+    prompt_tokens: int
     seed: int
     #: Token indices ``[start, end)`` of the *haystack* inside the rendered prompt:
     #: the filler plus the needle, i.e. the paper's ``x``, excluding the question and
@@ -475,7 +480,7 @@ def build_needle_sample(
         question=question,
         depth=depth,
         target_tokens=target_tokens,
-        haystack_tokens=len(ids),
+        prompt_tokens=len(ids),
         seed=seed,
         haystack_span=haystack_span,
         meta={"span_tight": tight, "span_straddles_boundary": straddles,

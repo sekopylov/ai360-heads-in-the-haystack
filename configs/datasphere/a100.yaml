@@ -4,8 +4,8 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 # Why this config
 # ---------------
 # Same grid as `paper.yaml` (9 geometric lengths over 1K-49K, 10 depths, 3 needles),
-# so its numbers are comparable -- with two differences that are about the card, not
-# the science:
+# so its numbers are comparable -- with differences that are about the card, not the
+# science:
 #
 #   * `--prefill-chunk 8192` instead of the 4096 default.  Chunking does NOT repeat
 #     layer work (each token belongs to one chunk); it bounds the attention score
@@ -15,10 +15,21 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 #     near 6.4 GiB for that matrix, so the bound stays and the chunk count halves.
 #     Feeding everything in one shot saves only ~4-8% of the attention time and
 #     gives the bound up entirely.
-#   * `--max-new-tokens 96` for detect (the `paper` profile's 48 truncates 11 of the
-#     hybrid's 75 instances at the t4 grid; a truncated instance scores lower --
-#     0.684 against 0.793 on the top head -- because the model answers and then keeps
-#     narrating, which is where the extra needle-token copies would come from).
+#     On the *bf16* path this run actually takes, flash SDPA never materialises that
+#     matrix at all: the binding chunk-sized allocation was the `lm_head` logits over
+#     every position of every chunk (~4.1 GB at 8192 x 248320 for the hybrid, ~2.6 GB
+#     for the dense model), which `prefill_cache` now avoids with
+#     `logits_to_keep=1`.  So the memory argument for chunking is about the fp32
+#     fallback, and the chunk size is now bounded by that, not by the logits.
+#   * `--max-new-tokens 96` for detect *and* mask.  The `paper` profile's 48 truncates
+#     11 of the hybrid's 75 instances at the t4 grid; a truncated instance scores
+#     lower -- recomputed from `ds-results/qwen3.5-0.8b/instances_next_step.jsonl`,
+#     split on `meta.truncated`: 0.671 on the top head (L11H1) for the 11 truncated
+#     instances against 0.755 for the other 64 -- because the model answers and then
+#     keeps narrating, which is where the extra needle-token copies would come from.
+#     `mask` runs at the CLI's 32-token default otherwise, i.e. *tighter* than the
+#     48 the committed t4 tree used on the stage that carries the causal claim; 96
+#     costs roughly 10-20 extra minutes of decode over the whole stage.
 #   * `--preflight` for detect: all 270 prompts are built and validated (CPU only)
 #     before the first forward pass, because one prompt whose haystack cannot be
 #     located verbatim would otherwise abort the stage hours into the run.  The L4
