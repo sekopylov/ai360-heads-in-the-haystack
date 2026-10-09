@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 224 tests: 207 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
+* 225 tests: 208 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
   the real checkpoints. All green.
 * **The committed artifacts now match the code.** The GPU run was refreshed in two
   jobs on an NVIDIA L4, 75 instances per model:
@@ -49,6 +49,44 @@ tied to a job id) → this file (where things stand and what is left).
   exact-match, recall, prefix-recall and the *generated texts*) and the same for
   each random trial, so a specific failure can be inspected from the artifact
   instead of only its mean.
+* **Review round (the fourth report), verified against the code:**
+  * **`HeadOverlap.mode` was never set** (`head_overlap` used `mode` for the
+    correlation but never passed it to its own constructor), so `overlap.json` said
+    `mode: grid` next to a correlation computed in `sorted` and next to a caveat
+    about sorted -- the artifact contradicted itself, and `cmd_compare` printed a
+    *different* payload than it wrote.  `mode` and the caveat now travel together,
+    set in `properties` (`SORTED_MODE_CAVEAT`), and the test that was supposed to
+    catch it only read the default; it now exercises `mode="sorted"`.
+  * `credits_aligned` still had the `min()` clamp that `credits_from_trace` had
+    already been fixed for; both now share `_validated_head_count`.
+  * `SCHEMA_VERSION` 5 spanned three commits that added fields *and* changed
+    semantics, so `warn_if_stale` said "fine" for artifacts that predate them.
+    Bumped to 6; the summarizer now emits 22 warnings on the committed `ds-results/`,
+    which is the honest signal.  The README caveat now lists *every* missing field
+    (truncation counters, `control_exhausted`, `random_distinct`, the QA/CoT
+    conditions, `aligned_top_heads[].n`, `distinct_subsets`, `code_sha256`).
+  * The control subsets are drawn without repetition now -- which is **not** an
+    additive change: the committed hybrid K=1 point has a duplicate
+    (`[L3H2, L3H2, L11H3]`), so its `random_std` came from two distinct
+    interventions.  The README said "no number changes"; it now says exactly which
+    arm a re-run would change.  The same drawing rule now also applies to
+    `qa_ablation`/`cot_ablation`, via one shared helper.
+  * `--random-trials 0`, `--max-new-tokens 0` (for `mask`/`qa`/`cot`) and an explicit
+    empty `--lengths` are rejected instead of producing all-zero metrics or `null`
+    spreads; `detect` already refused the zero budget, so the commands now agree.
+  * Smaller: `plot_attention_distribution`'s `top_n` is applied instead of ignored;
+    the exact-match legend no longer promises bars it does not draw; `cmd_compare`
+    prints `finite_json` (stdout used to be invalid JSON with `NaN` while the file
+    was fine); `HeadRef` is re-exported from `utils` rather than from `models` (which
+    merely imported it); README's "18 of 48 heads" is 15, and "within ~1%" is stated
+    for the means (per-instance the worst case is ~2%).
+  * Documented, not hidden: the `prompt` argmax domain is the rendered prompt
+    (haystack + question + template), not the paper's haystack-only `x`, so extra
+    positions can only withhold credit -- a haystack-only variant is not implemented;
+    and `token_mixer_ablation`'s dense branch is reachable from the API but not from
+    the CLI.
+  * Not done: per-sample std for the QA retrieval arm (so those bars stay absent),
+    and the 2-3-needle ablation grid (GPU run).
 * **Review round (the third report), verified against the code:**
   * **The pairing invariant was wrong on the EOS path** (the common one).  A step is
     recorded after the EOS check, so the last *recorded* decode step always predicted
@@ -531,7 +569,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 224 passed (207 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 225 passed (208 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

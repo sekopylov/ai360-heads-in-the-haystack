@@ -339,6 +339,24 @@ def _per_head(counts: dict[int, torch.Tensor], info: ModelInfo) -> dict[HeadRef,
     return out
 
 
+def _validated_head_count(info: ModelInfo, layer: int, argmax: torch.Tensor) -> int:
+    """The head count both credit variants must agree with the capture on.
+
+    `min()` used to clamp a mismatch, silently dropping attention rows when the
+    trace reported more heads than the metadata (and under-counting the strict
+    variant when it reported fewer).  One helper so the two variants cannot drift
+    apart again.
+    """
+    n_heads = info.num_heads[layer]
+    if argmax.shape[0] != n_heads:
+        raise ValueError(
+            f"layer {layer} reported {argmax.shape[0]} attention rows but the model "
+            f"metadata says {n_heads}; the capture and the model disagree, and this "
+            f"cannot change mid-run"
+        )
+    return n_heads
+
+
 def credits_from_trace(
     trace: DecodeTrace,
     sample: NeedleSample,
@@ -389,16 +407,7 @@ def credits_from_trace(
                 # which can include a module (e.g. a vision tower) this model does
                 # not score.  Skip it rather than KeyError.
                 continue
-            # Symmetric check: `min()` used to drop extra rows silently when the
-            # capture reported more heads than the metadata (the recorder validates
-            # equality at capture time, so a mismatch here means a hand-built trace).
-            n_heads = info.num_heads[layer]
-            if argmax.shape[0] != n_heads:
-                raise ValueError(
-                    f"layer {layer} reported {argmax.shape[0]} attention rows but the "
-                    f"model metadata says {n_heads}; the capture and the model "
-                    f"disagree, and this cannot change mid-run"
-                )
+            n_heads = _validated_head_count(info, layer, argmax)
             counts = considered_t.get(layer)
             if counts is None:
                 counts = torch.zeros(n_heads, dtype=torch.long)
@@ -466,7 +475,7 @@ def credits_aligned(
         for layer, argmax in step.positions().items():
             if layer not in info.num_heads:
                 continue
-            heads = min(info.num_heads[layer], argmax.shape[0])
+            heads = _validated_head_count(info, layer, argmax)
             matched, _sink = match_masks(argmax, prompt_ids, token, (start, end),
                                          0, heads)
             hits.extend((layer, int(head), token)

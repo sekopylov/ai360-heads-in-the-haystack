@@ -20,7 +20,14 @@ from typing import Any, Callable
 #: Bumped to 5: the causal artifacts now carry the eval-needle text and the masked
 #: head/layer audit (and the summary carries recited-only matrices), so a v4 reader
 #: would miss the fields that make those runs reproducible.
-SCHEMA_VERSION = 5
+#: Bumped to 6: three further rounds added fields *and* changed semantics without a
+#: bump -- the ablation artifacts gained truncation counters, `control_exhausted` and
+#: `random_distinct`; the QA/CoT payloads gained threshold/pairing/argmax_domain; the
+#: aligned ranking gained n/n_missing; the control subsets are now drawn without
+#: repetition (so a re-run's random arm differs); and the pairing rows are scoped by
+#: what was actually generated.  Without the bump a schema-5 artifact from before all
+#: of that read as current.
+SCHEMA_VERSION = 6
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 

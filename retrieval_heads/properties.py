@@ -175,10 +175,19 @@ def correlation_matrix(
         for j in range(i + 1, n):
             value = correlate(runs[i], runs[j], mode=mode)
             values[i][j] = values[j][i] = value
-    return CorrelationMatrix(labels=labels, values=values, mode=mode)
+    return CorrelationMatrix(labels=labels, values=values, mode=mode,
+                             caveat=SORTED_MODE_CAVEAT if mode == "sorted" else None)
 
 
 # --------------------------------------------------------------------------- intrinsic
+#: Interpretation note for `mode="sorted"`, shared by `correlation.json` and
+#: `overlap.json` so neither can disagree with its own `mode` field.
+SORTED_MODE_CAVEAT = (
+    "mode='sorted' correlates sorted score vectors, not head positions; a high "
+    "value does not mean the models use the same heads"
+)
+
+
 @dataclass
 class HeadOverlap:
     """How much two models agree on *which* heads are retrieval heads."""
@@ -245,7 +254,8 @@ def head_overlap(
         return HeadOverlap(
             model_a=scores_a.info.name, model_b=scores_b.info.name, threshold=threshold,
             n_a=len(set_a), n_b=len(set_b), n_shared=0, jaccard=float("nan"),
-            comparable=False,
+            comparable=False, mode=mode,
+            caveat=SORTED_MODE_CAVEAT if mode == "sorted" else None,
             score_correlation=correlate(scores_a, scores_b, mode=mode),
         )
     shared = sorted(set_a & set_b)
@@ -255,6 +265,7 @@ def head_overlap(
         n_a=len(set_a), n_b=len(set_b), n_shared=len(shared),
         jaccard=(len(shared) / len(union)) if union else float("nan"),
         shared=shared, only_a=sorted(set_a - set_b), only_b=sorted(set_b - set_a),
+        mode=mode, caveat=SORTED_MODE_CAVEAT if mode == "sorted" else None,
         score_correlation=correlate(scores_a, scores_b, mode=mode),
     )
 

@@ -1210,14 +1210,28 @@ def test_score_instance_always_records_both_pairings():
 
 
 def test_head_overlap_artifact_carries_its_mode():
+    """The old version of this test only read the *default*, so it passed while
+    `head_overlap` never passed `mode` to its own constructor: `overlap.json` said
+    `mode: grid` next to a correlation computed in `sorted` (and next to a caveat
+    about sorted), i.e. the artifact contradicted itself.
+    """
     from retrieval_heads.properties import head_overlap
 
     a = RetrievalScores(info=attention_info(1, 2), score=torch.tensor([[0.9, 0.0]]),
                         activation_freq=torch.zeros(1, 2), n_instances=1)
     b = RetrievalScores(info=attention_info(1, 2), score=torch.tensor([[0.8, 0.0]]),
                         activation_freq=torch.zeros(1, 2), n_instances=1)
-    payload = head_overlap(a, b, mode="grid").as_dict()
-    assert payload["mode"] == "grid", payload
+
+    grid = head_overlap(a, b, mode="grid").as_dict()
+    assert grid["mode"] == "grid" and grid["caveat"] is None
+
+    # Different layouts force the cross-family path, which is where `sorted` lives.
+    c = RetrievalScores(info=attention_info(2, 2), score=torch.tensor([[0.9, 0.0], [0.1, 0.0]]),
+                        activation_freq=torch.zeros(2, 2), n_instances=1)
+    sorted_payload = head_overlap(a, c, mode="sorted").as_dict()
+    assert sorted_payload["mode"] == "sorted", sorted_payload
+    assert sorted_payload["comparable"] is False
+    assert sorted_payload["caveat"], "a sorted comparison must carry its caveat"
 
 
 def _well_formed_curve() -> dict:

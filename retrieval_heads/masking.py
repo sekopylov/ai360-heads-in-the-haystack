@@ -347,6 +347,37 @@ class MaskingCurve:
         save_json(add_provenance(self.as_dict(), dtype=None), path)
 
 
+def draw_control_subsets(pool: Sequence[HeadRef], k_eff: int, n_trials: int,
+                         rng: np.random.Generator) -> list[list[HeadRef]]:
+    """`n_trials` control subsets, without repeating one while the space allows it.
+
+    Repeats matter at a small pool: the hybrid has 15 non-retrieval heads, so at K=1
+    a three-trial draw can pick the same head twice and `random_std` then measures
+    two distinct interventions, not three.  Callers record the realized count
+    (`random_distinct` / `distinct_subsets`) so the artifact says which it was.
+    """
+    if not pool or k_eff <= 0:
+        return [[] for _ in range(n_trials)]
+    if k_eff >= len(pool):
+        # The whole pool: a deterministic intervention, and repeats are unavoidable.
+        return [list(pool) for _ in range(n_trials)]
+    space = math.comb(len(pool), k_eff)
+    seen: set[tuple[str, ...]] = set()
+    out: list[list[HeadRef]] = []
+    attempts = 0
+    while len(out) < n_trials and attempts < 100 * n_trials:
+        attempts += 1
+        pick = [pool[i] for i in rng.permutation(len(pool))[:k_eff]]
+        key = tuple(sorted(str(head) for head in pick))
+        if key in seen and len(seen) < space:
+            continue
+        seen.add(key)
+        out.append(pick)
+    while len(out) < n_trials:  # the space was smaller than the trial count
+        out.append([pool[i] for i in rng.permutation(len(pool))[:k_eff]])
+    return out
+
+
 def masking_curve(
     model: Any,
     tokenizer: Any,
@@ -460,21 +491,8 @@ def masking_curve(
         masked_counts = []
         above_counts: list[int] = []
         threshold_heads = set(scores.heads_above())
-        # Draw the control subsets without repeating one where the pool allows it:
-        # with a small pool (the hybrid has 15) the same subset can otherwise be drawn
-        # twice, and `random_std` then measures fewer distinct interventions than the
-        # trial count suggests.  `random_distinct` in the artifact records the count.
-        seen_subsets: set[tuple[str, ...]] = set()
-        # Size of the subset space; beyond it, repeats are unavoidable.
-        subset_space = math.comb(len(pool), k_eff) if 0 <= k_eff <= len(pool) else 0
-        for trial in range(n_random_trials):
-            for _attempt in range(100):
-                pick = rng.permutation(len(pool))[:k_eff]
-                random_heads = [pool[i] for i in pick]
-                key = tuple(sorted(str(h) for h in random_heads))
-                if key not in seen_subsets or len(seen_subsets) >= subset_space:
-                    break
-            seen_subsets.add(key)
+        drawn = draw_control_subsets(pool, k_eff, n_random_trials, rng)
+        for random_heads in drawn:
             masked_counts.append(len(random_heads))
             # The honest control audit: how many drawn heads are retrieval heads.
             # (In the clean pool this is 0 by construction; it is non-zero only in
@@ -502,7 +520,9 @@ def masking_curve(
         curve.random_above_threshold.append(above_counts)
         curve.random_masked_mean.append(float(np.mean(masked_counts)))
         curve.control_exhausted.append(bool(len(pool) and k_eff >= len(pool)))
-        curve.random_distinct.append(len(seen_subsets))
+        curve.random_distinct.append(
+            len({tuple(sorted(str(h) for h in pick)) for pick in drawn})
+        )
         curve.random_recall_mean.append(float(np.mean(recall_trials)))
         curve.random_mean.append(float(np.mean(trials)))
         curve.random_std.append(float(np.std(trials)))
@@ -637,8 +657,10 @@ def token_mixer_ablation(
     """Silence K full-attention layers vs K linear-attention layers.
 
     On a dense model ``linear_attention`` is empty and the call returns
-    ``full_attention`` only -- still a valid "how concentrated is retrieval in a
-    few layers" measurement.
+    ``full_attention`` only -- still a valid "how concentrated is retrieval in a few
+    layers" measurement.  Note that `cmd_mask` only calls this when the model *has*
+    linear layers, so that dense branch is reachable from the API but not from the
+    CLI, and a dense run's tree has no ``mixer_ablation.json``.
 
     ``baseline`` lets the caller pass an F1 it already measured on the same samples
     (``cmd_mask`` computes one for the masking curve); on the hybrid that unmasked

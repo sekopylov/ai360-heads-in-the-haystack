@@ -21,7 +21,14 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from retrieval_heads.provenance import add_provenance, warn_if_stale
-from retrieval_heads.utils import ensure_dir, get_logger, load_json, save_json, set_seed
+from retrieval_heads.utils import (
+    ensure_dir,
+    finite_json,
+    get_logger,
+    load_json,
+    save_json,
+    set_seed,
+)
 
 log = get_logger("cli")
 
@@ -459,7 +466,36 @@ def cmd_detect(args: argparse.Namespace) -> int:
     return 0
 
 
+def require_ablation_args(args: argparse.Namespace) -> None:
+    """Reject the ablation arguments that would otherwise produce silent zeros.
+
+    `detect` already refuses `max_new_tokens <= 0` (via `decode_with_attention`), but
+    `mask`/`qa`/`cot` accepted it and then reported all-zero metrics; and
+    `--random-trials 0` left `np.mean([])` -> NaN in the artifact with an empty
+    `random_trials` list, while `token_mixer_ablation` silently clamped its own trial
+    count with `max(1, n_trials)`.  Fail like the rest of the CLI does.
+    """
+    # `getattr` everywhere, including inside the messages: this helper is called by
+    # `mask`, `qa` and `cot`, and `--mixer-trials` exists only on `mask`.
+    max_new_tokens = getattr(args, "max_new_tokens", 1)
+    if max_new_tokens < 1:
+        raise SystemExit(
+            f"--max-new-tokens must be >= 1 (got {max_new_tokens}); 0 generates "
+            f"nothing and every metric would be 0"
+        )
+    random_trials = getattr(args, "random_trials", 1)
+    if random_trials < 1:
+        raise SystemExit(
+            f"--random-trials must be >= 1 (got {random_trials}); the control arm "
+            f"is undefined without at least one trial"
+        )
+    mixer_trials = getattr(args, "mixer_trials", 1)
+    if mixer_trials < 1:
+        raise SystemExit(f"--mixer-trials must be >= 1 (got {mixer_trials})")
+
+
 def cmd_mask(args: argparse.Namespace) -> int:
+    require_ablation_args(args)
     import torch
 
     from retrieval_heads.detection import EVAL_NEEDLES
@@ -489,6 +525,10 @@ def cmd_mask(args: argparse.Namespace) -> int:
     # still the paper-scale grid.
     # Same window guard as `detect`: a length past the trained window is
     # extrapolation, not a measurement, and `detect` already refuses it.
+    # An explicit empty list is an error, not a request for the default; `detect`
+    # already refuses an empty grid the same way.
+    if args.lengths is not None and not args.lengths:
+        raise SystemExit("--lengths was given but empty; pass at least one length")
     lengths, _dropped = within_context_limit(args.lengths or (1024,), info)
     if not lengths:
         raise SystemExit(
@@ -582,6 +622,7 @@ def warn_oversized_samples(samples: Sequence[Any], info: Any, tokenizer: Any,
 
 
 def cmd_qa(args: argparse.Namespace) -> int:
+    require_ablation_args(args)
     from retrieval_heads.downstream import builtin_qa_samples, load_qa_jsonl, qa_ablation
     from retrieval_heads.scoring import RetrievalScores
 
@@ -606,6 +647,7 @@ def cmd_qa(args: argparse.Namespace) -> int:
 
 
 def cmd_cot(args: argparse.Namespace) -> int:
+    require_ablation_args(args)
     from retrieval_heads.downstream import (
         builtin_reasoning_samples, cot_ablation, load_reasoning_jsonl,
     )
@@ -646,23 +688,23 @@ def cmd_compare(args: argparse.Namespace) -> int:
         log.warning("layouts differ, so `sorted` mode is used: it correlates *ranked* "
                     "score vectors and is high by construction for any two heavy-tailed "
                     "distributions.  It does NOT mean the models use the same heads.")
-    caveat = ("mode='sorted' correlates sorted score vectors, not head positions; a high "
-              "value does not mean the models use the same heads") if mode == "sorted" else None
-    corr = correlation_matrix([runs[n] for n in names], mode=mode, labels=names)
-    if caveat:
-        corr.caveat = caveat
-    corr_payload = corr.as_dict()
-    if caveat:
-        corr_payload["caveat"] = caveat
-    save_json(add_provenance(corr_payload), Path(args.out or REPO_ROOT / "results") / "correlation.json")
-    print(json.dumps(corr_payload, indent=2))
+    # The caveat and the mode now travel together, set by `properties` itself, so the
+    # file and stdout cannot disagree and neither can contradict its own `mode` field
+    # (`head_overlap` used to leave `mode` at its default while the correlation inside
+    # had been computed in `sorted`).
+    corr_payload = correlation_matrix([runs[n] for n in names], mode=mode, labels=names).as_dict()
+    out_dir = Path(args.out or REPO_ROOT / "results")
+    save_json(add_provenance(corr_payload), out_dir / "correlation.json")
+    # `finite_json` first: `json.dumps` would print bare `NaN` for a grid-mode
+    # comparison across layouts, which is not valid JSON even though `save_json`
+    # (allow_nan=False) writes null for the same value.
+    print(json.dumps(finite_json(corr_payload), indent=2))
     if len(names) == 2:
-        overlap = head_overlap(runs[names[0]], runs[names[1]], threshold=args.threshold, mode=mode)
+        overlap = head_overlap(runs[names[0]], runs[names[1]], threshold=args.threshold,
+                               mode=mode)
         overlap_payload = overlap.as_dict()
-        if caveat:
-            overlap_payload["caveat"] = caveat
-        save_json(add_provenance(overlap_payload), Path(args.out or REPO_ROOT / "results") / "overlap.json")
-        print(json.dumps(overlap.as_dict(), indent=2))
+        save_json(add_provenance(overlap_payload), out_dir / "overlap.json")
+        print(json.dumps(finite_json(overlap_payload), indent=2))
     return 0
 
 

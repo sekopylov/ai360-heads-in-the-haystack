@@ -26,7 +26,7 @@ import torch
 
 from retrieval_heads.attention import HeadMasker
 from retrieval_heads.generation import greedy_ids
-from retrieval_heads.masking import control_pool, matched_k
+from retrieval_heads.masking import control_pool, draw_control_subsets, matched_k
 from retrieval_heads.models import ModelInfo
 from retrieval_heads.scoring import RetrievalScores
 from retrieval_heads.utils import HeadRef, eos_ids, get_logger, squad_f1
@@ -406,8 +406,9 @@ def qa_ablation(
                                               chat_template=chat_template,
                                               system_prompt=system_prompt)
         trials, overlaps, picks = [], [], []
-        for _ in range(n_random_trials):
-            pick = [pool[i] for i in rng.permutation(len(pool))[:k_eff]]
+        # Same control-drawing rule as `masking_curve`: no repeated subset while the
+        # pool allows it, so a small pool does not silently shrink the trial count.
+        for pick in draw_control_subsets(pool, k_eff, n_random_trials, rng):
             picks.append([str(h) for h in pick])
             # How many of the "random" heads are actually retrieval heads: the
             # audit trail for the control, stored instead of trusted.
@@ -497,8 +498,7 @@ def cot_ablation(
                                               chat_template=chat_template,
                                               system_prompt=system_prompt)
         trials, overlaps, picks = [], [], []
-        for _ in range(n_random_trials):
-            pick = [pool[i] for i in rng.permutation(len(pool))[:k_eff]]
+        for pick in draw_control_subsets(pool, k_eff, n_random_trials, rng):
             picks.append([str(h) for h in pick])
             overlaps.append(sum(1 for h in pick if h in set(retrieval_ranked[:k_eff])))
             trials.append(evaluate_reasoning(model, tokenizer, info, samples, cot=cot,

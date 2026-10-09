@@ -271,12 +271,22 @@ corrected filler sizing are all in effect.  Realized prompt lengths land within
 values are in `instances_*.jsonl`), against the ~2% tolerance the code enforces.
 
 **One caveat on the field set, not the numbers.**  `ds-results/` was written at
-commit `abbfc3c`, before the last two rounds of additive bookkeeping, so
-`masking_curve.json` does *not* carry `retrieval_truncated` / `random_truncated_mean`
-/ `baseline_truncated`, `control_exhausted` or `random_distinct` (the figures and
-tables here do not read them, and no number changes).  A `mask` re-run adds them;
-until then, read the truncation discussion below as coming from `detect` (which
-always recorded `n_instances_truncated`) rather than from the curve.
+commit `abbfc3c`, before the last three rounds of bookkeeping, so it lacks every
+field those rounds added: `masking_curve.json` has no `retrieval_truncated` /
+`random_truncated_mean` / `baseline_truncated`, `control_exhausted` or
+`random_distinct`; `task_qa.json` / `task_cot.json` have no `threshold`, `pairing` or
+`argmax_domain`; `summary_*.json`'s `aligned_top_heads[]` has no `n` / `n_missing`;
+`mixer_ablation.json` has no `distinct_subsets` (so the note under that table
+describes what a re-run would record); and the provenance has neither `git_rev` (the
+job had no `.git`) nor `code_sha256` (added after the run), so the numbers cannot be
+tied to a revision from the artifacts alone.  `SCHEMA_VERSION` was bumped to 6 for
+exactly this reason, so `warn_if_stale` now says "artifact predates the current
+fields" instead of "schema 5, fine".  A `mask` + `qa` + `cot` re-run fills all of it
+in; no *number* in the tables below changes with the new fields, with one exception
+worth stating: the control subsets are now drawn without repetition, so a `mask`
+re-run would draw slightly different random arms (the hybrid's K=1 point had a
+duplicate subset, `[L3H2, L3H2, L11H3]`, so its `random_std` was computed over two
+distinct interventions rather than three).
 
 ### Detection
 
@@ -443,14 +453,23 @@ meaningful within a family.
   default). With `full` the already-generated positions compete too, which makes a
   head's credit depend on how much the model happened to generate; the two domains
   give different head sets, and every artifact records which one was used.
+  One honest imprecision: the paper's `a ∈ R^{|x|}` is the *haystack* with the needle
+  inserted, while `prompt` here is the rendered prompt -- haystack **plus question
+  plus chat template**. Criterion (2)'s `j ∈ i_q` then discards everything outside the
+  needle span, so the extra positions can only *withhold* credit: if a template or
+  question token out-attends a needle token, the head loses the credit it would have
+  had under a haystack-only argmax. That third variant is not implemented; the
+  `mean_sink_rate` of 0.759 on the dense model is the visible consequence of position
+  0 being a template token.
 * **The random control is drawn from the non-retrieval pool, as the paper does.**
   `tex-src` says "masking out random *non-retrieval* heads" (intro and Sec. 4), and
   `control_pool` implements exactly that: everything above the threshold is
   excluded, and the per-trial overlap with the retrieval arm is recorded so the
   exclusion is auditable. An earlier note here claimed the paper drew uniformly
   over all heads and that this biased the contrast; that was wrong about the paper.
-  The one thing to keep in mind is the hybrid: its pool is only 18 of 48 heads, so
-  at large K the control is nearly the whole pool and `random_std` collapses.
+  The one thing to keep in mind is the hybrid: its pool is only **15** of 48 heads
+  (48 scoreable minus the 33 above the threshold), so at large K the control is the
+  whole pool and `random_std` collapses.
 * **The masking curve measures F1/EM against the whole needle, while the question
   asks for a sub-span**, so a correct short answer is penalised by the metric
   itself. The curve also records the LCS needle recall (`retrieval_recall`,

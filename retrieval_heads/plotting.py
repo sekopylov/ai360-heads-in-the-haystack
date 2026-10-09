@@ -324,7 +324,10 @@ def plot_masking_curve(curves: Mapping[str, Any],
                     label="top-K retrieval heads (bar: across eval samples)")
         ax.errorbar(k, rand, yerr=rand_yerr, fmt="-s",
                     color=PALETTE[0], capsize=3,
-                    label="K random heads (bar: across random trials)")
+                    # The exact-match series has no per-trial spread stored, so the
+                    # legend must not promise bars it does not draw.
+                    label="K random heads (bar: across random trials)"
+                          if rand_yerr is not None else "K random heads")
         ax.axhline(baseline, ls=":", color="grey", lw=1, label="no masking")
         requested = data.get("k_values") or []
         if requested and list(requested) != list(k):
@@ -399,14 +402,22 @@ def plot_mixer_ablation(ablations: Mapping[str, Any]) -> plt.Figure:
 def plot_attention_distribution(
     distributions: Mapping[str, tuple[np.ndarray, tuple[int, int]]],
     *,
-    top_n: int = 3,
+    top_n: int | None = 3,
 ) -> plt.Figure:
     """Attention rows of the strongest heads, with the needle span shaded.
 
     ``distributions`` maps a label to ``(attention_row, needle_span)`` where the
     row is a 1-D array over input positions.  This is the paper's argument in one
     picture: the head's mass sits exactly on the needle.
+
+    ``top_n`` caps how many panels are drawn (insertion order, so the caller
+    decides which heads matter); ``None`` draws all of them.  The parameter used to
+    be accepted and ignored.
     """
+    if top_n is not None and len(distributions) > top_n:
+        distributions = dict(list(distributions.items())[:top_n])
+    if not distributions:
+        raise ValueError("plot_attention_distribution needs at least one row")
     fig, axes = plt.subplots(len(distributions), 1,
                              figsize=(7.0, 1.7 * len(distributions)), squeeze=False)
     # `axes` is (n, 1) with squeeze=False, so the panels are `axes[:, 0]`.

@@ -309,8 +309,14 @@ def mixer_section(root: Path, keys: list[str]) -> list[str]:
             out.append(f"| {k} | {fmt(full, 1)} ±{fmt(at(full_std, i), 1)} "
                        f"| {fmt(linear, 1)} ±{fmt(at(linear_std, i), 1)} |")
         out.append("")
-        out.append("_± is the spread across the sampled layer subsets (n_trials); "
-                   "`distinct_subsets` in the artifact says how many were distinct._")
+        # The committed artifact predates `distinct_subsets`, so do not claim it is
+        # there: say what a current run records and what an older one cannot.
+        has_distinct = "distinct_subsets" in ablation
+        out.append("_± is the spread across the sampled layer subsets (n_trials)"
+                   + ("; `distinct_subsets` says how many were distinct._"
+                      if has_distinct else
+                      "; this artifact predates `distinct_subsets`, so the number of "
+                      "distinct subsets is not recorded._"))
         out.append("")
     return out
 

@@ -281,6 +281,30 @@ def test_code_sha256_covers_scripts_too(tmp_path):
     assert driver.code_sha256(package, scripts) != before
 
 
+def test_ablation_arguments_reject_silent_zero_runs():
+    """`--random-trials 0` / `--max-new-tokens 0` used to produce NaN artifacts.
+
+    `detect` already refused a zero budget; the ablations accepted it and reported
+    all-zero metrics, and `np.mean([])` left `null` in the JSON.  The helper is also
+    why `--mixer-trials` must be read with `getattr`: only `mask` has it.
+    """
+    from types import SimpleNamespace
+
+    from retrieval_heads.cli import require_ablation_args
+
+    require_ablation_args(SimpleNamespace(max_new_tokens=8, random_trials=3, mixer_trials=2))
+
+    for bad, message in ((SimpleNamespace(max_new_tokens=0, random_trials=3), "max-new-tokens"),
+                         (SimpleNamespace(max_new_tokens=8, random_trials=0), "random-trials"),
+                         (SimpleNamespace(max_new_tokens=8, random_trials=3,
+                                          mixer_trials=0), "mixer-trials")):
+        with pytest.raises(SystemExit, match=message):
+            require_ablation_args(bad)
+
+    # `qa`/`cot` have no --mixer-trials; the helper must not require it.
+    require_ablation_args(SimpleNamespace(max_new_tokens=8, random_trials=1))
+
+
 def test_every_command_only_reads_flags_its_parser_defines():
     """No `args.<flag>` a command reaches may be absent from its subparser.
 

@@ -12,11 +12,13 @@ such as Qwen3.5 (see :mod:`retrieval_heads.models`).
 """
 
 from retrieval_heads.models import (
-    HeadRef,
     ModelInfo,
     load_model,
     describe_model,
 )
+# `HeadRef` is defined in `utils`; re-exporting it from `models` (which merely
+# imports it) worked only by accident.
+from retrieval_heads.utils import HeadRef
 from retrieval_heads.haystack import (
     NeedleSample,
     HaystackBuilder,

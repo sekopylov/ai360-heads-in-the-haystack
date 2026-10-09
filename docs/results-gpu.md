@@ -71,7 +71,7 @@
 | 2 | 25.9 ±5.6 | 51.8 ±8.3 |
 | 4 | 11.2 ±2.1 | 14.6 ±18.8 |
 
-_± is the spread across the sampled layer subsets (n_trials); `distinct_subsets` in the artifact says how many were distinct._
+_± is the spread across the sampled layer subsets (n_trials); this artifact predates `distinct_subsets`, so the number of distinct subsets is not recorded._
 
 
 ## Downstream tasks
