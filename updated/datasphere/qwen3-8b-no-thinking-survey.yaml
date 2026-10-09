@@ -1,0 +1,48 @@
+name: qwen3-8b-no-thinking-retrieval-survey
+desc: A100 Qwen3-8B without thinking, same 27-case survey grid, token-multiset and attention-mass metrics, separate aggregation
+
+# Same checkpoint, detection dataset, grid and context seed as qwen3-8b-survey.
+# Flash prefill; observed eager decode collects attention for both metrics.
+# Keep the original survey output cap (2048); it does not force long answers.
+flags:
+  - attach-project-disk
+cmd: >
+  bash -c '
+  python3 retrieval_head_detection.py
+  --adapter qwen3_8b_no_thinking
+  --model ${DS_PROJECT_HOME}/c0/models/Qwen/Qwen3-8B
+  --output-root datasphere-results/qwen3-8b-no-thinking-survey
+  --haystack-root ${DETECTION_DATA}
+  --dtype float16
+  --device-map cuda:0
+  --prefill-attention sdpa_flash
+  --attention-scope all_decode_tokens
+  --lengths 8000,16000,30000
+  --depths 15,45,75
+  --max-new-tokens 2048
+  --retrieval-metrics needle_token_multiset_v1,needle_attention_mass_v1
+  --context-seed 42
+  && python3 aggregate_head_scores.py
+  --run datasphere-results/qwen3-8b-no-thinking-survey
+  '
+inputs:
+  - data/haystack_for_detect: DETECTION_DATA
+outputs:
+  - datasphere-results/qwen3-8b-no-thinking-survey
+env:
+  vars:
+    - HF_HUB_OFFLINE: "1"
+    - TRANSFORMERS_OFFLINE: "1"
+  python:
+    type: manual
+    version: "3.12"
+    requirements-file: datasphere/requirements-gpu.txt
+    pip:
+      extra-index-urls:
+        - https://download.pytorch.org/whl/cu118
+    local-paths:
+      - retrieval_head_detection.py
+      - aggregate_head_scores.py
+      - retrieval_heads
+cloud-instance-types:
+  - g2.1

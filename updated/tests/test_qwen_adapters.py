@@ -2,13 +2,23 @@
 import unittest
 import tempfile
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import torch
 from transformers import Qwen3Config, Qwen3ForCausalLM
 
 from retrieval_heads.attention import AttentionRequest, FullTraceCollector
-from retrieval_heads.models import Qwen3Adapter, Qwen3EightBAdapter, Qwen3EightBYarnAdapter, Qwen35Adapter, available_models
+from retrieval_heads.models import (
+    Qwen3Adapter,
+    Qwen3EightBAdapter,
+    Qwen3EightBNoYarn64KAdapter,
+    Qwen3EightBYarnAdapter,
+    Qwen3EightBNoThinkingAdapter,
+    Qwen3EightBNoYarn64KNoThinkingAdapter,
+    Qwen3EightBYarnNoThinkingAdapter,
+    Qwen35Adapter,
+    available_models,
+)
 from retrieval_heads.models.base import Prompt
 from retrieval_heads.experiment.scoring import create_retrieval_collector
 from retrieval_heads.experiment.types import NeedleSpan
@@ -27,6 +37,71 @@ class ToyTokenizer:
 
 
 class QwenAdapterTests(unittest.TestCase):
+    def test_no_thinking_registry_and_context_policies(self):
+        for name, cls, limit, config in [
+            ("qwen3_8b_no_thinking", Qwen3EightBNoThinkingAdapter, 32768, {}),
+            ("qwen3_8b_no_yarn_64k_no_thinking", Qwen3EightBNoYarn64KNoThinkingAdapter,
+             65536, {"max_position_embeddings": 65536}),
+            ("qwen3_8b_yarn_no_thinking", Qwen3EightBYarnNoThinkingAdapter,
+             131072, Qwen3EightBYarnAdapter.__new__(Qwen3EightBYarnAdapter)._model_config_overrides()),
+        ]:
+            with self.subTest(adapter=name):
+                self.assertIn(name, available_models())
+                adapter = cls.__new__(cls)
+                self.assertEqual(adapter.context_limit, limit)
+                self.assertEqual(adapter._model_config_overrides(), config)
+                self.assertEqual(adapter._chat_template_kwargs(), {"enable_thinking": False})
+
+    def test_no_thinking_passed_to_chat_template_only_for_new_adapters(self):
+        for cls in (Qwen3EightBAdapter, Qwen3EightBNoYarn64KAdapter, Qwen3EightBYarnAdapter,
+                    Qwen3EightBNoThinkingAdapter, Qwen3EightBNoYarn64KNoThinkingAdapter,
+                    Qwen3EightBYarnNoThinkingAdapter):
+            with self.subTest(adapter=cls.__name__):
+                adapter = cls.__new__(cls)
+                adapter._tokenizer = MagicMock()
+                adapter._tokenizer.apply_chat_template.return_value = "rendered prompt"
+                adapter._tokenizer.return_value = {"input_ids": torch.tensor([[2, 3]])}
+                prompt = adapter.encode_prompt("test context", "test question?")
+                args, kwargs = adapter._tokenizer.apply_chat_template.call_args
+                self.assertIn("<book>test context</book>", args[0][0]["content"])
+                self.assertIn("test question?", args[0][0]["content"])
+                self.assertFalse(kwargs["tokenize"])
+                self.assertTrue(kwargs["add_generation_prompt"])
+                if issubclass(cls, Qwen3EightBNoThinkingAdapter):
+                    self.assertIs(kwargs["enable_thinking"], False)
+                else:
+                    self.assertNotIn("enable_thinking", kwargs)
+                adapter._tokenizer.assert_called_once_with(
+                    "rendered prompt", add_special_tokens=False, return_tensors="pt")
+                self.assertEqual(prompt.token_ids, [2, 3])
+
+    def test_no_thinking_closed_prompt_keeps_answer_and_publishes_immediately(self):
+        adapter = Qwen3EightBNoThinkingAdapter.__new__(Qwen3EightBNoThinkingAdapter)
+        adapter._tokenizer = ToyTokenizer()
+        adapter._eos_token_ids = {63}
+        prompt = Prompt(None, [2, 60, 62, 61, 62])  # closed empty think in prompt
+        result = adapter._generation_result(prompt, [9, 62, 10, 63], "eos")
+        self.assertEqual(result.text, "word9 \nword10")
+        self.assertEqual(result.finish_reason, "eos")
+        self.assertTrue(adapter._attention_filter(prompt)(9))
+        self.assertIsNone(adapter._stop_reason(62))  # do not stop on newline
+        self.assertEqual(adapter._stop_reason(63), "eos")
+
+    def test_no_thinking_real_cached_decode_and_mask(self):
+        adapter = self.make_adapter(adapter_class=Qwen3EightBNoThinkingAdapter)
+        prompt = Prompt(torch.tensor([[2, 60, 61, 62]]), [2, 60, 61, 62])
+        trace = FullTraceCollector(prompt.token_ids)
+        result = adapter.generate(prompt, max_new_tokens=2,
+                                  attention=AttentionRequest(capture="full",
+                                      blocked_heads=frozenset({(0, 1)})), observer=trace)
+        self.assertTrue(result.token_ids)
+        self.assertEqual(len(trace.steps), len(result.token_ids))
+        self.assertEqual(adapter.model.config._attn_implementation, "sdpa")
+        self.assertFalse(adapter.attention._active)
+        for step in trace.steps:
+            probabilities = step.layers[0][1]
+            torch.testing.assert_close(probabilities, torch.full_like(probabilities, 1 / len(probabilities)))
+
     def test_yarn_real_checkpoint_load_and_rope(self):
         self.assertIn('qwen3_8b_yarn', available_models())
         config = Qwen3Config(vocab_size=64, hidden_size=32, intermediate_size=64,
@@ -60,6 +135,43 @@ class QwenAdapterTests(unittest.TestCase):
                 yarn.generate(long_prompt, max_new_tokens=2, attention=AttentionRequest())
                 with self.assertRaisesRegex(ValueError, 'YaRN context budget exceeded'):
                     yarn.generate(long_prompt, max_new_tokens=3, attention=AttentionRequest())
+                self.assertEqual(generate.call_count, 1)
+
+    def test_no_yarn_64k_only_raises_the_position_ceiling(self):
+        self.assertIn("qwen3_8b_no_yarn_64k", available_models())
+        config = Qwen3Config(vocab_size=64, hidden_size=32, intermediate_size=64,
+                            num_hidden_layers=2, num_attention_heads=4,
+                            num_key_value_heads=2, head_dim=8,
+                            max_position_embeddings=32768, eos_token_id=63,
+                            rope_parameters={"rope_type": "default", "rope_theta": 1000000.0})
+        with tempfile.TemporaryDirectory() as folder:
+            Qwen3ForCausalLM(config).save_pretrained(folder)
+            with patch("retrieval_heads.models.qwen_common.AutoTokenizer.from_pretrained",
+                       return_value=ToyTokenizer()):
+                native = Qwen3EightBAdapter(model_id=folder, device_map="cpu", dtype="float32")
+                extended = Qwen3EightBNoYarn64KAdapter(
+                    model_id=folder, device_map="cpu", dtype="float32",
+                )
+            self.assertEqual(extended.model.config.max_position_embeddings, 65536)
+            self.assertEqual(extended.model.config.rope_parameters,
+                             native.model.config.rope_parameters)
+            self.assertEqual(extended.model.config.rope_parameters["rope_type"], "default")
+            torch.testing.assert_close(native.model.model.rotary_emb.inv_freq,
+                                       extended.model.model.rotary_emb.inv_freq)
+            for key, value in native.model.state_dict().items():
+                torch.testing.assert_close(value, extended.model.state_dict()[key])
+            with torch.no_grad():
+                result = extended.model(input_ids=torch.tensor([[2, 3]]),
+                                        position_ids=torch.tensor([[48000, 48001]]))
+            self.assertTrue(torch.isfinite(result.logits).all())
+
+            long_prompt = Prompt(torch.zeros((1, 65534), dtype=torch.long), [])
+            with patch.object(Qwen3Adapter, "generate", return_value=None) as generate:
+                extended.generate(long_prompt, max_new_tokens=2,
+                                  attention=AttentionRequest())
+                with self.assertRaisesRegex(ValueError, "unscaled-64K context budget exceeded"):
+                    extended.generate(long_prompt, max_new_tokens=3,
+                                      attention=AttentionRequest())
                 self.assertEqual(generate.call_count, 1)
 
     def make_adapter(self, attention_scope=None, adapter_class=Qwen3Adapter):

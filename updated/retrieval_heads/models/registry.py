@@ -5,14 +5,25 @@ from collections.abc import Callable
 from .base import ModelAdapter
 from .qwen35 import Qwen35Adapter
 from .qwen3 import Qwen3Adapter
-from .qwen3_8b import Qwen3EightBAdapter, Qwen3EightBYarnAdapter
+from .qwen3_8b import (
+    Qwen3EightBAdapter,
+    Qwen3EightBNoYarn64KAdapter,
+    Qwen3EightBYarnAdapter,
+    Qwen3EightBNoThinkingAdapter,
+    Qwen3EightBNoYarn64KNoThinkingAdapter,
+    Qwen3EightBYarnNoThinkingAdapter,
+)
 
 ModelFactory = Callable[..., ModelAdapter]
 _MODELS: dict[str, ModelFactory] = {
     "qwen35": Qwen35Adapter,
     "qwen3": Qwen3Adapter,
     "qwen3_8b": Qwen3EightBAdapter,
+    "qwen3_8b_no_yarn_64k": Qwen3EightBNoYarn64KAdapter,
     "qwen3_8b_yarn": Qwen3EightBYarnAdapter,
+    "qwen3_8b_no_thinking": Qwen3EightBNoThinkingAdapter,
+    "qwen3_8b_no_yarn_64k_no_thinking": Qwen3EightBNoYarn64KNoThinkingAdapter,
+    "qwen3_8b_yarn_no_thinking": Qwen3EightBYarnNoThinkingAdapter,
 }
 
 

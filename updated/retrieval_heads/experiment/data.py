@@ -67,6 +67,48 @@ def load_detection_cases(root: Path) -> list[ExperimentCase]:
     return cases
 
 
+def load_validation_cases(root: Path) -> list[ExperimentCase]:
+    """Load held-out masking cases stored as corpus/needle directory pairs."""
+    cases: list[ExperimentCase] = []
+    case_ids: set[str] = set()
+    for case_dir in sorted(path for path in root.iterdir() if path.is_dir()):
+        needle_path = case_dir / "needle.json"
+        corpus_path = case_dir / "corpus.txt"
+        if not needle_path.exists() and not corpus_path.exists():
+            continue
+        if not needle_path.is_file() or not corpus_path.is_file():
+            raise FileNotFoundError(
+                f"Validation case {case_dir} must contain corpus.txt and needle.json"
+            )
+        row = json.loads(needle_path.read_text(encoding="utf-8"))
+        required = {"case_id", "needle", "question", "expected_answer"}
+        missing = required.difference(row)
+        if missing:
+            raise ValueError(
+                f"Validation case {needle_path} is missing fields: "
+                f"{', '.join(sorted(missing))}"
+            )
+        if any(not isinstance(row[name], str) or not row[name].strip()
+               for name in required):
+            raise ValueError(f"Validation fields must be nonempty strings: {needle_path}")
+        case_id = row["case_id"]
+        if case_id in case_ids:
+            raise ValueError(f"Duplicate validation case_id: {case_id}")
+        case_ids.add(case_id)
+        cases.append(
+            ExperimentCase(
+                case_id=case_id,
+                needle=row["needle"],
+                question=row["question"],
+                expected_answer=row["expected_answer"],
+                haystack_dir=case_dir,
+            )
+        )
+    if not cases:
+        raise ValueError(f"No validation cases found in {root}")
+    return cases
+
+
 def default_mask_case(haystack_dir: Path) -> ExperimentCase:
     return ExperimentCase(
         case_id="san-francisco",
@@ -91,6 +133,7 @@ class ContextBuilder:
         period_tokens: list[int],
         final_context_length_buffer: int = 200,
         context_seed: int | None = None,
+        random_start: bool = False,
     ) -> None:
         if max_context_length < 1:
             raise ValueError("max_context_length must be positive")
@@ -100,6 +143,7 @@ class ContextBuilder:
             raise ValueError("period_tokens must not be empty")
         self.tokenizer = tokenizer
         self.context_seed = context_seed
+        self.random_start = random_start
         self.max_context_length = max_context_length
         self.period_tokens = period_tokens
         self.final_context_length_buffer = final_context_length_buffer
@@ -109,24 +153,38 @@ class ContextBuilder:
         if directory in self._tokens:
             return self._tokens[directory]
         files = sorted(directory.glob("*.txt"))
+        rng = random.Random(self.context_seed)
         if self.context_seed is not None:
             # Local RNG: head sampling and condition execution order cannot
             # change the haystack. Seed the canonical file list anew per corpus.
-            random.Random(self.context_seed).shuffle(files)
+            rng.shuffle(files)
         if not files:
             raise FileNotFoundError(f"No .txt files found in {directory}")
         base = "".join(path.read_text(encoding="utf-8") for path in files)
         if not base:
             raise ValueError(f"Haystack files in {directory} are empty")
 
-        repetitions = 1
         tokens = self.tokenizer.encode(base, add_special_tokens=False)
+        if not tokens:
+            raise ValueError(f"Haystack files in {directory} produce no tokens")
+        if self.random_start:
+            if self.context_seed is None:
+                raise ValueError("A context seed is required for a random haystack start")
+            # Prefer one contiguous window. Only a corpus shorter than the
+            # requested maximum is repeated, matching the old long-context
+            # behavior while still allowing a seeded starting position.
+            if len(tokens) >= self.max_context_length:
+                start = rng.randrange(len(tokens) - self.max_context_length + 1)
+                tokens = tokens[start:]
+            else:
+                original = tokens
+                while len(tokens) < self.max_context_length + len(original):
+                    tokens += original
+                start = rng.randrange(len(original))
+                tokens = tokens[start:start + self.max_context_length]
+
         while len(tokens) < self.max_context_length:
-            repetitions *= 2
-            tokens = self.tokenizer.encode(
-                base * repetitions,
-                add_special_tokens=False,
-            )
+            tokens *= 2
         self._tokens[directory] = tokens
         return tokens
 

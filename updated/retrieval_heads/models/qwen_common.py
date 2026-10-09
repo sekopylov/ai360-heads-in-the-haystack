@@ -31,6 +31,7 @@ class QwenAdapter(ModelAdapter):
         device_map: str = "auto",
         dtype: str = "auto",
         prefill_attention: str = "sdpa",
+        decode_attention: str = "eager",
         trust_remote_code: bool = False,
         model_search_dirs: list[str] | None = None,
         attention_scope: str | None = None,
@@ -40,6 +41,12 @@ class QwenAdapter(ModelAdapter):
             raise ValueError(f"Unknown attention scope: {scope!r}")
         if scope == "answer_only" and type(self).attention_scope != "answer_only":
             raise ValueError("answer_only filtering is supported by the qwen3 adapter")
+        if decode_attention not in {"eager", "sdpa_flash"}:
+            raise ValueError(f"Unknown decode attention: {decode_attention!r}")
+        self.decode_attention = decode_attention
+        if decode_attention == "sdpa_flash":
+            from ..attention.flash import register_flash_backends
+            register_flash_backends()
         self.attention_scope = scope
         register_attention_backend()
         self.model_id = model_id
@@ -67,6 +74,8 @@ class QwenAdapter(ModelAdapter):
             trust_remote_code=trust_remote_code,
             **self._model_config_overrides(),
         ).eval()
+        if decode_attention == "sdpa_flash" and self.model.config.model_type != "qwen3":
+            raise ValueError("sdpa_flash masking decode currently supports dense Qwen3 only")
         devices = sorted({str(parameter.device) for parameter in self.model.parameters()})
         print(f"[model] parameter devices={devices}; device_map="
               f"{getattr(self.model, 'hf_device_map', None)}", flush=True)
@@ -139,6 +148,7 @@ class QwenAdapter(ModelAdapter):
             messages,
             tokenize=False,
             add_generation_prompt=True,
+            **self._chat_template_kwargs(),
         )
         encoded = self.tokenizer(
             text,
@@ -151,10 +161,18 @@ class QwenAdapter(ModelAdapter):
             token_ids=input_ids[0].tolist(),
         )
 
+    def _chat_template_kwargs(self) -> dict:
+        """Adapter-specific prompt policy; existing adapters keep template defaults."""
+        return {}
+
     @contextmanager
     def _observable_decode(self):
         old_implementation = self.model.config._attn_implementation
-        self.model.set_attn_implementation(BACKEND_NAME)
+        backend = BACKEND_NAME
+        if self.decode_attention == "sdpa_flash":
+            from ..attention.flash import DECODE_NAME
+            backend = DECODE_NAME
+        self.model.set_attn_implementation(backend)
         try:
             yield
         finally:
@@ -171,6 +189,9 @@ class QwenAdapter(ModelAdapter):
     ) -> GenerationResult:
         if max_new_tokens < 1:
             raise ValueError("max_new_tokens must be positive")
+        if self.decode_attention == "sdpa_flash":
+            from ..attention.flash import validate_flash_request
+            validate_flash_request(attention, observer)
         if attention.mask_mode not in {"zero_output", "legacy_uniform"}:
             raise ValueError(f"Unknown mask mode: {attention.mask_mode!r}")
         validate_blocked_heads(attention.blocked_heads, self.eligible_heads)

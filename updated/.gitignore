@@ -1,5 +1,6 @@
 /.venv/
 /.venv-datasphere/
+/.venv-model-guide/
 /.agent/
 /models/
 /outputs/
@@ -11,5 +12,6 @@
 /detection/
 /evaluation/
 /datasphere-results/
+/report-assets/
 __pycache__/
 *.pyc

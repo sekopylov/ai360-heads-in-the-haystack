@@ -37,9 +37,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--detection-data", type=Path)
     parser.add_argument("--mask-data", type=Path)
+    parser.add_argument("--mask-case-id", action="append",
+                        help="select a validation case; repeat to select multiple cases")
     parser.add_argument("--model", default="Qwen/Qwen3.5-0.8B")
     parser.add_argument("--adapter", default="qwen35",
-                        help="model adapter: qwen35, qwen3, qwen3_8b or qwen3_8b_yarn")
+                        help="model adapter registered in retrieval_heads.models")
     parser.add_argument("--model-search-dir", action="append",
                         help="explicit root containing MODEL_ID; repeat for ordered search; no default search directory")
     parser.add_argument("--dtype", default="float16")
@@ -52,6 +54,8 @@ def parse_args() -> argparse.Namespace:
                         help="ranking JSON; required for mask and full multi-metric runs")
     parser.add_argument("--device-map", default="auto")
     parser.add_argument("--prefill-attention", default="sdpa")
+    parser.add_argument("--decode-attention", choices=("eager", "sdpa_flash"), default="eager",
+                        help="masking decode backend; detection always uses observed eager")
     parser.add_argument("--attention-scope", choices=("answer_only", "all_decode_tokens"),
                         help="include thinking in retrieval analysis, or analyze only final answer")
     parser.add_argument("--seed", type=int, default=42)
@@ -84,6 +88,32 @@ class Progress:
     def advance(self) -> None:
         self.completed += 1
         self.report()
+
+
+def validation_case_count(root: Path, selected_ids: list[str] | None = None) -> int:
+    """Return the number of corpus.txt + needle.json validation directories."""
+    count = 0
+    found_ids = set()
+    if selected_ids and len(selected_ids) != len(set(selected_ids)):
+        raise SystemExit("--mask-case-id must not contain duplicates")
+    for case_dir in sorted(path for path in root.iterdir() if path.is_dir()):
+        corpus = case_dir / "corpus.txt"
+        needle = case_dir / "needle.json"
+        if not corpus.exists() and not needle.exists():
+            continue
+        if not corpus.is_file() or not needle.is_file():
+            raise SystemExit(
+                f"Validation case {case_dir} must contain corpus.txt and needle.json"
+            )
+        if selected_ids:
+            case_id = json.loads(needle.read_text(encoding="utf-8"))["case_id"]
+            found_ids.add(case_id)
+            count += case_id in selected_ids
+        else:
+            count += 1
+    if selected_ids and set(selected_ids).difference(found_ids):
+        raise SystemExit(f"Unknown validation cases: {sorted(set(selected_ids).difference(found_ids))}")
+    return count
 
 
 def run_command(script: str, *arguments: str, progress: Progress) -> None:
@@ -123,6 +153,8 @@ def main() -> int:
         raise SystemExit("--detection-data is required for smoke/full profiles")
     if args.profile in ("full", "mask") and args.mask_data is None:
         raise SystemExit("--mask-data is required for full/mask profiles")
+    if args.mask_data is not None and not args.mask_data.is_dir():
+        raise SystemExit(f"Mask data directory does not exist: {args.mask_data}")
     if args.profile == "mask":
         if args.head_scores is None:
             raise SystemExit("--head-scores is required for the mask profile")
@@ -134,6 +166,15 @@ def main() -> int:
             and len(args.retrieval_metrics.split(",")) > 1 and args.head_scores is None):
         raise SystemExit("--head-scores must explicitly select a ranking file for full multi-metric runs")
     context_seed = args.context_seed if args.context_seed is not None else args.seed
+    mask_case_count = (
+        validation_case_count(args.mask_data, args.mask_case_id)
+        if args.profile in ("full", "mask") else 0
+    )
+    # A root containing case subdirectories uses the held-out validation
+    # format. A directory with plain .txt files remains the legacy one-case
+    # San Francisco format.
+    if args.profile in ("full", "mask") and mask_case_count == 0:
+        mask_case_count = 1
     output_root = args.output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
 
@@ -186,7 +227,7 @@ def main() -> int:
         )
     total = detection_cases * grid_size
     if args.profile in ("full", "mask"):
-        total += args.context_count * grid_size * (
+        total += mask_case_count * args.context_count * grid_size * (
             1 + len(topks) * (sum(v != "random" for v in mask_selections)
                               + (args.random_repeats if "random" in mask_selections else 0))
         )
@@ -226,15 +267,22 @@ def main() -> int:
         if len(files) != 1:
             raise SystemExit("--head-scores must explicitly select a ranking file")
         head_scores = detection_dir / next(iter(files.values()))
+    mask_data_arguments = (
+        ("--validation-root", str(args.mask_data.resolve()))
+        if validation_case_count(args.mask_data)
+        else ("--haystack-dir", str(args.mask_data.resolve()))
+    )
     masking_common = (
         *common,
+        "--decode-attention", args.decode_attention,
         *grid,
-        "--haystack-dir",
-        str(args.mask_data.resolve()),
+        *mask_data_arguments,
         "--mask-mode",
         "legacy_uniform",
         "--head-scores", str(head_scores),
     )
+    for case_id in args.mask_case_id or []:
+        masking_common += ("--case-id", case_id)
     for index in range(args.context_count):
         seed = context_seed + index
         context_root = output_root / "evaluation" / f"context-{seed}"

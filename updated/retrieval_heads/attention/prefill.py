@@ -38,6 +38,10 @@ def memory_efficient_prefill(
 
 
 def resolve_prefill_backend(name: str) -> str:
+    if name == "sdpa_flash":
+        from .flash import PREFILL_NAME, register_flash_backends
+        register_flash_backends()
+        return PREFILL_NAME
     if name != "sdpa_memory_efficient":
         return name
     AttentionInterface.register(MEMORY_EFFICIENT_NAME, memory_efficient_prefill)

@@ -28,7 +28,7 @@ cmd: >
 
 inputs:
   - data/haystack_for_detect: DETECTION_DATA
-  - data/PaulGrahamEssays: MASK_DATA
+  - data/validation_haystacks: MASK_DATA
 outputs:
   - datasphere-results/qwen3-full
 env:

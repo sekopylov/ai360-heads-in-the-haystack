@@ -1,0 +1,58 @@
+name: qwen3-8b-no-thinking-paul-graham-attention-mass-mask
+desc: A100 Flash GQA Qwen3-8B without thinking, Paul Graham with original San Francisco needle, frozen survey attention-mass ranking, 1k-30k lengths and 0-100 percent depths
+
+# 20 lengths x 10 distinct depths x (baseline + 6 top) = 1400 generations.
+# The repeated 33% is deduplicated. Zero blocked heads is the automatic baseline,
+# so --topks contains only the positive counts. No random-head conditions.
+# Native 32768 context budget; no YaRN. Output budget: 256 tokens.
+flags:
+  - attach-project-disk
+
+cmd: >
+  python3 job.py
+  --profile mask
+  --adapter qwen3_8b_no_thinking
+  --model ${DS_PROJECT_HOME}/c0/models/Qwen/Qwen3-8B
+  --output-root datasphere-results/qwen3-8b-no-thinking-paul-graham-attention-mass-mask-san-francisco
+  --mask-data ${MASK_DATA}
+  --mask-case-id paul-graham-san-francisco
+  --head-scores ${HEAD_SCORES}
+  --dtype float16
+  --device-map cuda:0
+  --prefill-attention sdpa_flash
+  --decode-attention sdpa_flash
+  --attention-scope all_decode_tokens
+  --lengths 1000,2526,4053,5579,7105,8632,10158,11684,13211,14737,16263,17789,19316,20842,22368,23895,25421,26947,28474,30000
+  --depths 0,11,22,33,44,56,67,78,89,100
+  --max-new-tokens 256
+  --topks 20,40,60,80,100,120
+  --mask-selections top
+  --context-count 1
+  --context-seed 42
+  --seed 42
+
+inputs:
+  - data/validation_haystacks: MASK_DATA
+  - datasphere-results/qwen3-8b-survey/detection/aggregation/head_scores_needle_attention_mass_v1.json: HEAD_SCORES
+
+outputs:
+  - datasphere-results/qwen3-8b-no-thinking-paul-graham-attention-mass-mask-san-francisco
+
+env:
+  vars:
+    - HF_HUB_OFFLINE: "1"
+    - TRANSFORMERS_OFFLINE: "1"
+  python:
+    type: manual
+    version: "3.12"
+    requirements-file: datasphere/requirements-gpu.txt
+    pip:
+      extra-index-urls:
+        - https://download.pytorch.org/whl/cu118
+    local-paths:
+      - datasphere/job.py
+      - needle_in_haystack_with_mask.py
+      - retrieval_heads
+
+cloud-instance-types:
+  - g2.1

@@ -16,6 +16,24 @@ SPEC.loader.exec_module(job)
 
 
 class JobMaskProfileTests(unittest.TestCase):
+    def test_flash_decode_forwarded_to_masking_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scores = root / 'scores.json'
+            scores.write_text('{}')
+            (root / 'needles.jsonl').write_text('{}\n')
+            argv = ['job.py', '--profile', 'full', '--output-root', str(root / 'out'),
+                    '--mask-data', str(root), '--detection-data', str(root),
+                    '--head-scores', str(scores), '--device-map', 'cpu',
+                    '--context-count', '1', '--mask-selections', 'top,bottom',
+                    '--decode-attention', 'sdpa_flash', '--prefill-attention', 'sdpa_flash']
+            with patch.object(sys, 'argv', argv), patch.object(job, 'run_command') as run:
+                job.main()
+            self.assertNotIn('--decode-attention', run.call_args_list[0].args)
+            for call in run.call_args_list[2:]:
+                index = call.args.index('--decode-attention')
+                self.assertEqual(call.args[index + 1], 'sdpa_flash')
+
     def test_bottom_strategy_and_progress(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -64,6 +82,32 @@ class JobMaskProfileTests(unittest.TestCase):
             self.assertEqual(calls["full"][0].kwargs["progress"].total, 126)
             self.assertTrue(all(call.args[0] == "needle_in_haystack_with_mask.py"
                                 for call in calls["mask"]))
+
+    def test_validation_root_counts_cases_and_is_forwarded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            validation = root / "validation"
+            validation.mkdir()
+            for name in ("case-a", "case-b"):
+                case = validation / name
+                case.mkdir()
+                (case / "corpus.txt").write_text("text")
+                (case / "needle.json").write_text("{}")
+            scores = root / "scores.json"
+            scores.write_text("{}")
+            argv = ["job.py", "--profile", "mask",
+                    "--output-root", str(root / "out"),
+                    "--mask-data", str(validation), "--head-scores", str(scores),
+                    "--device-map", "cpu", "--lengths", "8000,30000",
+                    "--depths", "15,45,75", "--context-count", "2",
+                    "--topks", "4,8", "--random-repeats", "2",
+                    "--mask-selections", "top,bottom,random"]
+            with patch.object(sys, "argv", argv), patch.object(job, "run_command") as run:
+                job.main()
+            self.assertEqual(len(run.call_args_list), 18)
+            self.assertEqual(run.call_args_list[0].kwargs["progress"].total, 216)
+            self.assertIn("--validation-root", run.call_args_list[0].args)
+            self.assertNotIn("--haystack-dir", run.call_args_list[0].args)
 
     def test_mask_validates_inputs_before_creating_output(self):
         with tempfile.TemporaryDirectory() as directory:

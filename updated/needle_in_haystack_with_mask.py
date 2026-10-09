@@ -10,10 +10,10 @@ from retrieval_heads.experiment.data import (
     default_mask_case,
     depth_grid,
     linear_grid,
+    load_validation_cases,
     parse_depths,
     parse_lengths,
 )
-from retrieval_heads.experiment.locator import LegacyOverlapLocator
 from retrieval_heads.experiment.runner import ExperimentRunner
 from retrieval_heads.experiment.scoring import rank_heads
 from retrieval_heads.experiment.storage import (
@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--head-selection", choices=("top", "bottom"), default="top",
                         help="ranked selection for positive --mask-topk; negative still selects random")
     parser.add_argument("--context-seed", type=int,
-                        help="shuffle haystack texts reproducibly; defaults to --seed")
+                        help="select the haystack order/window reproducibly; defaults to --seed")
     parser.add_argument(
         "--random-exclusion-top",
         type=int,
@@ -84,13 +84,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device-map", default="auto")
     parser.add_argument("--dtype", default="auto")
     parser.add_argument("--prefill-attention", default="sdpa")
+    parser.add_argument("--decode-attention", choices=("eager", "sdpa_flash"), default="eager",
+                        help="sdpa_flash: native Flash GQA masking on A100, without capture")
     parser.add_argument("--attention-scope", choices=("answer_only", "all_decode_tokens"),
                         help="attention analysis scope; defaults to adapter policy; does not change masking or ROUGE")
-    parser.add_argument(
+    data = parser.add_mutually_exclusive_group()
+    data.add_argument(
         "--haystack-dir",
         type=Path,
-        default=HERE / "data" / "PaulGrahamEssays",
+        help="legacy single-case haystack directory (uses the San Francisco needle)",
     )
+    data.add_argument(
+        "--validation-root",
+        type=Path,
+        help="directory of cases, each containing corpus.txt and needle.json",
+    )
+    parser.add_argument("--case-id", action="append",
+                        help="select a validation case; repeat to select multiple cases")
     parser.add_argument("--output-root", type=Path, default=HERE)
     parser.add_argument("--head-scores", type=Path)
     return parser.parse_args()
@@ -168,9 +178,13 @@ def choose_blocked_heads(
 
 def main() -> None:
     args = parse_args()
+    if args.validation_root is None and args.haystack_dir is None:
+        raise ValueError("Use --validation-root or --haystack-dir")
     if args.mask_topk < 0 and args.head_selection == "bottom":
         raise ValueError("bottom selection requires positive --mask-topk; negative means random")
     context_seed = args.context_seed if args.context_seed is not None else args.seed
+    if args.validation_root is not None and context_seed is None:
+        raise ValueError("Validation corpora require --context-seed or --seed")
     if args.seed is not None:
         random.seed(args.seed)
     lengths = (
@@ -187,6 +201,7 @@ def main() -> None:
         device_map=args.device_map,
         dtype=args.dtype,
         prefill_attention=args.prefill_attention,
+        decode_attention=args.decode_attention,
         attention_scope=args.attention_scope,
     )
     context_builder = ContextBuilder(
@@ -194,15 +209,33 @@ def main() -> None:
         max_context_length=max(lengths),
         period_tokens=model.period_tokens,
         context_seed=context_seed,
+        random_start=args.validation_root is not None,
     )
     runner = ExperimentRunner(
         model,
         context_builder,
-        LegacyOverlapLocator(model.tokenizer, threshold=0.9),
+        # Masking evaluates only the generated final answer. Locating answer
+        # tokens in the prompt is a detection concern and can be brittle at
+        # tokenizer boundaries, so it is intentionally skipped here.
+        None,
         max_new_tokens=args.max_new_tokens,
     )
     ranked = load_ranked_heads(args, model) if args.mask_topk else []
-    case = default_mask_case(args.haystack_dir)
+    if args.validation_root is not None:
+        cases = load_validation_cases(args.validation_root)
+        if args.case_id is not None:
+            missing = set(args.case_id).difference(case.case_id for case in cases)
+            if missing:
+                raise ValueError(f"Unknown validation cases: {sorted(missing)}")
+            cases = [case for case in cases if case.case_id in args.case_id]
+        data_source = str(args.validation_root.resolve())
+        context_window = "seeded_contiguous_offset"
+    else:
+        if args.case_id is not None:
+            raise ValueError("--case-id requires --validation-root")
+        cases = [default_mask_case(args.haystack_dir)]
+        data_source = str(args.haystack_dir.resolve())
+        context_window = "prefix"
 
     if args.mask_topk > 0:
         condition = f"{args.head_selection}{args.mask_topk}"
@@ -241,12 +274,17 @@ def main() -> None:
         "randomized_per_case": args.mask_topk < 0,
         "seed": args.seed,
         "context_seed": context_seed,
+        "context_window": context_window,
+        "data_source": data_source,
+        "case_ids": [case.case_id for case in cases],
         "random_exclusion_top": (
             abs(args.mask_topk)
             if args.mask_topk < 0 and args.random_exclusion_top is None
             else args.random_exclusion_top
         ),
         "max_new_tokens": args.max_new_tokens,
+        "prefill_attention": args.prefill_attention,
+        "decode_attention": args.decode_attention,
     }
     write_json(run_path, run_config)
     if args.mask_topk >= 0:
@@ -260,63 +298,69 @@ def main() -> None:
             "blocked_heads=randomized per case"
         )
 
-    total = len(lengths) * len(depths)
+    total = len(cases) * len(lengths) * len(depths)
     completed = 0
-    for context_length in lengths:
-        for depth in depths:
-            completed += 1
-            # Match the source experiment: draw a fresh random control for
-            # every context/depth case. Exact heads are saved in its JSON.
-            blocked = (
-                choose_blocked_heads(args, model, ranked)
-                if args.mask_topk < 0
-                else stable_blocked
-            )
-            print(
-                f"[{completed}/{total}] context={context_length} "
-                f"depth={depth:g}% blocked={len(blocked)}"
-            )
-            prepared = runner.prepare(
-                case,
-                context_length=context_length,
-                depth_percent=depth,
-            )
-            result = runner.run(
-                prepared,
-                attention=AttentionRequest(
-                    blocked_heads=blocked,
-                    mask_mode=args.mask_mode,
-                ),
-            )
-            stem = result_stem(
-                model.model_version,
-                context_length,
-                depth,
-                case_id=case.case_id,
-            )
-            write_json(
-                results_dir / f"{stem}_results.json",
-                result_payload(
-                    result,
-                    model.model_id,
-                    experiment={
-                        "kind": "head_masking",
-                        "condition": condition,
-                        "mask_mode": args.mask_mode,
-                        "blocked_heads": [
-                            list(head) for head in sorted(blocked)
-                        ],
-                        "seed": args.seed,
-                    },
-                ),
-            )
-            context_path = contexts_dir / f"{stem}_context.txt"
-            context_path.parent.mkdir(parents=True, exist_ok=True)
-            context_path.write_text(prepared.context, encoding="utf-8")
-            print(
-                f"  score={result.score:.1f} "
-                f"response={result.generation.text!r}"
-            )
+    for case in cases:
+        for context_length in lengths:
+            for depth in depths:
+                completed += 1
+                # Match the source experiment: draw a fresh random control for
+                # every case/context/depth tuple. Exact heads are saved in JSON.
+                blocked = (
+                    choose_blocked_heads(args, model, ranked)
+                    if args.mask_topk < 0
+                    else stable_blocked
+                )
+                print(
+                    f"[{completed}/{total}] case={case.case_id} "
+                    f"context={context_length} depth={depth:g}% "
+                    f"blocked={len(blocked)}"
+                )
+                prepared = runner.prepare(
+                    case,
+                    context_length=context_length,
+                    depth_percent=depth,
+                )
+                result = runner.run(
+                    prepared,
+                    attention=AttentionRequest(
+                        blocked_heads=blocked,
+                        mask_mode=args.mask_mode,
+                    ),
+                )
+                stem = result_stem(
+                    model.model_version,
+                    context_length,
+                    depth,
+                    case_id=case.case_id,
+                )
+                write_json(
+                    results_dir / f"{stem}_results.json",
+                    result_payload(
+                        result,
+                        model.model_id,
+                        experiment={
+                            "kind": "head_masking",
+                            "prefill_attention": args.prefill_attention,
+                            "decode_attention": args.decode_attention,
+                            "condition": condition,
+                            "mask_mode": args.mask_mode,
+                            "blocked_heads": [
+                                list(head) for head in sorted(blocked)
+                            ],
+                            "seed": args.seed,
+                            "context_seed": context_seed,
+                            "context_window": context_window,
+                        },
+                    ),
+                )
+                context_path = contexts_dir / f"{stem}_context.txt"
+                context_path.parent.mkdir(parents=True, exist_ok=True)
+                context_path.write_text(prepared.context, encoding="utf-8")
+                print(
+                    f"  score={result.score:.1f} "
+                    f"response={result.generation.text!r}"
+                )
 
     run_config["complete"] = True
     run_config["completed_cases"] = completed

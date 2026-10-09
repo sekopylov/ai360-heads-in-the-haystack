@@ -17,7 +17,7 @@ class ExperimentRunner:
         self,
         model: ModelAdapter,
         context_builder: ContextBuilder,
-        locator: NeedleLocator,
+        locator: NeedleLocator | None,
         *,
         max_new_tokens: int = 50,
     ) -> None:
@@ -40,9 +40,10 @@ class ExperimentRunner:
             depth_percent=depth_percent,
         )
         prompt = self.model.encode_prompt(context, case.question)
-        needle_span = self.locator.find(
-            prompt.token_ids,
-            case.expected_answer,
+        needle_span = (
+            self.locator.find(prompt.token_ids, case.expected_answer)
+            if self.locator is not None
+            else None
         )
         return PreparedExample(
             case=case,
@@ -78,4 +79,3 @@ class ExperimentRunner:
             score=score,
             duration_seconds=duration,
         )
-

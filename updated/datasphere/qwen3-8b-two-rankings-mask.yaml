@@ -1,0 +1,74 @@
+name: qwen3-8b-three-corpora-two-rankings-mask
+desc: Paired top/bottom masking on three held-out validation cases for multiset and attention-mass rankings; one context seed, no random controls
+
+flags:
+  - attach-project-disk
+
+cmd: >
+  bash -c '
+  python3 job.py
+  --profile mask
+  --adapter qwen3_8b
+  --model ${DS_PROJECT_HOME}/c0/models/Qwen/Qwen3-8B
+  --output-root datasphere-results/qwen3-8b-three-corpora-two-rankings-mask/multiset
+  --mask-data ${MASK_DATA}
+  --head-scores ${MULTISET_HEAD_SCORES}
+  --dtype float16
+  --device-map cuda:0
+  --prefill-attention sdpa_memory_efficient
+  --attention-scope all_decode_tokens
+  --lengths 8000,16000,30000
+  --depths 15,45,75
+  --max-new-tokens 2048
+  --topks 4,8,16
+  --mask-selections top,bottom
+  --context-count 1
+  --context-seed 42
+  --seed 42
+  && python3 job.py
+  --profile mask
+  --adapter qwen3_8b
+  --model ${DS_PROJECT_HOME}/c0/models/Qwen/Qwen3-8B
+  --output-root datasphere-results/qwen3-8b-three-corpora-two-rankings-mask/attention-mass
+  --mask-data ${MASK_DATA}
+  --head-scores ${ATTENTION_MASS_HEAD_SCORES}
+  --dtype float16
+  --device-map cuda:0
+  --prefill-attention sdpa_memory_efficient
+  --attention-scope all_decode_tokens
+  --lengths 8000,16000,30000
+  --depths 15,45,75
+  --max-new-tokens 2048
+  --topks 4,8,16
+  --mask-selections top,bottom
+  --context-count 1
+  --context-seed 42
+  --seed 42
+  '
+
+inputs:
+  - data/validation_haystacks: MASK_DATA
+  - datasphere-results/qwen3-8b-survey/detection/aggregation/head_scores_needle_token_multiset_v1.json: MULTISET_HEAD_SCORES
+  - datasphere-results/qwen3-8b-survey/detection/aggregation/head_scores_needle_attention_mass_v1.json: ATTENTION_MASS_HEAD_SCORES
+
+outputs:
+  - datasphere-results/qwen3-8b-three-corpora-two-rankings-mask
+
+env:
+  vars:
+    - HF_HUB_OFFLINE: "1"
+    - TRANSFORMERS_OFFLINE: "1"
+  python:
+    type: manual
+    version: "3.12"
+    requirements-file: datasphere/requirements-gpu.txt
+    pip:
+      extra-index-urls:
+        - https://download.pytorch.org/whl/cu118
+    local-paths:
+      - datasphere/job.py
+      - needle_in_haystack_with_mask.py
+      - retrieval_heads
+
+cloud-instance-types:
+  - g1.1

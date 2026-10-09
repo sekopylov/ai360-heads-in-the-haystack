@@ -2,6 +2,9 @@
 
 Рабочий корень проекта — папка `updated`. Все пути ниже указаны относительно неё.
 
+Практический разбор загрузки checkpoint, PyTorch forward, ручного decode,
+KV-cache и Flash/GQA: [MODEL_EXECUTION_GUIDE.md](MODEL_EXECUTION_GUIDE.md).
+
 В репозитории уже есть:
 
 - `datasphere/job.py` — запускает этапы эксперимента по очереди;
@@ -12,8 +15,9 @@
 
 Все команды ниже выполняются **из папки `updated`**.
 
-Корпуса находятся в `data/haystack_for_detect/` и
-`data/PaulGrahamEssays/`; YAML передаёт их в job через `inputs`.
+Detection-корпуса находятся в `data/haystack_for_detect/`, а held-out
+masking-корпусы — в `data/validation_haystacks/`; YAML передаёт их в job через
+`inputs`.
 
 Драйвер компилируется, оба YAML разбираются локально без ошибок. Удалённый
 smoke также проверен в указанном проекте: job `bt1mpuoprch2p2dmfsoh` успешно
@@ -111,6 +115,28 @@ needle-span, для каждой головы складываем attention п�
 ответ делят общий лимит генерации; ROUGE по финальному ответу,
 retrieval scope задаётся `--attention-scope` как у Thinking-4B.
 Значение `--model` по умолчанию в CLI не изменено: задавайте модель явно.
+
+Для masking dense Qwen3 на A100 доступны `--prefill-attention sdpa_flash`
+и `--decode-attention sdpa_flash`. Это встроенный PyTorch FlashAttention
+с компактными GQA K/V; установка отдельной библиотеки `flash-attn` не нужна.
+Выбранным головам на decode обнуляется Q после RoPE, что сохраняет
+`legacy_uniform`: нулевые logits до softmax, а не удаление вклада головы.
+Prefill остаётся без masking и причинным; decode видит весь доступный cache.
+Backend запрещает math fallback, padding/явную attention-mask, capture,
+needle-span и `zero_output`; для них используйте eager. Нужна CUDA GPU
+Ampere или новее. Detection сохраняет наблюдаемый eager decode.
+Backend prefill/decode записывается в masking run.json и каждый result JSON.
+
+Оба `qwen3-8b-three-corpora-48k-no-yarn-*-mask.yaml` используют A100 (`g2.1`)
+и Flash на prefill/decode. Каждый содержит 252 генерации. Оценка после smoke
+2026-10-09 — около 2–4,5 часа на job; при массовом исчерпании лимита 2048 токенов
+около 6–7,5 часа. На 8k/16k это экстраполяция: smoke сравнивал 32k/48k.
+
+Для отдельного эксперимента с 48k без YaRN доступен адаптер
+`--adapter qwen3_8b_no_yarn_64k`. Он увеличивает только
+`max_position_embeddings` до 65 536 и не меняет параметры RoPE модели. Поэтому
+это именно тест экстраполяции за нативный предел 32 768, а не поддерживаемый
+чекпойнтом режим длинного контекста; качество на 48k может заметно снизиться.
 
 Вариант `--adapter qwen3_8b_yarn` читает тот же checkpoint Qwen3-8B, но при
 создании модели передаёт static YaRN (`factor=4`, исходный лимит32768,

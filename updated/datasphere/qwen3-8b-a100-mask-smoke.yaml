@@ -1,0 +1,31 @@
+name: qwen3-8b-a100-mask-smoke
+desc: Six masking generations comparing eager and native GQA Flash SDPA on A100
+flags:
+  - attach-project-disk
+cmd: >
+  python3 a100_mask_smoke.py
+  --model ${DS_PROJECT_HOME}/c0/models/Qwen/Qwen3-8B
+  --validation-root ${MASK_DATA}
+  --head-scores ${HEAD_SCORES}
+  --output-root datasphere-results/qwen3-8b-a100-mask-smoke
+inputs:
+  - data/validation_haystacks: MASK_DATA
+  - datasphere-results/qwen3-8b-survey/detection/aggregation/head_scores_needle_token_multiset_v1.json: HEAD_SCORES
+outputs:
+  - datasphere-results/qwen3-8b-a100-mask-smoke
+env:
+  vars:
+    - HF_HUB_OFFLINE: "1"
+    - TRANSFORMERS_OFFLINE: "1"
+  python:
+    type: manual
+    version: "3.12"
+    requirements-file: datasphere/requirements-gpu.txt
+    pip:
+      extra-index-urls:
+        - https://download.pytorch.org/whl/cu118
+    local-paths:
+      - datasphere/a100_mask_smoke.py
+      - retrieval_heads
+cloud-instance-types:
+  - g2.1

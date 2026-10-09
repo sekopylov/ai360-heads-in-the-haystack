@@ -34,7 +34,9 @@ class PreparedExample:
     case: ExperimentCase
     context: str
     prompt: Prompt
-    needle_span: NeedleSpan
+    # Detection needs a token span for retrieval scoring. Masking only scores
+    # the final answer and deliberately leaves this unset.
+    needle_span: NeedleSpan | None
     context_length: int
     depth_percent: float
 
