@@ -506,9 +506,12 @@ def run_detection(
         if not recited:
             continue
         agg = aggregate_scores(recited, info, pairing=pairing, threshold=config.threshold)
+        # Mirror the main sidecar's provenance: without `config`/`argmax_domain` a
+        # `*_recited.json` could not be tied to the conditions that produced it.
         agg.meta = {"corpus": scores.meta["corpus"], "recited_only": True,
                     "recall_threshold": RECITED_RECALL, "n_instances": len(recited),
-                    "pairing": pairing}
+                    "pairing": pairing, "argmax_domain": config.argmax_domain,
+                    "config": scores.meta.get("config")}
         conditional[pairing] = agg
 
     run = DetectionRun(

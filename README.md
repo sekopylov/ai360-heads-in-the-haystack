@@ -324,29 +324,41 @@ induction-head position, where the retrieved token is staged for later use).  Bo
 come out of the same decoding pass, so this costs nothing to report — and no
 reproduction should quote one without the other.
 
-### Masking: the causal claim holds
+### Masking: the causal claim holds from ~8% of heads, not at 2%
 
-Needle-in-a-Haystack, exact match, retrieval heads vs random heads:
+Needle-in-a-Haystack, retrieval heads vs random heads.  The per-trial numbers below
+are the ones that matter; a mean over three trials hides how erratic the control is.
 
-| model | baseline | best retrieval-masked case | random |
-|---|---|---|---|
-| Qwen3-0.6B | 94.3 f1 / 90% exact | 93.0 / 50% at K=9 (2% of heads); 83.2 / **0%** at K=18 (4%) | 95.3 / 63% at K=9; 59.8 / 13% at K=18 |
-| Qwen3.5-0.8B | 46.4 f1 / **0% exact** | 42.1 / 0% at K=1; 23.0 / 0% at K=16 | 51.2 / 0% at K=1; 65.7 / 0% at K=8 |
+| model | baseline | K (share of heads) | retrieval | random trials |
+|---|---|---|---|---|
+| Qwen3-0.6B | 94.3 f1 / 90% exact / 98.7 recall | 9 (2%) | 93.0 / 50% / 96.1 | 95.7, 90.9, **100.0** recall; 6/10, 3/10, **10/10** exact |
+| | | 18 (4%) | 83.2 / **0%** / 88.3 | 93.9, 87.0, **0.0** recall |
+| | | 36 (8%) | 71.0 / 0% / 59.6 | 85.7, 100.0, 98.7 recall |
+| Qwen3.5-0.8B | 46.4 f1 / 0% exact / 48.7 recall | 1 (2%) | 42.1 / 0% / 43.9 | 39.1, 39.1, 49.6 recall |
+| | | 8 (17%) | 35.0 / 0% / 27.8 | 48.3, 68.3, 71.7 recall |
+| | | 15 (31%) | 23.0 / 0% / **21.7** | **0.0, 0.0, 0.0** recall (degenerate text) |
 
-Two things to read carefully here.
+**On the dense model the honest statement is "the effect is clear from ~8% of heads;
+at 2-4% this measurement does not separate the arms".**  At K=9 (2%) the retrieval arm
+is *not* worse than the control — one random trial scores **10/10 exact, above the
+9/10 baseline** — and at K=18 the random mean (59.8 f1) is produced by a single trial
+collapsing to recall 0.0, while retrieval's recall (88.3) sits inside the random
+range (93.9 / 87.0 / 0.0).  Only from K=36 does retrieval's recall (59.6) fall below
+every random trial (85.7 / 100.0 / 98.7).  `random_std` is ±42.3 at K=18 — that is
+the shape of the control, not noise around a clean separation.
 
-* **On the dense model the exact-match collapse starts at ~4% of heads, not 2%.**
-  At K=9 the retrieval arm leaves F1 almost untouched (93.0 against 95.3 for the
-  matched random arm) and only halves exact match (50% against 63%); at K=18 exact
-  match goes to **0%** while the random arm still gets 13%.  The random arm is
-  erratic at this size (92.6 f1 at K=36, 14.9 at K=76), so a single point is not
-  the claim -- the curve is.
-* **On the hybrid the exact-match axis is uninformative**: the baseline is already
-  0%, because `exact_match` requires the *whole* needle while the question asks for
-  a sub-span (the model does answer correctly -- see the Limitations note and
-  `masking_recall.pdf`, which plots the LCS recall instead).  There the retrieval
-  and random arms are not separable at this scale: 42.1 vs 51.2 at K=1, 43.1 vs
-  43.6 at K=4, 35.0 vs 65.7 at K=8.
+**On the hybrid the causal claim is not just weak, it inverts at the last point.**
+Its non-retrieval pool is only 15 heads, so K=16 is capped to 15 and the "random"
+arm becomes the *entire* sub-threshold pool — a deterministic intervention, not a
+sample.  It drives recall to **0.0 on all ten samples** with degenerate output
+(`"1. 1. 1. 1. ..."`), while masking the top-15 *by score* leaves fluent but wrong
+answers (`harp`, `sundial`) at recall 21.7.  So on this model the lowest-scoring
+heads are collectively *more* critical for NIAH than the highest-scoring ones, and
+the 0.1 threshold does not isolate a removable subset.  The exact-match axis is
+uninformative there for a separate reason: the baseline is already 0%, because
+`exact_match` requires the whole needle while the question asks for a sub-span (the
+per-sample `generated_texts` in `masking_curve.json` show the answers are often
+correct — `masking_recall.pdf` plots the LCS recall instead).
 
 At the large-K end of the curve the "retrieval" arm necessarily reaches below the
 0.1 threshold (there are only 28 such heads on the dense model while the curve goes
@@ -363,8 +375,15 @@ scoreable heads would put retrieval heads in the control most of the time on the
 hybrid (33 of its 48 heads clear 0.1).  Both arms therefore remove exactly the
 same number of heads at every point, and the realized counts are stored in
 `masking_curve.json` (`k_effective`, `retrieval_masked`, `random_masked_mean`).
+The pool size is also why the two models' K columns are not comparable: 31% of the
+hybrid's scoreable heads is its whole control pool, 2% of the dense model's is nine
+heads out of 420.
 
-### Downstream: CoT vs extractive QA under masking
+### Downstream: CoT vs extractive QA under masking — a pipeline check, not a measurement
+
+Read this section as "the stage runs end to end and its artifacts are auditable", not
+as evidence about the paper's Sec. 5.  The sets are 8 hand-written items each, so one
+item is 12.5 points and the differences below are 1-4 items.
 
 Chain-of-thought, 8 items, after recalibration (baseline off the floor):
 
@@ -441,10 +460,11 @@ meaningful within a family.
   both counts, `denominator_inflation`, and the per-head numerator
   (`copied_tokens`), so the raw-denominator variant is recomputable; the >0.1 shares
   in the tables are unique-token shares. Note the consequence for the threshold
-  itself: because the scale is inflated by `denominator_inflation` (~1.16 on these
-  needles), "score > 0.1" is *weaker* than "copied 10% of the needle tokens"; the
-  equivalent raw-denominator threshold is `0.1 / denominator_inflation`. The counts
-  in the tables are therefore not directly comparable to the paper's.
+  itself: because the scale is inflated by `denominator_inflation` (**1.0405** on
+  these needles: 25.67 needle tokens against 24.67 unique), "score > 0.1" is
+  *weaker* than "copied 10% of the needle tokens"; the equivalent raw-denominator
+  threshold is `0.1 / denominator_inflation` ~ **0.096**. The counts in the tables
+  are therefore not directly comparable to the paper's.
 * **The length grid is geometric, not uniform.** The paper samples 20 lengths
   uniformly over 1K-50K, so its long contexts carry far more weight; `paper` here is
   7 geometric lengths (210 instances) and `t4` is 5 lengths up to 16K. "The
@@ -460,9 +480,23 @@ meaningful within a family.
   removes neither parameters nor KV entries, so the Sec. 5 KV-compression reading
   does not follow directly.
 * **`mean_sink_rate` is "argmax at prompt position 0"**, which under a chat template
-  is a template token rather than necessarily a BOS sink. `exact_match` in the
-  artifacts is a normalised-contains check (NIAH convention), not character-exact
-  equality.
+  is a template token rather than necessarily a BOS sink.  It is not a footnote:
+  **0.759 on Qwen3-0.6B** (0.035 on the hybrid) means that in three of four steps
+  where criterion (1) applies at all, the argmax sits on position 0, so criterion
+  (2) can only fire in the remaining quarter.  Every absolute score, and the 0.1
+  threshold with it, is conditioned on that -- which is another reason the shares
+  are not comparable to the paper's.  `exact_match` in the artifacts is a
+  normalised-contains check (NIAH convention), not character-exact equality.
+* **Generation budget is now recorded on both sides.**  `detect` always had
+  `n_instances_truncated` (11/75 on the hybrid at a 48-token budget); the ablations
+  now carry `retrieval_truncated`/`random_truncated_mean` per K as well, because a
+  drop in F1 cannot otherwise be told apart from a budget that ran out.
+* **The paper's Sec. 4.3 "intrinsic" experiment is not tested here.**  It needs a
+  base model and a derivative of it (the paper fine-tunes one); this registry has
+  no such pair, and the 0.93 cross-model number is a `sorted`-mode correlation of
+  score *distributions*, which the README says explicitly is not head
+  correspondence.  So the claim "retrieval heads transfer to fine-tuned variants"
+  is out of scope for this reproduction, not weakly confirmed by it.
 * **Synthetic filler by default.** Every shipped profile generates the haystack
   from a 60-word template pool, so a 1K-50K context is highly repetitive text.
   Attention argmax is sensitive to that regularity, so the *absolute* scores are

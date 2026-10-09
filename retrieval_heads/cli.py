@@ -111,6 +111,10 @@ class DetectionSettings:
     argmax_domain: str = "prompt"
     threshold: float = DEFAULT_THRESHOLD
     corpus_path: str | None = None
+    #: How `detect` captured the attention rows.  `mask` has no flag for it, so
+    #: reading it from the command line would label every artifact "patch" even
+    #: after a `detect --capture-method output_attentions` run.
+    capture_method: str = "patch"
 
 
 def resolve_detection_settings(args: argparse.Namespace, scores: Any) -> DetectionSettings:
@@ -166,6 +170,8 @@ def resolve_detection_settings(args: argparse.Namespace, scores: Any) -> Detecti
     settings.threshold = pick("threshold", config.get("threshold", _MISSING),
                               requested_threshold,
                               requested_threshold == DEFAULT_THRESHOLD)
+    # Not a flag on the ablations: the only truthful source is what detect recorded.
+    settings.capture_method = config.get("capture_method") or settings.capture_method
 
     recorded_corpus = meta.get("corpus_path")
     # `qa`/`cot` have no --corpus flag at all, so this must not assume one.
@@ -347,6 +353,14 @@ def _load(name: str, *, attn_implementation: str = "eager", dtype: str | None = 
         log.info("reusing the already-loaded %s (no second weight load)", name)
         return cached
 
+    if _LOADED:
+        # Evict *before* allocating the new weights.  Clearing after `load_model`
+        # (as this did) kept both models resident through the load, contradicting
+        # the "one resident model" guarantee the cache exists to provide.
+        _LOADED.clear()
+        if device == "cuda":  # pragma: no cover - GPU path
+            torch.cuda.empty_cache()
+
     model, tokenizer, info = load_model(
         path, dtype=resolved_dtype,
         attn_implementation=attn_implementation, device=device,
@@ -355,11 +369,6 @@ def _load(name: str, *, attn_implementation: str = "eager", dtype: str | None = 
         log.info("loaded model on CUDA")
     print(describe_model(info))
     print()
-    if _LOADED:
-        # Evict the previous model: keep exactly one resident.
-        _LOADED.clear()
-        if device == "cuda":  # pragma: no cover - GPU path
-            torch.cuda.empty_cache()
     _LOADED[key] = (model, tokenizer, info)
     return model, tokenizer, info
 
@@ -501,7 +510,7 @@ def cmd_mask(args: argparse.Namespace) -> int:
     curve.meta["enable_thinking"] = settings.enable_thinking
     curve.meta["threshold"] = settings.threshold
     curve.meta["detection_pairing"] = (scores.meta or {}).get("config", {}).get("pairing")
-    curve.meta["capture_method"] = getattr(args, "capture_method", "patch")
+    curve.meta["capture_method"] = settings.capture_method
     save_json(add_provenance(curve.as_dict(), dtype=info.dtype),
               out_dir / "masking_curve.json")
 
@@ -515,7 +524,11 @@ def cmd_mask(args: argparse.Namespace) -> int:
                                         k_values=mixer_k,
                                         max_new_tokens=args.max_new_tokens,
                                         prefill_chunk=normalize_prefill_chunk(args.prefill_chunk),
-                                        n_trials=args.mixer_trials, seed=args.seed)
+                                        n_trials=args.mixer_trials, seed=args.seed,
+                                        # The masking curve already ran the unmasked
+                                        # pass on these exact samples; on the hybrid
+                                        # re-running it was the stage's costliest step.
+                                        baseline=curve.baseline)
         payload = ablation.as_dict()
         payload.update({"needle": needle, "question": question,
                         "needle_source": "eval", "seed": args.seed,

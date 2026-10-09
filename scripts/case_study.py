@@ -86,6 +86,9 @@ def main() -> int:
     args = parser.parse_args()
 
     model, tokenizer, info = _load(args.model)
+    if not 0 <= args.needle_index < len(DEFAULT_NEEDLES):
+        parser.error(f"--needle-index must be in [0, {len(DEFAULT_NEEDLES) - 1}], "
+                     f"got {args.needle_index}")
     needle, question = DEFAULT_NEEDLES[args.needle_index]
     sample = build_needle_sample(
         tokenizer, needle=needle, question=question, target_tokens=args.length,
@@ -100,6 +103,11 @@ def main() -> int:
         # opts into storing the rows; everything else keeps argmax only.  The
         # chunked prefill avoids the one-shot fp32 path that OOM'd at 16K.
         prefill_chunk=4096, store_rows=True,
+        # Must reach the capture, not just `find_copy_step`: the credits (and hence
+        # `top_heads` in the artifact) come from `credits_from_trace`, i.e. from the
+        # argmax this call records.  Passing it only to the display path made the
+        # figure and the JSON describe two different domains.
+        argmax_domain=args.argmax_domain,
     )
     credits, _, considered = credits_from_trace(trace, sample, info, pairing=args.pairing)
     print("generated:", repr(tokenizer.decode(generated, skip_special_tokens=True)[:220]), "\n")

@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 218 tests: 201 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
+* 222 tests: 205 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
   the real checkpoints. All green.
 * **The committed artifacts now match the code.** The GPU run was refreshed in two
   jobs on an NVIDIA L4, 75 instances per model:
@@ -49,7 +49,45 @@ tied to a job id) → this file (where things stand and what is left).
   exact-match, recall, prefix-recall and the *generated texts*) and the same for
   each random trial, so a specific failure can be inspected from the artifact
   instead of only its mean.
-* **Review round (the "right after the run" report), verified against the code:**
+* **Review round (the second report), verified against the code:**
+  * `case_study.py` passed `--argmax-domain` to `find_copy_step` (the figure) but not
+    to `decode_with_attention` (the capture the credits come from), so with `full`
+    the artifact's `top_heads` described the prompt domain while the JSON claimed
+    `full`.  Fixed, and the script finally has a test (it had none).
+  * `mask` wrote `capture_method: "patch"` unconditionally (`getattr(args, ...)` --
+    the flag does not exist there); it now takes what `detect` recorded.
+  * README's `denominator_inflation` was stale (1.16; the schema-5 artifacts say
+    1.0405, so the equivalent raw threshold is ~0.096, not 0.086).
+  * `credits_from_trace` built a `zeros()` on every step via `setdefault`, and its
+    `considered` accumulator silently restarted if a layer's head count changed
+    (dropping the tally); now a plain lookup and an explicit `ValueError`.
+  * `cmd_mask` ran the unmasked baseline twice (the curve and then the mixer
+    ablation); `token_mixer_ablation(baseline=...)` reuses it -- on the hybrid that
+    pass was the stage's most expensive step.
+  * `_load` cleared the cache *after* loading, so both models were resident during
+    the load despite the comment; it now evicts first.
+  * Provenance gaps closed: `task_qa`/`task_cot` record `threshold`, `pairing` and
+    `argmax_domain`; `scores_*_recited.json` carries `config`/`argmax_domain`;
+    `code_sha256` hashes `scripts/` too (it defines `SCALES`, i.e. the grid).
+  * Ablations now record truncation (`retrieval_truncated`, `random_truncated_mean`,
+    `baseline_truncated`), so a drop can be told apart from an exhausted budget.
+  * Guards: `plot_heat_map({})` raises a message instead of `max()` on empty;
+    `case_study --needle-index` is bounds-checked; the duplicate `scoring` import is
+    merged.
+  * **Methodology, now stated in the README instead of implied:** the dense masking
+    effect is clear only from ~8% of heads (at K=9 one random trial scores 10/10
+    exact against a 9/10 baseline; at K=18 the random mean is one collapsed trial);
+    on the hybrid the K=16 point caps to the whole 15-head pool, which is a
+    deterministic intervention that drives recall to 0.0 with degenerate text while
+    the top-15 arm stays fluent -- so there the lowest-scoring heads are collectively
+    more critical.  Also added: the 0.759 sink rate and what it does to criterion
+    (2); that Sec. 4.3's intrinsic experiment needs a base/derivative pair this
+    registry does not have; and that the downstream section is a pipeline check
+    (8 items = 12.5 points per item), not a measurement.
+  * Not done: splitting `test_regressions.py` (1600+ lines) by topic, and extending
+    the ablation to 2-3 eval needles instead of one (that is a GPU run; the artifact
+    does record that all ten "samples" are one (q,k) at 2 lengths x 5 depths).
+* **Review round (the first report), verified against the code:**
   * `--thinking` did nothing on Qwen3.5.  It passed `None`, which *omits* the
     `enable_thinking` kwarg, and that template tests `is defined and is true`, so the
     flag rendered the empty ` thinking` block while the artifact recorded `null`
@@ -458,7 +496,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 218 passed (201 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 222 passed (205 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

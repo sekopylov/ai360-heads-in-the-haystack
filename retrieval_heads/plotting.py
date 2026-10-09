@@ -170,6 +170,10 @@ def plot_score_distribution(scores_by_model: Mapping[str, RetrievalScores],
 def plot_heat_map(scores_by_model: Mapping[str, RetrievalScores],
                   *, labels: Sequence[str] | None = None) -> plt.Figure:
     """Layer x head retrieval-score heatmaps, NaN (non-scoreable) shown as grey."""
+    if not scores_by_model:
+        # `max()` over an empty generator is a ValueError; callers guard today, but
+        # the function should not depend on that.
+        raise ValueError("plot_heat_map needs at least one run")
     names = list(scores_by_model)
     labels = list(labels) if labels else names
     shape = (max(s.info.num_layers for s in scores_by_model.values()),

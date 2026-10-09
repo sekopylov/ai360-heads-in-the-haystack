@@ -384,13 +384,27 @@ def credits_from_trace(
                 continue
             heads = min(info.num_heads[layer], argmax.shape[0])
             counts = considered_t.get(layer)
-            if counts is None or counts.numel() != heads:
+            if counts is None:
                 counts = torch.zeros(heads, dtype=torch.long)
                 considered_t[layer] = counts
+            elif counts.numel() != heads:
+                # Silently reallocating here used to drop everything counted so far
+                # (and `sink_t` would then fail on a shape mismatch anyway), so say
+                # what happened instead of losing the tally.
+                raise ValueError(
+                    f"layer {layer} reported {heads} heads after {counts.numel()} "
+                    f"in earlier steps; the attention geometry cannot change mid-run"
+                )
             counts += 1
             matched, sink = match_masks(argmax, prompt_ids, token, (start, end),
                                         sink_position, heads)
-            sink_t.setdefault(layer, torch.zeros(heads, dtype=torch.long))[:] += sink.long()
+            # `setdefault` builds its default eagerly, i.e. one zeros() per layer-step
+            # for nothing; the dict lookup does not.
+            sink_counts = sink_t.get(layer)
+            if sink_counts is None:
+                sink_counts = torch.zeros(heads, dtype=torch.long)
+                sink_t[layer] = sink_counts
+            sink_counts += sink.long()
             hits.extend((layer, int(head), token)
                         for head in matched.nonzero(as_tuple=False).flatten().tolist())
 

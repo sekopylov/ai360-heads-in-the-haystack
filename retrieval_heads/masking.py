@@ -22,10 +22,13 @@ import torch
 
 from retrieval_heads.attention import HeadMasker, TokenMixerMasker
 from retrieval_heads.generation import greedy_ids
-from retrieval_heads.scoring import needle_prefix_recall, needle_recall
 from retrieval_heads.haystack import NeedleSample, build_needle_sample
 from retrieval_heads.models import ModelInfo
-from retrieval_heads.scoring import RetrievalScores
+from retrieval_heads.scoring import (
+    RetrievalScores,
+    needle_prefix_recall,
+    needle_recall,
+)
 from retrieval_heads.utils import HeadRef, eos_ids, get_logger, save_json, squad_f1
 
 log = get_logger("masking")
@@ -108,13 +111,19 @@ class NiahMetrics:
     #: The actual completions, so a failure can be inspected from the artifact
     #: instead of only from its mean (the paper's Sec. 5 argument is about cases).
     generated_texts: list[str] = field(default_factory=list)
+    #: How many samples hit `max_new_tokens` without an EOS.  `detect` recorded this
+    #: from the start, the ablations did not -- so a drop could not be checked against
+    #: a budget that ran out, which matters on the hybrid (its `detect` run truncated
+    #: 11 of 75 instances at a 48-token budget).
+    n_truncated: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return {"f1": self.f1, "exact_match": self.exact_match, "recall": self.recall,
                 "n": self.n, "f1s": self.f1s, "exact_matches": self.exact_matches,
                 "recalls": self.recalls,
                 "prefix_recalls": self.prefix_recalls,
-                "generated_texts": self.generated_texts}
+                "generated_texts": self.generated_texts,
+                "n_truncated": self.n_truncated}
 
 
 def normalized_contains(text: str, needle: str) -> bool:
@@ -158,12 +167,15 @@ def evaluate_samples(
         raise
     f1s, ems, recalls, prefix_recalls = [], [], [], []
     generated_texts: list[str] = []
+    n_truncated = 0
     try:
         special = set(getattr(tokenizer, "all_special_ids", None) or [])
         for sample in samples:
             ids = greedy_generate(model, sample.input_ids, max_new_tokens=max_new_tokens,
                                   eos=eos, attn_impl=attn_impl,
                                   prefill_chunk=prefill_chunk)
+            if len(ids) >= max_new_tokens and (not eos or ids[-1] not in eos):
+                n_truncated += 1
             text = tokenizer.decode(ids, skip_special_tokens=True)
             # Exact match is computed on skip_special_tokens text, so F1 must skip
             # them too or the two metrics in one artifact describe different things.
@@ -190,6 +202,7 @@ def evaluate_samples(
         recalls=[100.0 * value for value in recalls],
         prefix_recalls=[100.0 * value for value in prefix_recalls],
         generated_texts=generated_texts,
+        n_truncated=n_truncated,
     )
 
 
@@ -255,6 +268,12 @@ class MaskingCurve:
     retrieval_recall: list[float] = field(default_factory=list)
     random_recall_mean: list[float] = field(default_factory=list)
     baseline_recall: float = 0.0
+    #: Samples that hit `max_new_tokens` without an EOS, per K: without it a drop
+    #: cannot be told apart from a budget that ran out (the hybrid's detect run
+    #: truncated 11 of 75 instances at a 48-token budget).
+    retrieval_truncated: list[int] = field(default_factory=list)
+    random_truncated_mean: list[float] = field(default_factory=list)
+    baseline_truncated: int = 0
     #: Realized heads masked per point, for both arms.  They are equal by
     #: construction; recording them makes a mismatch visible instead of implicit.
     k_effective: list[int] = field(default_factory=list)
@@ -296,6 +315,9 @@ class MaskingCurve:
             "retrieval_recall": self.retrieval_recall,
             "random_recall_mean": self.random_recall_mean,
             "baseline_recall": self.baseline_recall,
+            "retrieval_truncated": self.retrieval_truncated,
+            "random_truncated_mean": self.random_truncated_mean,
+            "baseline_truncated": self.baseline_truncated,
             "retrieval_exact_match": self.retrieval_exact,
             "random_exact_match_mean": self.random_exact_mean,
             "baseline_exact_match": self.baseline_exact,
@@ -363,7 +385,7 @@ def masking_curve(
     curve = MaskingCurve(
         k_values=[], retrieval=[], random_mean=[], random_std=[],
         baseline=baseline.f1, baseline_exact=baseline.exact_match,
-        baseline_recall=baseline.recall,
+        baseline_recall=baseline.recall, baseline_truncated=baseline.n_truncated,
         score_threshold=scores.threshold,
         meta={"model": info.name, "baseline_exact_match": baseline.exact_match,
               "n_samples": len(samples), "pairing": scores.pairing,
@@ -408,6 +430,7 @@ def masking_curve(
         curve.retrieval.append(metrics.f1)
         curve.retrieval_recall.append(metrics.recall)
         curve.retrieval_std.append(float(np.std(metrics.f1s)) if metrics.f1s else 0.0)
+        curve.retrieval_truncated.append(metrics.n_truncated)
         curve.retrieval_exact.append(metrics.exact_match)
         curve.retrieval_exact_std.append(
             float(np.std(metrics.exact_matches)) if metrics.exact_matches else 0.0
@@ -417,6 +440,7 @@ def masking_curve(
                  metrics.f1, metrics.exact_match)
 
         trials, exact_trials, recall_trials, overlaps = [], [], [], []
+        truncated_trials: list[int] = []
         trial_metrics = []
         masked_counts = []
         above_counts: list[int] = []
@@ -436,6 +460,7 @@ def masking_curve(
             overlaps.append(sum(1 for h in random_heads if h in set(top)))
             m = evaluate_samples(model, tokenizer, info, samples, masked_heads=random_heads,
                                  max_new_tokens=max_new_tokens, prefill_chunk=prefill_chunk)
+            truncated_trials.append(m.n_truncated)
             trials.append(m.f1)
             recall_trials.append(m.recall)
             exact_trials.append(m.exact_match)
@@ -453,6 +478,7 @@ def masking_curve(
         curve.random_mean.append(float(np.mean(trials)))
         curve.random_std.append(float(np.std(trials)))
         curve.random_exact_mean.append(float(np.mean(exact_trials)))
+        curve.random_truncated_mean.append(float(np.mean(truncated_trials)))
         log.info("k=%-4d random-masked f1=%.1f +/- %.1f exact=%.1f (retrieval-head "
                  "overlap %s)", k, np.mean(trials), np.std(trials), np.mean(exact_trials),
                  overlaps)
@@ -577,15 +603,22 @@ def token_mixer_ablation(
     prefill_chunk: int | None = 4096,
     n_trials: int = 3,
     seed: int = 0,
+    baseline: float | None = None,
 ) -> MixerAblation:
     """Silence K full-attention layers vs K linear-attention layers.
 
     On a dense model ``linear_attention`` is empty and the call returns
     ``full_attention`` only -- still a valid "how concentrated is retrieval in a
     few layers" measurement.
+
+    ``baseline`` lets the caller pass an F1 it already measured on the same samples
+    (``cmd_mask`` computes one for the masking curve); on the hybrid that unmasked
+    pass is the most expensive single step of the stage.
     """
-    baseline = evaluate_samples(model, tokenizer, info, samples, max_new_tokens=max_new_tokens,
-                                 prefill_chunk=prefill_chunk)
+    if baseline is None:
+        baseline = evaluate_samples(model, tokenizer, info, samples,
+                                    max_new_tokens=max_new_tokens,
+                                    prefill_chunk=prefill_chunk).f1
     full_layers = list(info.scoreable_layers)
     linear_layers = list(info.linear_layers)
 
@@ -673,7 +706,7 @@ def token_mixer_ablation(
 
     return MixerAblation(
         full_attention=full_scores, linear_attention=linear_scores,
-        baseline=baseline.f1, k_values=list(k_values),
+        baseline=float(baseline), k_values=list(k_values),
         n_full_layers=len(full_layers), n_linear_layers=len(linear_layers),
         full_attention_exact=full_exact, linear_attention_exact=linear_exact,
         full_attention_masked=full_masked, linear_attention_masked=linear_masked,

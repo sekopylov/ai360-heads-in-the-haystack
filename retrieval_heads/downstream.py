@@ -375,7 +375,15 @@ def qa_ablation(
                            "prefill_chunk": prefill_chunk,
                            "enable_thinking": enable_thinking,
                            "chat_template": chat_template,
-                           "system_prompt": system_prompt, "by_k": {}}
+                           "system_prompt": system_prompt,
+                           # How the heads were chosen: the names are in `by_k`, but
+                           # without these a reader cannot tell under which conditions
+                           # (and argmax domain) they were selected.
+                           "threshold": scores.threshold,
+                           "pairing": getattr(scores, "pairing", None),
+                           "argmax_domain": (getattr(scores, "meta", None) or {}).get(
+                               "argmax_domain"),
+                           "by_k": {}}
     retrieval_ranked = scores.ranked_heads()
     pool, contaminated = control_pool(scores)
     if contaminated:
@@ -466,7 +474,12 @@ def cot_ablation(
                            "prefill_chunk": prefill_chunk,
                            "enable_thinking": enable_thinking,
                            "chat_template": chat_template,
-                           "system_prompt": system_prompt, "results": {}}
+                           "system_prompt": system_prompt,
+                           "threshold": scores.threshold,
+                           "pairing": getattr(scores, "pairing", None),
+                           "argmax_domain": (getattr(scores, "meta", None) or {}).get(
+                               "argmax_domain"),
+                           "results": {}}
 
     for cot in (False, True):
         variant = "cot" if cot else "answer_only"

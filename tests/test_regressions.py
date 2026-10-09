@@ -1361,6 +1361,26 @@ def test_aligned_credits_are_a_subset_of_the_loose_ones():
         assert strict[head] <= loose[head], (head, strict[head], loose[head])
 
 
+def test_credits_refuse_a_head_count_that_changes_mid_run():
+    """The accumulator used to silently restart, dropping everything counted so far.
+
+    `sink_t` then failed on a shape mismatch anyway, so the "tolerance" only ever
+    turned a loud error into a quiet loss of the tally.
+    """
+    from retrieval_heads.scoring import DecodeTrace, StepTrace, credits_from_trace
+    from tests.test_scoring import FakeSample, make_info, spike
+
+    sample = FakeSample([11, 7, 8, 12, 13], (1, 3))
+    info = make_info(num_layers=1, heads=2)
+    trace = DecodeTrace(prompt_len=5, steps=[
+        StepTrace(step=0, fed_token=1, predicted_token=7, attn={0: spike(2, 5, {0: 2})}),
+        # The same layer now reports one head instead of two.
+        StepTrace(step=1, fed_token=7, predicted_token=8, attn={0: spike(1, 6, {0: 2})}),
+    ])
+    with pytest.raises(ValueError, match="cannot change mid-run"):
+        credits_from_trace(trace, sample, info, pairing="next_step")
+
+
 def test_plot_task_cot_gets_a_figure_title():
     import matplotlib.pyplot as plt
 

@@ -248,6 +248,39 @@ def test_provenance_records_the_code_hash(monkeypatch):
     assert provenance()["code_sha256"] == "deadbeefdeadbeef"
 
 
+def test_mask_takes_capture_method_from_the_scores_not_the_parser():
+    """`mask` has no `--capture-method`; defaulting to "patch" mislabelled the run."""
+    from types import SimpleNamespace
+
+    from retrieval_heads.cli import resolve_detection_settings
+
+    # The flags `mask` actually has; it has no --capture-method by design.
+    mask_args = SimpleNamespace(system_prompt=None, no_chat_template=False, thinking=False)
+    scores = SimpleNamespace(meta={"config": {"capture_method": "output_attentions",
+                                             "threshold": 0.1}})
+    settings = resolve_detection_settings(mask_args, scores)
+    assert settings.capture_method == "output_attentions"
+
+    # Nothing recorded -> the historical default, not an exception.
+    settings = resolve_detection_settings(mask_args, SimpleNamespace(meta={}))
+    assert settings.capture_method == "patch"
+
+
+def test_code_sha256_covers_scripts_too(tmp_path):
+    """`SCALES` lives in scripts/, so a grid change must move the hash."""
+    driver = load_job_driver()
+    package = tmp_path / "retrieval_heads"
+    scripts = tmp_path / "scripts"
+    package.mkdir()
+    scripts.mkdir()
+    (package / "a.py").write_text("x = 1\n", encoding="utf-8")
+    (scripts / "job.py").write_text("SCALES = {}\n", encoding="utf-8")
+
+    before = driver.code_sha256(package, scripts)
+    (scripts / "job.py").write_text("SCALES = {'t4': 1}\n", encoding="utf-8")
+    assert driver.code_sha256(package, scripts) != before
+
+
 def test_every_command_only_reads_flags_its_parser_defines():
     """No `args.<flag>` a command reaches may be absent from its subparser.
 
