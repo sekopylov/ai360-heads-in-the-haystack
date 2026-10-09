@@ -79,7 +79,8 @@ def choose_block_list(args, attn_layers, n_heads, group_size=1):
     return [h for g in rng.sample(groups, k // group_size) for h in g]
 
 
-if __name__ == "__main__":
+def build_parser(argv=None):
+    """The parser of a run with the arguments of the task chosen in argv."""
     parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument('--model_path', type=str, required=True)
     parser.add_argument('--task', type=str, default="niah", choices=sorted(TASKS))
@@ -104,29 +105,38 @@ if __name__ == "__main__":
     parser.add_argument('--every', type=int, default=1, help='take every N-th sample')
     parser.add_argument('--dtype', type=str, default="auto")
     parser.add_argument('--with_metrics', action='store_true', help='start rh.metrics --follow --consume on the spool as a separate process')
-    task_class = TASKS[parser.parse_known_args()[0].task]
-    task_class.add_arguments(parser)
-    args = parser.parse_args()
-    if sum(bool(x) for x in (args.mask_top, args.mask_random, args.mask_random_groups)) > 1:
-        parser.error('--mask_top, --mask_random and --mask_random_groups are exclusive')
-    if args.mask_top and not args.mask_file:
-        parser.error('--mask_top needs --mask_file')
-    if args.mask_file and from_masked_run(args.mask_file):
-        parser.error(f'{args.mask_file} comes from a run with masked heads; the heads must be ranked by a run without a mask')
-    spool_dir = args.spool or f"{args.out}/spool"
+    TASKS[parser.parse_known_args(argv)[0].task].add_arguments(parser)
+    return parser
 
+
+def check(args, parser):
+    """The reason why this run must not start, or None."""
+    if sum(bool(x) for x in (args.mask_top, args.mask_random, args.mask_random_groups)) > 1:
+        return '--mask_top, --mask_random and --mask_random_groups are exclusive'
+    if args.mask_top and not args.mask_file:
+        return '--mask_top needs --mask_file'
+    if args.mask_file and from_masked_run(args.mask_file):
+        return f'{args.mask_file} comes from a run with masked heads; the heads must be ranked by a run without a mask'
     # the folder already holds a run: the same settings continue it, other settings would silently skip its samples
     # (their names repeat between runs) and mix two experiments
-    if os.path.exists(f"{spool_dir}/run.json"):
+    run_json = f"{args.spool or args.out + '/spool'}/run.json"
+    if os.path.exists(run_json):
         defaults = {k: parser.get_default(k) for k in vars(args)}
-        previous = spool.load_json(f"{spool_dir}/run.json").get("args", {})
-        conflict = settings_conflict(previous, json.loads(json.dumps(vars(args))), defaults)
+        conflict = settings_conflict(spool.load_json(run_json).get("args", {}), json.loads(json.dumps(vars(args))), defaults)
         if conflict:
-            parser.error(f"{args.out} holds a run with other settings, choose another --out. Differences (there, here): "
-                         + "; ".join(f"{k}: {a!r} / {b!r}" for k, (a, b) in conflict.items()))
+            return (f"{args.out} holds a run with other settings, choose another --out. Differences (there, here): "
+                    + "; ".join(f"{k}: {a!r} / {b!r}" for k, (a, b) in conflict.items()))
+    return None
 
+
+def execute(args, enc, model, attn_layers):
+    """
+    One run with a loaded model. Returns the counts of the samples: selected by the task and --every, generated now,
+    skipped as already done, and whether the loop reached the end.
+    """
+    import torch, transformers
     from . import model as rh_model
-    enc, model, attn_layers = rh_model.load(args.model_path, args.dtype)
+    spool_dir = args.spool or f"{args.out}/spool"
     stop = rh_model.stop_tokens(enc, model)
     n_heads = model.config.num_attention_heads
     group_size = n_heads // (getattr(model.config, "num_key_value_heads", None) or n_heads)
@@ -134,7 +144,7 @@ if __name__ == "__main__":
     mask = "top" if args.mask_top else "random" if args.mask_random else "random_groups" if args.mask_random_groups else "none"
     if block_list:
         print(f"masking {len(block_list)} heads ({mask}), head groups of {group_size}", flush=True)
-    task = task_class(enc, args)
+    task = TASKS[args.task](enc, args)
 
     done_ids = set()
     if os.path.exists(f"{args.out}/samples.jsonl"):
@@ -142,7 +152,6 @@ if __name__ == "__main__":
             done_ids = {json.loads(l)["id"] for l in f if l.strip()}
         print(f"{len(done_ids)} samples are already in {args.out}/samples.jsonl and will be skipped", flush=True)
 
-    import torch, transformers
     writer = spool.SpoolWriter(spool_dir, args.save, args.topk, args.buffer_gb, args.chunk_mb)
     if writer.pending_ids:
         print(f"{len(writer.pending_ids)} complete samples wait in the spool for the metrics and will be skipped", flush=True)
@@ -155,14 +164,18 @@ if __name__ == "__main__":
     if args.with_metrics:
         metrics = subprocess.Popen([sys.executable, "-m", "rh.metrics", spool_dir, "--out", args.out, "--follow", "--consume"])
 
-    taken, completed = 0, False
+    counts = {"selected": 0, "generated": 0, "skipped": 0, "completed": False}
     try:
         for n, sample in enumerate(task.samples()):
-            if n % args.every or sample.id in done_ids:
+            if n % args.every:
                 continue
-            if args.limit is not None and taken >= args.limit:
+            counts["selected"] += 1
+            if sample.id in done_ids:
+                counts["skipped"] += 1
+                continue
+            if args.limit is not None and counts["generated"] >= args.limit:
                 break
-            taken += 1
+            counts["generated"] += 1
             start_time = time.time()
             writer.start_sample(sample)
             output = []
@@ -176,9 +189,23 @@ if __name__ == "__main__":
                               stopped=bool(output) and output[-1] in stop, responses_at=responses_at)
             if metrics is None:
                 print(f"{sample.id}: {time.time() - start_time:.1f}s, {len(output)} tokens, {response[:70]!r}", flush=True)
-        completed = True
+        else:
+            counts["completed"] = True
     finally:
         # also after an error, so that the metrics do not wait for data that will never come
-        writer.end_run(completed)
+        writer.end_run(counts["completed"])
         if metrics is not None:
-            metrics.wait()
+            counts["metrics_exit_code"] = metrics.wait()
+    return counts
+
+
+if __name__ == "__main__":
+    parser = build_parser()
+    args = parser.parse_args()
+    problem = check(args, parser)
+    if problem:
+        parser.error(problem)
+    from . import model as rh_model
+    enc, model, attn_layers = rh_model.load(args.model_path, args.dtype)
+    counts = execute(args, enc, model, attn_layers)
+    sys.exit(counts.get("metrics_exit_code", 0))
