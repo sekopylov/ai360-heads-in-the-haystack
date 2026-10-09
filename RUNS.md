@@ -1180,6 +1180,36 @@ results/new/qwen3_mask/groups20/   20 случайных целыми групп
     2>&1 | tee source/logs/run_qwen3_mask_groups120.log
 ```
 
+### 8.9. Маска 20 лучших голов по другой метрике: масса внимания на игле
+
+Рейтинг голов берётся из `data/head_scores/head_scores_needle_attention_mass_v1.json` (файл Михаила: 1152 головы Qwen3-8B, 27 примеров на голову). Задача, длины и лимит ответа те же, что в 8.8, меняется только рейтинг. Результат пишется в отдельную папку, чтобы не смешиваться с `results/new/qwen3_mask/top20`, где 20 лучших по `copy_count`.
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file data/head_scores/head_scores_needle_attention_mass_v1.json \
+    --mask_top 20 \
+    --out results/new/qwen3_mask_attention_mass/top20 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_attention_mass_top20.log
+```
+
+Сравнение с прогоном без маски и с 20 лучшими по `copy_count`:
+
+```python
+!cd .. && .venv_new/bin/python -m rh.sweep \
+    results/new/qwen3_mask/none \
+    results/new/qwen3_mask/top20 \
+    results/new/qwen3_mask_attention_mass/top20
+```
+
 ## 9. Известные особенности
 
 - Перед первым запуском нужна папка `logs/`: без неё `tee` завершается с ошибкой, и ячейка падает уже после прогона.
