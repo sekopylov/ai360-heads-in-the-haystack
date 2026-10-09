@@ -487,6 +487,24 @@ def report_environment() -> None:
         print(f"[entry] GPU: {props.name} sm_{props.major}{props.minor} "
               f"{props.total_memory / 2**30:.1f} GiB | cuda {torch.version.cuda} | "
               f"{torch.cuda.device_count()} device(s)")
+        # The prefill runs through SDPA, which picks the flash kernel in bf16 -- but
+        # only if this GPU and this torch build support it.  The chunked-prefill
+        # memory bound assumes it does: on the math fallback the score matrix is
+        # materialised as (heads, chunk, seq), ~6.4 GB for the hybrid and ~12.9 GB for
+        # the dense model at 49K/8192.  The bootstrap job probed this on the L4; doing
+        # it here means every job's log answers it for the card it actually got,
+        # before the grid rather than after it.
+        try:
+            import torch.nn.attention as attn
+
+            with attn.sdpa_kernel(attn.SDPBackend.FLASH_ATTENTION):
+                q = torch.randn(1, 2, 64, 32, dtype=torch.bfloat16, device="cuda")
+                torch.nn.functional.scaled_dot_product_attention(q, q, q)
+            print("[entry] SDPA flash backend: ok")
+        except Exception as exc:  # noqa: BLE001 - report it, never fail the job here
+            print(f"[entry] SDPA flash backend: NOT available "
+                  f"({type(exc).__name__}: {exc}) -- bf16 SDPA will use another "
+                  f"backend and the chunked-prefill memory bound may not hold")
     else:
         print("[entry] GPU: none -- stages will run on CPU")
 
@@ -779,8 +797,13 @@ def stage_argv(
         # The paper's Fig. 1 needs the real attention rows and therefore a model, which
         # the driver already has resident at this point; `--scores` reuses the run's own
         # recorded conditions, and the per-model `--out` keeps two models' JSON apart.
+        # `--length 4096` (not the script's 1024 default) so the figure shows a needle
+        # further from the query than the trivial case, and `--max-new-tokens 96` so it
+        # generates under the same budget as the run it illustrates; the length cannot
+        # match a 1K-49K grid, and `store_rows` keeps every step's row, so a longer one
+        # would be the figure's whole cost.
         return [["--model", key, "--scores", str(runs[key]), "--out", str(runs[key]),
-                 *prompt_flags]
+                 "--length", "4096", "--max-new-tokens", "96", *prompt_flags]
                 for key in models]
     if stage == "figures":
         return [["figures", "--runs", *[str(p) for p in runs.values()],

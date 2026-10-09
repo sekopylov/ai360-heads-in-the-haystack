@@ -126,6 +126,9 @@ Artifacts and logs come back with
 `cuda-probe.yaml` (read-only `--inspect-dir` audit), `a100.yaml` (the `paper` grid on
 one A100 with 8192-token prefill chunks and a 96-token detect budget; the A100 costs 2.32x
 the L4 per hour, so it is for long-context runs, not for iteration),
+`a100-notemplate.yaml` (the same grid with the driver's `--no-chat-template`, i.e. the
+paper's sink geometry — the two are a controlled pair, and the README's sink bullet has
+the measured difference),
 `a100-preflight.yaml` (two lengths, `describe,detect` only — the cheap measurement of
 the hardware and of the argmax-domain/sink geometry the full run would otherwise
 gamble on), `a100-preflight-notemplate.yaml` (the same grid with the driver's
@@ -596,6 +599,11 @@ meaningful within a family.
   It is a share of scored *(head, step)* pairs, not of steps: `considered` is the same
   for every head of a layer, so the two readings differ whenever some heads point
   elsewhere.
+  **`figures` and `compare` read the primary domain only** (they load the historical
+  `scores_<pairing>` name), so the PDFs show the domain the run was configured for;
+  the per-domain comparison lives in `summary_*.json` (`sparsity_by_domain`,
+  `retrieval_pool_by_domain`, `domain_ranking_overlap`), in the
+  `scores_<pairing>_<domain>` sidecars, and in `summarize_results.py`'s notes.
 * **Where the attention sink sits relative to `x` changes the answer by an order of
   magnitude, and that is a property of the prompt, not of the model.**  Criterion (2)
   requires the argmax to be a *needle* token, so a sink at sequence position 0 that
@@ -724,7 +732,10 @@ meaningful within a family.
 * **Generation budget is now recorded on both sides.**  `detect` always had
   `n_instances_truncated` (11/75 on the hybrid at a 48-token budget); the ablations
   now carry `retrieval_truncated`/`random_truncated_mean` per K as well, because a
-  drop in F1 cannot otherwise be told apart from a budget that ran out.
+  drop in F1 cannot otherwise be told apart from a budget that ran out.  The counters
+  mean "hit the budget", not "wanted to continue": a generation whose *next* token
+  would have been EOS still counts as truncated, so they are an upper bound on the
+  instances that were actually cut short.
 * **The paper's Sec. 4.3 "intrinsic" experiment is not tested here.**  It needs a
   base model and a derivative of it (the paper fine-tunes one); this registry has
   no such pair, and the 0.93 cross-model number is a `sorted`-mode correlation of

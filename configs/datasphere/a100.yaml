@@ -28,32 +28,48 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 #     instances against 0.755 for the other 64 -- because the model answers and then
 #     keeps narrating, which is where the extra needle-token copies would come from.
 #     `mask` runs at the CLI's 32-token default otherwise, i.e. *tighter* than the
-#     48 the committed t4 tree used on the stage that carries the causal claim; 96
-#     costs roughly 10-20 extra minutes of decode over the whole stage.
+#     48 the committed t4 tree used on the stage that carries the causal claim.
 #   * `--preflight` for detect: all 270 prompts are built and validated (CPU only)
 #     before the first forward pass, because one prompt whose haystack cannot be
 #     located verbatim would otherwise abort the stage hours into the run.  The L4
 #     scales leave it off.
 #
+# Budget, in generations rather than adjectives (the arithmetic is checkable; the wall
+# clock is an estimate to refine from the preflight log):
+#   detect  270 instances per model (210 for the dense one), 1K-49K, 96 tokens each;
+#   mask    45 samples per point x [1 baseline + 6 K x (1 retrieval + 5 random)]
+#           = 1665 generations for the dense model, 1395 for the hybrid (its 0.01 and
+#           0.02 collapse to K=1, so five distinct points, not six);
+#   mixer   hybrid only: mixer_k = (1,2,4) x 3 trials x 2 stacks x 45 = 810.
+# So ~3.9k generations of 4-16K plus ~480 prefills of 1K-49K.  `--random-trials 5` is
+# the dominant multiplier (five sixths of the mask arms) and the mixer ablation is the
+# first thing to cut if the wall clock bites; both are recorded in the artifacts.
+#
+# Stage list: no `qa`/`cot`.  Their built-in sets are 8+8 hand-written items -- a
+# pipeline check worth a minute on the L4, not A100 time, and one item is 12.5 points
+# so they cannot support the paper's Sec. 5.3 claim either way.  A real measurement
+# needs `--data file.jsonl`; until then the downstream stage belongs on the cheap
+# grid (`t4-cached.yaml`), and `a100-resume.yaml` can add it to a finished A100 tree.
+#
 # Open decision the launcher must make: the sink geometry.  The `a100` scale pins
 # `--argmax-domain haystack` (the paper's `a in R^{|x|}`), but with the chat template
 # the attention sink at sequence position 0 sits *before* the haystack, so it can
-# never suppress criterion (2) and the >0.1 share inflates.  Measured on one
-# Qwen3-0.6B instance at 512 tokens: 173/448 heads above 0.1 with the template against
-# 13/448 with `--no-chat-template` (the paper's template-free geometry, where the sink
-# is the first haystack token); the same instance under `prompt` gives 34 and 5, and
-# the plain prompt cost needle recall on that instance (0.40 against 1.00).  So the
-# faithful geometry is `--no-chat-template`, but it is a different (and on a base
-# model, partly failing) task.  Add `--no-chat-template` to the detect flags below to
-# choose it; the run records `sink_in_haystack` either way.
+# never suppress criterion (2) and the >0.1 share inflates.  The measured pair is in
+# `a100-notemplate.yaml` (the same grid with `--no-chat-template`); in short, on the
+# CPU probe the dense model gives 38% of heads above 0.1 with the template and 6%
+# without -- but without it the same model recovers only 0.55 of the needle, while the
+# hybrid is 75-77% either way with recall 1.00.  So this config is the run comparable
+# with the committed `ds-results/` tree (same geometry, task solved), and
+# `a100-notemplate.yaml` is the paper-comparable one.  Launching both is the honest
+# option; whichever is run, say which and why in the results doc.
 #
 # Note the *domain* axis is no longer part of this decision: since round seven every
 # captured domain is scored in the same pass and written as its own matrix
-# (`scores_<pairing>_<domain>`), and the summary reports `sparsity_by_domain` and
-# `domain_ranking_overlap`.  The template axis is a property of the prompt, so it
-# cannot be derived from this run -- price it first with `a100-preflight.yaml`
-# (describe,detect at two lengths, ~minutes), which reports the same per-domain
-# matrices plus `sink_in_haystack` on the real grid.
+# (`scores_<pairing>_<domain>`), and the summary reports `sparsity_by_domain`,
+# `domain_ranking_overlap` and `retrieval_pool_by_domain`.  The template axis is a
+# property of the prompt, so it cannot be derived from this run -- price it first with
+# `a100-preflight.yaml` and `a100-preflight-notemplate.yaml` (describe,detect at two
+# lengths, ~minutes).
 #
 # Honest note on the grid: the paper's own detection grid is 20 lengths sampled
 # uniformly over 1K-50K (with 10 depths and 3 needle sets, ~600 instances per model);
@@ -83,7 +99,7 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 # finished tree, because `mask` is the stage that costs real money (45 samples per
 # point).
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages describe,detect,mask,qa,cot,compare,figures,case-study --out-prefix ds-results-a100
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100
 
 flags:
   - attach-project-disk

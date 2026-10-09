@@ -1,0 +1,66 @@
+name: rh-a100-notemplate
+desc: paper-scale grid on one A100 without the chat template -- the paper's geometry
+
+# Why this config exists
+# ----------------------
+# The sink geometry is a property of the *prompt*, not of the model, so it cannot be
+# derived from a template-on run: with a chat template position 0 is `<|im_start|>`,
+# which sits before the haystack and can never win criterion (2); the paper's
+# template-free prompt puts the context first, so position 0 is the first haystack
+# token and the sink eats the argmax.  `a100.yaml` is the template-on run (the one
+# comparable with the committed `ds-results/` tree); this is the paper-faithful one.
+# Everything else -- grid, chunks, budgets, preflight, stage list -- is identical, so
+# the two are a controlled pair.
+#
+# What the CPU probe says (3 instances per model, 512 tokens, 96-token budget, fp32;
+# the README carries the same table):
+#
+#   model          template  haystack >0.1  prompt >0.1  sink in x  recall  pool
+#   Qwen3-0.6B     yes       170/448 (38%)   34/448 (8%)   no        1.00    278
+#   Qwen3-0.6B     no         26/448  (6%)   18/448 (4%)   yes       0.55    422
+#   Qwen3.5-0.8B   yes        37/48  (77%)   35/48 (73%)   no        1.00     11
+#   Qwen3.5-0.8B   no         36/48  (75%)   35/48 (73%)   yes       1.00     12
+#
+# Read it as: the dense model's 38% is a *template artifact* -- in this geometry it is
+# 6%, inside the paper's quoted 3-6% band -- but here the same model recovers only
+# 0.55 of the needle, so that share is measured on a model that is partly failing the
+# task (report `sparsity_recited` and `n_instances_recited` beside it, and expect a
+# lower masking baseline than the committed tree's 94.3 F1).  The hybrid is
+# template-insensitive (75-77%, recall 1.00 either way), so its non-sparsity is
+# architectural and this run should reproduce it.
+#
+# Which to launch: both is the honest answer, and they answer different questions
+# (paper comparability vs task success).  If only one, this is the paper's geometry
+# and `a100.yaml` is the one comparable with the committed tree -- say which was run
+# and why in the results doc.  The two preflights
+# (`a100-preflight.yaml`/`a100-preflight-notemplate.yaml`) measure the same axes at
+# 1024/4096 for minutes and should be launched first.
+
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --no-chat-template --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100-notemplate
+
+flags:
+  - attach-project-disk
+
+inputs:
+  - models:
+      var: WEIGHTS
+
+outputs:
+  - ds-results-a100-notemplate
+
+env:
+  vars:
+    PYTORCH_ALLOC_CONF: expandable_segments:True
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+
+cloud-instance-types:
+  - g2.1               # 28 vCPU, 1x A100 80 GB

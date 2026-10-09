@@ -223,6 +223,22 @@ def detection_section(root: Path, keys: list[str]) -> list[str]:
                         f"by the primary domain, so this is how much a domain change "
                         f"would change what it masks)"
                     )
+            # The random arm's pool: `mask` draws its control from heads at or below the
+            # threshold, so this is the number that decides whether the causal curve can
+            # separate its arms -- and it is what the A100 preflight is read for.
+            pools = at(summary, "retrieval_pool_by_domain") or {}
+            if pools:
+                parts = []
+                for name, data in sorted(pools.items()):
+                    parts.append(f"`{name}` {at(data, 'n_pool')}/{at(data, 'n_heads')}")
+                first = next(iter(pools.values()))
+                notes.append(
+                    f"- `{key}`/{pairing}: the random arm's pool (heads at or below "
+                    f"{fmt(at(first, 'threshold'))}) by argmax domain: "
+                    + ", ".join(parts)
+                    + " -- `mask` draws its control from it, and a pool of a few heads "
+                      "collapses every large-K point into the same intervention"
+                )
             if at(summary, "sparsity_recited"):
                 rec = at(summary, "sparsity_recited")
                 rec_buckets = at(rec, "thresholds", {}) or {}

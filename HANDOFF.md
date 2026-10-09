@@ -83,6 +83,46 @@ tied to a job id) → this file (where things stand and what is left).
   exact-match, recall, prefix-recall and the *generated texts*) and the same for
   each random trial, so a specific failure can be inspected from the artifact
   instead of only its mean.
+* **Review round (the ninth report, pre-A100), verified against the code:**
+  * **The launch geometry was the real finding, and it is now a controlled pair.**
+    `a100.yaml` pinned `--argmax-domain haystack` *with* the chat template, i.e. the
+    geometry the project itself calls inflated.  The reviewer is right, and the fix is
+    not to pick silently: `configs/datasphere/a100-notemplate.yaml` is the same grid
+    with `--no-chat-template` (the paper's geometry), the two configs carry the measured
+    probe table and say what each is comparable with, and the README's launch advice is
+    to run both or to state which and why.  `a100.yaml` now also says it is the run
+    comparable with the committed tree.
+  * **The flash-backend probe runs in every job now.**  It lived only in the bootstrap
+    job (an L4), while the chunked-prefill memory argument depends on flash being
+    available on the card that actually runs; `report_environment()` prints it for the
+    card it got, before the grid.  The reviewer's other half -- that the preflight's
+    1024/4096 lengths never touch the 49K/8192 regime -- is what step 2 of the launch
+    sequence is for (the preflight is a decision aid, not a memory soak test).
+  * **`qa`/`cot` are out of the A100 stage list.**  Two reviewers flagged 8+8
+    hand-written items on 542.88 RUB/hour: a pipeline check the L4 already exercises,
+    and one item is 12.5 points so it cannot support Sec. 5.3 either way.  A real
+    measurement needs `--data file.jsonl`; the config comments say so and
+    `a100-resume.yaml` mirrors the new tail (`compare,figures,case-study`).
+  * **The budget is stated as arithmetic, not adjectives.**  `a100.yaml` now carries the
+    generation counts (detect 270/model; mask 1665 dense / 1395 hybrid; mixer 810
+    hybrid ~ 3.9k generations of 4-16K plus 480 prefills) and names `--random-trials 5`
+    as the dominant multiplier and the mixer ablation as the first thing to cut.  The
+    reviewer's own 2475 omitted the hybrid's mask arm; the counts are now checkable in
+    the config rather than estimated in prose.
+  * **`run-in-datasphere.md` was three rounds stale** -- "3 needles x 5 depths = 15
+    samples" (it is 3 lengths x 5 x 3 = 45), "the CLI default is 3x5x1 = 15" (it is
+    1x5x1 = 5), and the pre-round-eight truncation numbers (0.684/0.793 -> 0.671/0.755).
+    Fixed, plus a new checklist step: preflight both geometries *before* paying for the
+    grid.
+  * **Smaller:** `summarize_results.py` prints `retrieval_pool_by_domain` (the number
+    the preflight configs point at); the `case-study` stage runs at `--length 4096
+    --max-new-tokens 96` instead of the script's 1024/32 defaults, so Fig. 1 uses the
+    run's generation regime; the README states that `figures`/`compare` draw the
+    primary domain only (the per-domain comparison is in the summary and the notes) and
+    that the truncation counters mean "hit the budget", not "wanted to continue".
+  * **Process note, and my mistake:** the reviewer saw the repo move under it
+    (`5caa54f` -> `34646cd` plus an uncommitted test file) because I kept working while
+    it read.  Future rounds: commit and stop touching the tree while a reviewer runs.
 * **Review round (the eighth report, pre-A100), verified against the code:**
   * **`mask` on the A100 ran at 32 tokens while `detect` ran at 96 -- fixed.**  The
     reviewer is right that the stage carrying the causal claim was generating with the
@@ -776,19 +816,25 @@ Ordered by how expensive they were to rediscover.
    `n_instances_recited`/`mean_needle_recall`.  The CPU probe already predicts them
    (README's sink-geometry bullet: dense 38% with the template vs 6% without, hybrid
    75-77% either way, pool 11-12 for the hybrid) -- the preflight's job is to confirm
-   them at 1024/4096 tokens, where the context is longer than the probe's 512.
+   them at 1024/4096 tokens, where the context is longer than the probe's 512.  Its log
+   now also prints the SDPA flash-backend probe for the card it actually got.
 3. **Decide the geometry.**  Both are defensible and they answer different questions:
    with the template the models solve the task (recall 1.00) and the dense model's
    share is inflated by the sink; without it the dense share lands in the paper's
    3-6% band but the dense model recovers only ~0.55 of the needle.  Reporting both
    is the honest option; if only one is run, say which and why in the results doc.
-4. **Launch `a100.yaml`** (the full grid; it pins `--argmax-domain haystack`,
-   `--max-new-tokens 96` for detect *and* mask, `--preflight`, and runs
-   `describe,detect,mask,qa,cot,compare,figures,case-study`).  `--no-chat-template` can
-   be added to the driver's cmd line for the other geometry.
+4. **Launch the full grid**: `a100.yaml` (chat template, comparable with the committed
+   `ds-results/` tree) or `a100-notemplate.yaml` (the paper's geometry) -- identical
+   grids, so they are a controlled pair.  Both pin `--argmax-domain haystack`,
+   `--max-new-tokens 96` for detect *and* mask, `--preflight`, and run
+   `describe,detect,mask,compare,figures,case-study`; `qa`/`cot` are deliberately
+   *not* in the A100 list (8+8 hand-written items are a pipeline check, not A100
+   time -- a real measurement needs `--data file.jsonl`, and the cheap grid already
+   exercises the stage).
 5. **If a late stage fails**, stage the downloaded tree as `ds-a100-resume/` and launch
-   `a100-resume.yaml` -- it re-runs only `qa,cot,compare,figures`, because `mask` is
-   the stage that costs real money (45 samples per point x 6 K x 6 arms).
+   `a100-resume.yaml` -- it re-runs only `compare,figures,case-study`, because `mask`
+   is the stage that costs real money (45 samples per point x 6 K x 6 arms ~ 1.4-1.7k
+   generations per model, plus the hybrid's 810 mixer generations).
 
 Each item below says what to do, not just what is missing.  Everything that could be
 finished offline is done, including round six (the `haystack` argmax domain and its

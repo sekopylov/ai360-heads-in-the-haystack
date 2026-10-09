@@ -1,5 +1,5 @@
 name: rh-a100-resume
-desc: remaining stages (qa,cot,compare,figures) on the A100, reusing a finished a100 run's detect/mask
+desc: remaining stages (compare,figures,case-study) on the A100, reusing a finished a100 run's detect/mask
 
 # Why this config exists
 # ----------------------
@@ -8,6 +8,11 @@ desc: remaining stages (qa,cot,compare,figures) on the A100, reusing a finished 
 # stage must not cost the heavy stages again.  `t4-resume.yaml` is the same idea for the
 # L4 scale; this is its A100 counterpart, and it exists because the a100 tree has a
 # different `--out-prefix` and scale, which `t4-resume.yaml` hard-codes.
+#
+# Its stage list is the *tail* of `a100.yaml`/`a100-notemplate.yaml`: those two no
+# longer run `qa`/`cot` (8+8 hand-written items are a pipeline check, not A100 time),
+# so this one does not either.  Add them here -- with `--data file.jsonl` to make them
+# a measurement -- if a finished A100 tree needs the downstream stage.
 
 # How the previous artifacts reach the job
 # ----------------------------------------
@@ -23,7 +28,7 @@ desc: remaining stages (qa,cot,compare,figures) on the A100, reusing a finished 
 #   cp -r <downloaded>/ds-results-a100/. ds-a100-resume/
 # (`ds-a100-resume/` is gitignored.)
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages qa,cot,compare,figures --out-prefix ds-a100-resume
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages compare,figures,case-study --out-prefix ds-a100-resume
 
 flags:
   - attach-project-disk
