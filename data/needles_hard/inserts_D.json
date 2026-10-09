@@ -1,0 +1,18 @@
+{
+  "_roles": "distractor: a competing record, its facts mean confusion; value: a part of the right answer, its facts are in answer_key",
+  "inserts": {
+    "beiqing":   {"role": "distractor", "text": "The best thing to do in Beiqing is to take a walk in Lanxi Park and have a cup of Cappuccino in the evening.", "facts": [["Lanxi Park", "Lanxi"], ["Cappuccino"]]},
+    "beijiang":  {"role": "distractor", "text": "The best thing to do in Beijiang is to take a walk in Songmu Park and have a cup of Latte in the evening.", "facts": [["Songmu Park", "Songmu"], ["Latte"]]},
+    "beixing":   {"role": "distractor", "text": "The best thing to do in Beixing is to take a walk in Hexin Park and have a cup of Mocha in the evening.", "facts": [["Hexin Park", "Hexin"], ["Mocha"]]},
+    "beiling":   {"role": "distractor", "text": "The best thing to do in Beiling is to take a walk in Yunbo Park and have a cup of Americano in the evening.", "facts": [["Yunbo Park", "Yunbo"], ["Americano"]]},
+    "beijing_value_2": {"role": "value", "text": "Another great thing to do in Beijing is to rent a bicycle at Mingshui Lake and try a bowl of sesame noodles at noon.", "facts": [["Mingshui Lake", "Mingshui"], ["sesame noodles"]]},
+    "beijing_value_3": {"role": "value", "text": "One more great thing to do in Beijing is to climb Taolin Hill and drink a glass of pear juice at sunrise.", "facts": [["Taolin Hill", "Taolin"], ["pear juice"]]},
+    "shanghai":  {"role": "value", "text": "The best thing to do in Shanghai is to take a walk in Jinhua Garden and have a cup of Matcha in the morning.", "facts": [["Jinhua Garden", "Jinhua"], ["Matcha"]]}
+  },
+  "levels": {
+    "D1_2":  {"placement": "random", "use": ["beiqing"]},
+    "D1_5":  {"placement": "random", "use": ["beiqing", "beijiang", "beixing", "beiling"]},
+    "D2":    {"placement": "random", "use": ["beijing_value_2", "beijing_value_3"]},
+    "D3":    {"placement": "random", "use": ["shanghai"]}
+  }
+}

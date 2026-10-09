@@ -1,0 +1,26 @@
+{
+  "distractors": {
+    "shanghai": {
+      "text": "The best thing to do in Shanghai is to take a walk in Jinhua Garden and have a cup of Matcha in the morning.",
+      "facts": [["Jinhua Garden", "Jinhua"], ["Matcha"]]
+    },
+    "chengdu": {
+      "text": "The best thing to do in Chengdu is to visit Qinglan Temple and have a bowl of Dandan noodles at noon.",
+      "facts": [["Qinglan Temple", "Qinglan"], ["Dandan noodles", "Dandan"]]
+    },
+    "xian": {
+      "text": "The best thing to do in Xi'an is to cycle along Liwen Wall and have a glass of plum juice at night.",
+      "facts": [["Liwen Wall", "Liwen"], ["plum juice"]]
+    },
+    "beijing_worst": {
+      "text": "The worst thing to do in Beijing is to drive through Dongsi Road and have a can of cold soda at rush hour.",
+      "facts": [["Dongsi Road", "Dongsi"], ["cold soda", "soda"]]
+    }
+  },
+  "levels": {
+    "B1": {"placement": "far", "use": ["shanghai"]},
+    "B2": {"placement": "random", "use": ["shanghai", "chengdu", "xian"]},
+    "B3": {"placement": "near", "use": ["shanghai", "chengdu", "xian"]},
+    "B4": {"placement": "near", "use": ["beijing_worst"]}
+  }
+}
