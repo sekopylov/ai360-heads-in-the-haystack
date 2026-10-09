@@ -307,6 +307,11 @@ def test_haystack_domain_is_a_lower_bound_of_the_prompt_domain(qwen3):
                               argmax_domain="haystack")
     prompt = score_instance(model, info, sample, tokenizer, max_new_tokens=24,
                             argmax_domain="prompt")
+    # `full` adds generated positions, so it is the *other* end of the ordering: a
+    # generated position with a larger value takes the argmax away from the needle
+    # (a tie does not -- prompt positions come first).
+    full = score_instance(model, info, sample, tokenizer, max_new_tokens=24,
+                          argmax_domain="full")
 
     assert haystack.meta["argmax_domain"] == "haystack"
     assert haystack.meta["argmax_span"] == list(sample.haystack_span)
@@ -322,10 +327,18 @@ def test_haystack_domain_is_a_lower_bound_of_the_prompt_domain(qwen3):
             f"{head}: the haystack domain lost credit ({haystack.scores['next_step'][key]} < "
             f"{prompt.scores['next_step'][key]}); the span is not a subset of the prompt"
         )
+        assert prompt.scores["next_step"][key] >= full.scores["next_step"][key] - 1e-9, (
+            f"{head}: the prompt domain lost credit against `full` "
+            f"({prompt.scores['next_step'][key]} < {full.scores['next_step'][key]}); a "
+            f"generated position cannot be inside the needle span"
+        )
         # The prompt domain comes out of the *same* pass, so the sidecar must equal a
         # run that was configured for it: the alternative is captured, not re-derived.
         assert haystack.scores_by_domain["prompt"]["next_step"][key] == pytest.approx(
             prompt.scores["next_step"][key]
+        ), head
+        assert haystack.scores_by_domain["full"]["next_step"][key] == pytest.approx(
+            full.scores["next_step"][key]
         ), head
     # The sink diagnostic is domain-independent: it is the same prompt argmax.
     assert haystack.sink_rate["next_step"]["__overall__"] == pytest.approx(
