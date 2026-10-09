@@ -800,6 +800,380 @@ for folder in sorted(glob.glob("results/graph/Qwen1.5-14B-Chat*")):
 
 На что смотреть при выборе: наименьший лимит, при котором `truncated` близко к нулю, а порядок голов уже не отличается от самого большого. Число ответов, упёршихся в предел 256, есть в сводке прогона (`truncated_at_cap`).
 
+### 8.9. Перебор числа отключённых голов
+
+Оценочная игла, 200 примеров на запуск, внимание не сохраняется. Головы — из детекции (`results/new/qwen3_detect`).
+
+Число голов: 20, 40, 60, 80, 100, 120 — это от 1,7% до 10,4% из 1152 голов Qwen3-8B. Все значения кратны 4, размеру группы голов с общими ключами и значениями.
+
+Три вида маски на каждое число:
+
+| Вид | Аргумент | Какие головы |
+|---|---|---|
+| лучшие | `--mask_top K` | первые K голов по скору детекции |
+| случайные россыпью | `--mask_random K` | K случайных голов вне 100 лучших, по всей модели |
+| случайные группами | `--mask_random_groups K` | K/4 случайных групп целиком, без групп, где есть лучшие головы |
+
+Плюс один запуск без маски — ячейка «Без маски» из раздела 8.3 (`results/new/qwen3_mask_none`). Всего 19 запусков. Случайные головы выбираются один раз на запуск, `--seed 0` по умолчанию; для второго набора случайных голов — другой `--seed` и другая папка `--out`.
+
+Если времени мало, сначала 20, 60 и 120: это 10 запусков, и по ним уже видна форма кривой.
+
+Сводная таблица по всем запускам, без GPU:
+
+```python
+!cd .. && .venv_new/bin/python -m rh.sweep results/new/qwen3_mask_*
+```
+
+С `--limit 128` ответы оцениваются обрезанными на этом лимите.
+
+#### Лучшие головы
+
+20 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_top 20 \
+    --out results/new/qwen3_mask_top20 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_top20.log
+```
+
+40 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_top 40 \
+    --out results/new/qwen3_mask_top40 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_top40.log
+```
+
+60 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_top 60 \
+    --out results/new/qwen3_mask_top60 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_top60.log
+```
+
+80 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_top 80 \
+    --out results/new/qwen3_mask_top80 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_top80.log
+```
+
+100 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_top 100 \
+    --out results/new/qwen3_mask_top100 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_top100.log
+```
+
+120 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_top 120 \
+    --out results/new/qwen3_mask_top120 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_top120.log
+```
+
+#### Случайные россыпью
+
+20 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random 20 \
+    --out results/new/qwen3_mask_random20 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_random20.log
+```
+
+40 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random 40 \
+    --out results/new/qwen3_mask_random40 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_random40.log
+```
+
+60 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random 60 \
+    --out results/new/qwen3_mask_random60 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_random60.log
+```
+
+80 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random 80 \
+    --out results/new/qwen3_mask_random80 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_random80.log
+```
+
+100 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random 100 \
+    --out results/new/qwen3_mask_random100 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_random100.log
+```
+
+120 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random 120 \
+    --out results/new/qwen3_mask_random120 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_random120.log
+```
+
+#### Случайные группами
+
+20 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random_groups 20 \
+    --out results/new/qwen3_mask_groups20 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_groups20.log
+```
+
+40 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random_groups 40 \
+    --out results/new/qwen3_mask_groups40 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_groups40.log
+```
+
+60 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random_groups 60 \
+    --out results/new/qwen3_mask_groups60 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_groups60.log
+```
+
+80 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random_groups 80 \
+    --out results/new/qwen3_mask_groups80 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_groups80.log
+```
+
+100 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random_groups 100 \
+    --out results/new/qwen3_mask_groups100 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_groups100.log
+```
+
+120 голов:
+
+```python
+!mkdir -p logs
+!cd .. && .venv_new/bin/python -u -m rh.run \
+    --model_path Qwen/Qwen3-8B \
+    --task niah \
+    --needles data/needles_eval.jsonl \
+    --s_len 1000 \
+    --e_len 30000 \
+    --context_intervals 20 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random_groups 120 \
+    --out results/new/qwen3_mask_groups120 \
+    --with_metrics \
+    2>&1 | tee source/logs/run_qwen3_mask_groups120.log
+```
+
 ## 9. Известные особенности
 
 - Перед первым запуском нужна папка `logs/`: без неё `tee` завершается с ошибкой, и ячейка падает уже после прогона.

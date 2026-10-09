@@ -40,15 +40,30 @@ def ranked_heads(path):
     return [[int(i) for i in k.split("-")] for k in ranked]
 
 
-def choose_block_list(args, attn_layers, n_heads):
+def choose_block_list(args, attn_layers, n_heads, group_size=1):
+    """
+    The heads to mask, the same for every sample of the run.
+    --mask_top K: the K best heads of --mask_file.
+    --mask_random K: K random heads outside the best ones, scattered over the model.
+    --mask_random_groups K: K random heads taken as whole groups of heads that share keys and values (grouped-query
+    attention; a group is `group_size` neighbouring heads of a layer); groups with one of the best heads are left out.
+    The best heads that random heads avoid are the first max(100, K) of --mask_file.
+    """
     if args.mask_top:
         return ranked_heads(args.mask_file)[:args.mask_top]
+    k = args.mask_random or args.mask_random_groups
+    if not k:
+        return None
+    best = {tuple(h) for h in ranked_heads(args.mask_file)[:max(100, k)]} if args.mask_file else set()
+    rng = random.Random(args.seed)
     if args.mask_random:
-        # random heads outside the best ones, the same for every sample of the run
-        best = {tuple(h) for h in ranked_heads(args.mask_file)[:max(100, args.mask_random)]} if args.mask_file else set()
         heads = [[l, h] for l in attn_layers for h in range(n_heads) if (l, h) not in best]
-        return random.Random(args.seed).sample(heads, args.mask_random)
-    return None
+        return rng.sample(heads, k)
+    if k % group_size:
+        raise ValueError(f"--mask_random_groups {k} is not a multiple of the group size {group_size}")
+    groups = [[[l, h] for h in range(g, g + group_size)] for l in attn_layers for g in range(0, n_heads, group_size)]
+    groups = [g for g in groups if not any(tuple(h) in best for h in g)]
+    return [h for g in rng.sample(groups, k // group_size) for h in g]
 
 
 if __name__ == "__main__":
@@ -69,6 +84,8 @@ if __name__ == "__main__":
     parser.add_argument('--mask_file', type=str, default=None, help='head_score json that ranks the heads')
     parser.add_argument('--mask_top', type=int, default=0, help='mask this number of the best heads of --mask_file')
     parser.add_argument('--mask_random', type=int, default=0, help='mask this number of random heads outside the best 100 of --mask_file')
+    parser.add_argument('--mask_random_groups', type=int, default=0,
+                        help='mask this number of random heads taken as whole groups that share keys and values, outside the groups of the best heads')
     parser.add_argument('--seed', type=int, default=0, help='seed of the random heads')
     parser.add_argument('--limit', type=int, default=None, help='stop after this number of samples')
     parser.add_argument('--every', type=int, default=1, help='take every N-th sample')
@@ -77,8 +94,8 @@ if __name__ == "__main__":
     task_class = TASKS[parser.parse_known_args()[0].task]
     task_class.add_arguments(parser)
     args = parser.parse_args()
-    if args.mask_top and args.mask_random:
-        parser.error('--mask_top and --mask_random are exclusive')
+    if sum(bool(x) for x in (args.mask_top, args.mask_random, args.mask_random_groups)) > 1:
+        parser.error('--mask_top, --mask_random and --mask_random_groups are exclusive')
     if args.mask_top and not args.mask_file:
         parser.error('--mask_top needs --mask_file')
     if args.mask_file and from_masked_run(args.mask_file):
@@ -88,7 +105,12 @@ if __name__ == "__main__":
     from . import model as rh_model
     enc, model, attn_layers = rh_model.load(args.model_path, args.dtype)
     stop = rh_model.stop_tokens(enc, model)
-    block_list = choose_block_list(args, attn_layers, model.config.num_attention_heads)
+    n_heads = model.config.num_attention_heads
+    group_size = n_heads // (getattr(model.config, "num_key_value_heads", None) or n_heads)
+    block_list = choose_block_list(args, attn_layers, n_heads, group_size)
+    mask = "top" if args.mask_top else "random" if args.mask_random else "random_groups" if args.mask_random_groups else "none"
+    if block_list:
+        print(f"masking {len(block_list)} heads ({mask}), head groups of {group_size}", flush=True)
     task = task_class(enc, args)
 
     done_ids = set()
@@ -104,7 +126,7 @@ if __name__ == "__main__":
     done_ids |= writer.pending_ids
     limits = sorted({l for l in args.limits if l < args.max_new_tokens} | {args.max_new_tokens})
     writer.start_run({"args": vars(args), "attn_layers": attn_layers, "block_list": block_list, "stop_tokens": sorted(stop),
-                      "limits": limits,
+                      "limits": limits, "mask": mask, "group_size": group_size,
                       "torch": torch.__version__, "transformers": transformers.__version__})
     metrics = None
     if args.with_metrics:
