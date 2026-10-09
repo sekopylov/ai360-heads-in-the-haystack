@@ -470,18 +470,27 @@ def test_match_masks_is_safe_for_a_position_beyond_the_prompt():
     assert credits == {0}
 
 
-def test_prompt_credit_survives_the_haystack_domain():
-    """The domain bound is one-way and it is a theorem, ties included.
+def test_the_three_domains_are_ordered_by_credit():
+    """The domain ordering is a theorem, ties included, and it is one-way.
 
-    The haystack span is a subset of the prompt and contains the needle, so if the
-    prompt argmax is a needle position then it is *also* the first maximum inside the
-    haystack: an earlier position in the span tied with it would have been the prompt
-    argmax instead.  Credit can therefore only be gained when moving to `haystack`,
-    never lost -- even under bf16, where ties are common.  The reverse is false (a
-    template token can win the prompt argmax), which is why the committed prompt-domain
-    numbers are a lower bound.
+    Writing `credit(D)` for the heads criterion (2) credits under position set `D`:
 
-    Rows are quantised so that exact ties actually occur in the sample.
+        credit(haystack)  ⊇  credit(prompt)  ⊇  credit(full)
+
+    * `haystack` ⊆ `prompt` and the needle lies inside the haystack, so if the prompt
+      argmax is a needle position it is also the *first* maximum inside the span (an
+      earlier tied position inside the span would have been the prompt argmax
+      instead).  Credit can only be gained, never lost -- even under bf16, where ties
+      are common.
+    * `full` ⊇ `prompt` adds generated positions, and a generated position with a
+      strictly larger value takes the argmax away from the needle (a tie does not:
+      prompt positions come first, so the earlier maximum still wins).  So credit can
+      only be lost.
+
+    The reverse directions fail, which is why the committed `prompt`-domain numbers
+    are a lower bound on retrieval and an upper bound on the `full` domain.
+    Rows are quantised so that exact ties actually occur in the sample, and the row is
+    longer than the prompt so the generated positions exist.
     """
     from retrieval_heads.scoring import StepTrace
 
@@ -490,7 +499,7 @@ def test_prompt_credit_survives_the_haystack_domain():
     info = make_info(num_layers=1, heads=4)
     ties = 0
     for _ in range(40):
-        row = (torch.rand(4, 5) * 3).round() / 3        # few distinct values -> ties
+        row = (torch.rand(4, 7) * 3).round() / 3        # few distinct values -> ties
         ties += int(row.numel() - row.unique().numel())
         attn = {0: row.unsqueeze(0).unsqueeze(2)}
         by_domain = {
@@ -506,8 +515,9 @@ def test_prompt_credit_survives_the_haystack_domain():
         credits = {
             domain: credits_from_trace(trace, sample, info, pairing="next_step",
                                        domain=domain)[0]
-            for domain in ("prompt", "haystack")
+            for domain in ("prompt", "full", "haystack")
         }
         for head in info.scoreable_heads:
+            assert credits["full"][head] <= credits["prompt"][head], (head, row.tolist())
             assert credits["prompt"][head] <= credits["haystack"][head], (head, row.tolist())
     assert ties > 0, "the quantisation produced no ties, so the tie case is untested"

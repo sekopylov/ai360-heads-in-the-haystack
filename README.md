@@ -615,8 +615,26 @@ meaningful within a family.
   Note that the per-domain matrices do **not** remove this axis: the template decides
   whether position 0 is inside `x` at all, so `haystack`-with-template and
   `haystack`-without are different measurements, not two readings of one.  The A100
-  preflight (`configs/datasphere/a100-preflight.yaml`) exists to price that axis
+  preflight (`configs/datasphere/a100-preflight.yaml`, plus
+  `a100-preflight-notemplate.yaml` for the other geometry) exists to price that axis
   before the full grid.
+  **Three instances per model, 512 tokens, 96-token budget, CPU fp32** (a probe, not
+  the grid, but two models rather than one) give the same picture and add the domain
+  ordering -- `haystack` ⊇ `prompt` ⊇ `full`, which is a theorem rather than a
+  measurement (`test_scoring.py::test_the_three_domains_are_ordered_by_credit`):
+
+  | model | `haystack` >0.1 | `prompt` >0.1 | `full` >0.1 | pool (`haystack`) |
+  |---|---|---|---|---|
+  | Qwen3-0.6B | 170/448 (38%) | 34/448 (8%) | 32/448 (7%) | 278 |
+  | Qwen3.5-0.8B | 37/48 (77%) | 35/48 (73%) | 31/48 (65%) | **11** |
+
+  `sink_in_haystack` was `False` for all six instances (the chat template puts the
+  sink before `x`), and the argmax moved on 90.0% of the dense model's scored
+  `(layer, head, step)` positions against 38.8% of the hybrid's.  The last column is
+  the number that matters for the causal stage: `mask` draws its random arm from heads
+  at or below the threshold, so the hybrid has 11 usable control heads under
+  `haystack` (13 under `prompt`) -- the K grid `0.01 … 0.33` resolves to 1, 2, 4, 8,
+  16 there, and everything from K=11 up is the whole pool in one intervention.
 * **The random control is drawn from the non-retrieval pool, as the paper does.**
   `tex-src` says "masking out random *non-retrieval* heads" (intro and Sec. 4), and
   `control_pool` implements exactly that: everything above the threshold is

@@ -143,7 +143,20 @@ tied to a job id) → this file (where things stand and what is left).
     shrinks as the `>0.1` share grows (33/48 heads above 0.1 under `prompt` leaves 15),
     so under `haystack` the `mask` curve may degenerate.  That is what the two preflights
     are for; the artifact already records `control_exhausted`,
-    `random_control_contaminated`, `k_effective` and `random_retrieval_overlap`.
+    `random_control_contaminated`, `k_effective` and `random_retrieval_overlap`.  Then
+    *measured* it offline instead of leaving it to the preflight (3 instances per model,
+    512 tokens, 96-token budget, CPU fp32, `detect --preflight` into `.tmp/`):
+    dense `haystack` 170/448 (38%) vs `prompt` 34/448 (8%) vs `full` 32/448 (7%), pool
+    278; hybrid 37/48 (77%) / 35/48 (73%) / 31/48 (65%), **pool 11** (13 under
+    `prompt`).  `sink_in_haystack` false for all six; the argmax moved on 90.0% of the
+    dense model's scored positions against 38.8% of the hybrid's.  So the pool shrinks
+    (13 -> 11) but does not vanish, the hybrid's K grid resolves to 1/2/4/8/16 and
+    everything from K=11 is the whole pool, and the dense model's `haystack` share is
+    nowhere near the paper's 3-6% *with a chat template*.  Recorded in the README with
+    the ordering `haystack` ⊇ `prompt` ⊇ `full`, now pinned as a theorem in
+    `test_scoring.py::test_the_three_domains_are_ordered_by_credit` (40 quantised rows,
+    ties included), and `summary_*.json` carries `retrieval_pool_by_domain` so the
+    preflight answers the pool question without arithmetic.
   * Also left deliberately: `qa`/`cot` stay on the A100 (minutes against hours, and they
     complete the tree), and the dense model's two longest lengths stay dropped (its
     40960-token window is a model property; changing the grid would break "same grid as
