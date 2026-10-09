@@ -489,12 +489,22 @@ def build_model_info(model: nn.Module, config: Any, *, path: str, name: str | No
     # would be empty and `n_all_heads` would quietly change the published numbers.
     num_layers = int(getattr(tcfg, "num_hidden_layers", 0) or 0)
     if num_layers:
-        missing = sorted(set(range(num_layers)) - (set(attention) | set(linear)))
+        discovered = set(attention) | set(linear)
+        missing = sorted(set(range(num_layers)) - discovered)
         if missing:
             raise RuntimeError(
                 f"layers {missing} have neither a scoreable attention module nor a "
                 f"recognised token mixer (unknown class name?); refusing to describe "
                 f"the model as if those layers did not exist"
+            )
+        beyond = sorted(layer for layer in discovered if layer >= num_layers)
+        if beyond:
+            # An MTP block, an auxiliary stack, or a wrong `num_hidden_layers` would
+            # otherwise reach `empty_matrix`/`aggregate_scores`, which index
+            # `(num_layers, max_heads)` and fail with an unhelpful IndexError.
+            raise RuntimeError(
+                f"modules report layer_idx {beyond} but the config says num_hidden_layers="
+                f"{num_layers}; refusing to build a grid that cannot address them"
             )
 
     num_heads = {

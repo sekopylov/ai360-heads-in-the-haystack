@@ -55,16 +55,6 @@ def category_fractions(scores: RetrievalScores, threshold: float = 0.1) -> dict[
     }
 
 
-def score_histogram(scores: RetrievalScores, bins: Sequence[float] | int = 20) -> dict[str, Any]:
-    """Histogram of retrieval scores over all scoreable heads."""
-    values = np.array([scores.head_score(h) for h in scores.info.scoreable_heads], dtype=float)
-    finite = values[np.isfinite(values)]
-    counts, edges = np.histogram(finite, bins=bins, range=(0.0, 1.0))
-    return {"counts": counts.tolist(), "edges": edges.tolist(),
-            "total": int(finite.size), "n_non_finite": int(values.size - finite.size),
-            "model": scores.info.name}
-
-
 def activation_gap(scores: RetrievalScores, top_k: int = 40) -> dict[str, Any]:
     """Score vs activation frequency, sorted by score -- the gap in Fig. 3.
 
@@ -80,18 +70,6 @@ def activation_gap(scores: RetrievalScores, top_k: int = 40) -> dict[str, Any]:
                           if float(scores.activation_freq[h.layer, h.head]) >= 1.0],
         "model": scores.info.name,
     }
-
-
-def pie_data(scores: RetrievalScores, thresholds: Sequence[float] = (0.0, 0.1, 0.5)) -> dict[str, Any]:
-    """Ring/pie breakdown per threshold, the data behind ``ring_graph.pdf``."""
-    values = np.array([scores.head_score(h) for h in scores.info.scoreable_heads], dtype=float)
-    values = values[np.isfinite(values)]
-    total = max(len(values), 1)
-    slices = {}
-    for t in thresholds:
-        above = int(np.sum(values > t))
-        slices[f">{t}"] = {"n": above, "frac": above / total}
-    return {"model": scores.info.name, "n_heads": len(values), "slices": slices}
 
 
 # --------------------------------------------------------------------------- correlation
@@ -177,19 +155,10 @@ class CorrelationMatrix:
     mode: str = "grid"
 
     def as_dict(self) -> dict[str, Any]:
-        return {"labels": self.labels, "values": self.values, "mode": self.mode}
-
-    def same_family_hint(self, threshold: float = 0.8) -> list[tuple[str, str, float]]:
-        """Pairs whose correlation clears ``threshold`` (the paper's ``> 0.8`` bar)."""
-        out = []
-        for i, li in enumerate(self.labels):
-            for j, lj in enumerate(self.labels):
-                if j <= i:
-                    continue
-                value = self.values[i][j]
-                if np.isfinite(value) and value > threshold:
-                    out.append((li, lj, value))
-        return out
+        # `caveat` included here, as `HeadOverlap.as_dict` already did; the caller
+        # used to patch the key in by hand.
+        return {"labels": self.labels, "values": self.values, "mode": self.mode,
+                "caveat": self.caveat}
 
 
 def correlation_matrix(

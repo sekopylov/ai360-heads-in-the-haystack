@@ -11,6 +11,8 @@ whole token-mixer layers -- Gated Attention (softmax) versus Gated DeltaNet
 
 from __future__ import annotations
 
+import itertools
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence
@@ -236,6 +238,10 @@ class MaskingCurve:
     random_mean: list[float]
     random_std: list[float]
     random_trials: list[list[float]] = field(default_factory=list)
+    #: Names the metric the *primary* series (`retrieval`/`random_mean`) is computed
+    #: with -- always f1, and the artifact carries `retrieval_recall`/`random_recall`
+    #: alongside.  A figure drawn with `metric="recall"` reads those series instead,
+    #: so this field must not be read as "what the figure shows".
     metric: str = "f1"
     baseline: float = 0.0
     score_threshold: float = 0.1
@@ -519,6 +525,22 @@ class MixerAblation:
             return []
         return [min(k, self.n_linear_layers) / self.n_linear_layers for k in self.k_values]
 
+    @property
+    def distinct_subsets(self) -> dict[str, list[int]]:
+        """How many *distinct* layer subsets each K was actually averaged over.
+
+        The subsets are drawn without replacement, so at K=1 with ``n_trials=3``
+        this is 3 -- it used to be possible to draw the same layer twice and report
+        the spread over fewer interventions than the trial count suggests.
+        """
+        out: dict[str, list[int]] = {}
+        for label, sets in (("full_attention", self.full_attention_layers),
+                            ("linear_attention", self.linear_attention_layers)):
+            if not sets:
+                continue
+            out[label] = [len({tuple(sorted(s)) for s in per_k}) for per_k in sets]
+        return out
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "k_values": self.k_values,
@@ -534,6 +556,7 @@ class MixerAblation:
             "linear_attention_trials": self.linear_attention_trials,
             "full_attention_layers": self.full_attention_layers,
             "linear_attention_layers": self.linear_attention_layers,
+            "distinct_subsets": self.distinct_subsets,
             "seed": self.seed,
             "full_attention_exact_match": self.full_attention_exact,
             "linear_attention_exact_match": self.linear_attention_exact,
@@ -569,14 +592,35 @@ def token_mixer_ablation(
     rng = np.random.default_rng(seed)
     trials_per_k = max(1, n_trials)
 
-    def _subset(layers: list[int], k: int) -> list[int]:
+    def _subsets(layers: list[int], k: int, n: int) -> list[list[int]]:
         # Random subsets, averaged: the old `layers[:k]` always took the *earliest*
         # layers of each stack, so on a hybrid the linear arm (layers 0,1,2...) was
         # systematically earlier than the attention arm (3,7,11...).  Any difference
         # could have been depth, not the kind of mixer.
+        #
+        # Sampled *without replacement* where the space allows: with n_trials=3 at
+        # K=1 the old code could draw the same layer twice ([[15],[19],[15]]), which
+        # makes the reported spread a spread over fewer distinct interventions than
+        # the trial count suggests.
         if k >= len(layers):
-            return list(layers)
-        return [layers[i] for i in rng.permutation(len(layers))[:k]]
+            return [list(layers)] * n
+        total = math.comb(len(layers), k)
+        if n >= total:  # exhaustive: enumerate every subset once
+            return [list(c) for c in itertools.combinations(layers, k)][:n]
+        seen: set[tuple[int, ...]] = set()
+        out: list[list[int]] = []
+        attempts = 0
+        while len(out) < n and attempts < 100 * n:
+            attempts += 1
+            picked = [layers[i] for i in rng.permutation(len(layers))[:k]]
+            key = tuple(sorted(picked))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(picked)
+        while len(out) < n:  # extremely unlikely; keep the count as promised
+            out.append([layers[i] for i in rng.permutation(len(layers))[:k]])
+        return out
 
     full_scores: list[float] = []
     linear_scores: list[float] = []
@@ -593,8 +637,7 @@ def token_mixer_ablation(
 
     for k in k_values:
         runs, exacts, counts, picks = [], [], [], []
-        for _ in range(trials_per_k):
-            picked = _subset(full_layers, k)
+        for picked in _subsets(full_layers, k, trials_per_k):
             picks.append(picked)
             m = evaluate_samples(model, tokenizer, info, samples, masked_layers=picked,
                                  max_new_tokens=max_new_tokens, prefill_chunk=prefill_chunk)
@@ -612,8 +655,7 @@ def token_mixer_ablation(
 
         if linear_layers:
             runs, exacts, counts, picks = [], [], [], []
-            for _ in range(trials_per_k):
-                picked = _subset(linear_layers, k)
+            for picked in _subsets(linear_layers, k, trials_per_k):
                 picks.append(picked)
                 m = evaluate_samples(model, tokenizer, info, samples, masked_layers=picked,
                                      max_new_tokens=max_new_tokens, prefill_chunk=prefill_chunk)

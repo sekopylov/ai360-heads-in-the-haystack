@@ -9,16 +9,16 @@
 
 ## Retrieval-head detection
 
-| model | pairing | instances | recited | mean recall | top head | score | >0.1 | >0.5 |
-|---|---|---|---|---|---|---|---|---|
-| Qwen3-0.6B | next_step | 75 | 75/75 | 0.963 | `L16H14` | 0.89 | 28/448 (6.2%) | 5/448 (1.1%) |
-| _Qwen3-0.6B (recited only)_ | next_step | 75 | (same) | 0.963 | `L16H14` | 0.89 | 28/448 (6.2%) | 5/448 (1.1%) |
-| Qwen3-0.6B | same_step | 75 | 75/75 | 0.963 | `L6H6` | 0.92 | 27/448 (6.0%) | 6/448 (1.3%) |
-| _Qwen3-0.6B (recited only)_ | same_step | 75 | (same) | 0.963 | `L6H6` | 0.92 | 27/448 (6.0%) | 6/448 (1.3%) |
-| Qwen3.5-0.8B | next_step | 75 | 75/75 | 0.925 | `L11H1` | 0.74 | 33/48 (68.8%) | 9/48 (18.8%) |
-| _Qwen3.5-0.8B (recited only)_ | next_step | 75 | (same) | 0.925 | `L11H1` | 0.74 | 33/48 (68.8%) | 9/48 (18.8%) |
-| Qwen3.5-0.8B | same_step | 75 | 75/75 | 0.925 | `L7H7` | 0.91 | 20/48 (41.7%) | 5/48 (10.4%) |
-| _Qwen3.5-0.8B (recited only)_ | same_step | 75 | (same) | 0.925 | `L7H7` | 0.91 | 20/48 (41.7%) | 5/48 (10.4%) |
+| model | pairing | instances | recited | with copy | mean recall | top head | score | >0.1 | >0.5 |
+|---|---|---|---|---|---|---|---|---|---|
+| Qwen3-0.6B | next_step | 75 | 75/75 | 75/75 | 0.963 | `L16H14` | 0.89 | 28/448 (6.2%) | 5/448 (1.1%) |
+| _Qwen3-0.6B (recited only)_ | next_step | 75 | (same) | (same) | 0.963 | `L16H14` | 0.89 | 28/448 (6.2%) | 5/448 (1.1%) |
+| Qwen3-0.6B | same_step | 75 | 75/75 | 75/75 | 0.963 | `L6H6` | 0.92 | 27/448 (6.0%) | 6/448 (1.3%) |
+| _Qwen3-0.6B (recited only)_ | same_step | 75 | (same) | (same) | 0.963 | `L6H6` | 0.92 | 27/448 (6.0%) | 6/448 (1.3%) |
+| Qwen3.5-0.8B | next_step | 75 | 75/75 | 75/75 | 0.925 | `L11H1` | 0.74 | 33/48 (68.8%) | 9/48 (18.8%) |
+| _Qwen3.5-0.8B (recited only)_ | next_step | 75 | (same) | (same) | 0.925 | `L11H1` | 0.74 | 33/48 (68.8%) | 9/48 (18.8%) |
+| Qwen3.5-0.8B | same_step | 75 | 75/75 | 75/75 | 0.925 | `L7H7` | 0.91 | 20/48 (41.7%) | 5/48 (10.4%) |
+| _Qwen3.5-0.8B (recited only)_ | same_step | 75 | (same) | (same) | 0.925 | `L7H7` | 0.91 | 20/48 (41.7%) | 5/48 (10.4%) |
 
 ## Cross-model agreement
 
@@ -67,9 +67,11 @@
 
 | K | full-attention masked | linear masked |
 |---|---|---|
-| 1 | 38.5 | 56.4 |
-| 2 | 25.9 | 51.8 |
-| 4 | 11.2 | 14.6 |
+| 1 | 38.5 ±8.6 | 56.4 ±3.7 |
+| 2 | 25.9 ±5.6 | 51.8 ±8.3 |
+| 4 | 11.2 ±2.1 | 14.6 ±18.8 |
+
+_± is the spread across the sampled layer subsets (n_trials); `distinct_subsets` in the artifact says how many were distinct._
 
 
 ## Downstream tasks

@@ -499,6 +499,23 @@ def run_cli(stage: str, argv: list[str]) -> None:
         raise SystemExit(f"[entry] stage {stage} returned {rc}")
 
 
+def code_sha256(root: Path = Path("retrieval_heads")) -> str:
+    """Hash the uploaded package so a job artifact can be tied to its code.
+
+    The job gets `local-paths` without `.git`, so `provenance()["git_rev"]` is None
+    there; this is the substitute.  Hashes every `.py` under ``root`` in sorted order
+    (path + contents), so it changes when any module changes and not when unrelated
+    files do.
+    """
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        digest.update(str(path).encode("utf-8"))
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
+
+
 def record_stage_state(prefix: Path, stage: str, model: str | None, status: str,
                        error: str | None = None) -> None:
     """Append one line of provenance to ``<prefix>/run_state.json``.
@@ -626,6 +643,10 @@ def main(argv: list[str] | None = None) -> int:
         override_dtype(args.models, args.dtype)
 
     prefix = Path(args.out_prefix)
+    # Tie the artifacts to the exact code that produced them: the job has no `.git`,
+    # so `git_rev` is None and this hash is the only link back to a revision.
+    os.environ["RH_CODE_SHA256"] = code_sha256()
+    print(f"[entry] code_sha256={os.environ['RH_CODE_SHA256']}", flush=True)
     for stage, model in stage_plan(stages, args.models):
         targets = [model] if model else args.models
         for cli_argv in stage_argv(stage, profile=args.profile, models=targets,

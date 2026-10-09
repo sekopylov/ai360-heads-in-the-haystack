@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from retrieval_heads.haystack import (
@@ -80,6 +82,41 @@ def test_haystack_grows_with_target(tokenizer):
     large = build_needle_sample(tokenizer, needle=NEEDLE, question=QUESTION,
                                 target_tokens=512, depth=0.5, builder=builder)
     assert large.length > small.length
+
+
+def test_enable_thinking_true_is_the_only_value_that_means_on():
+    """`--thinking` used to pass `None`, which the Qwen3.5 template reads as OFF.
+
+    Qwen3.5 tests `enable_thinking is defined and enable_thinking is true`, so an
+    omitted kwarg lands in the else branch (empty ` thinking` block); Qwen3-0.6B
+    tests `is false` and is on unless told otherwise.  `True` is therefore the one
+    value that means "thinking on" for both, and the artifact no longer records
+    `null` for a flag that did nothing.
+    """
+    from transformers import AutoTokenizer
+
+    from retrieval_heads.haystack import render_chat
+
+    open_tag = chr(60) + "think" + chr(62)
+    close_tag = chr(60) + "/think" + chr(62)
+    messages = [{"role": "user", "content": "hi"}]
+    qwen35 = Path("models/Qwen3.5-0.8B")
+    if not (qwen35 / "chat_template.jinja").exists() and not (
+            qwen35 / "tokenizer_config.json").exists():
+        pytest.skip("Qwen3.5 tokenizer is not downloaded")
+
+    tokenizer = AutoTokenizer.from_pretrained(qwen35)
+    on = render_chat(tokenizer, messages, enable_thinking=True)
+    off = render_chat(tokenizer, messages, enable_thinking=False)
+    # Thinking on = the block is opened and left open; off = an empty closed block.
+    assert open_tag in on and close_tag not in on, on[-60:]
+    assert f"{open_tag}\n\n{close_tag}" in off, off[-60:]
+
+    # Qwen3-0.6B's template tests `is false`, so True must not add a think block.
+    qwen3 = AutoTokenizer.from_pretrained("models/Qwen3-0.6B")
+    assert open_tag not in render_chat(qwen3, messages, enable_thinking=True)[-60:]
+    assert f"{open_tag}\n\n{close_tag}" in render_chat(
+        qwen3, messages, enable_thinking=False)
 
 
 def test_load_corpus_rejects_an_empty_file(tmp_path):

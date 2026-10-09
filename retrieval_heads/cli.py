@@ -129,7 +129,8 @@ def resolve_detection_settings(args: argparse.Namespace, scores: Any) -> Detecti
 
     def pick(name: str, recorded: Any, requested: Any, implied_by_default: bool) -> Any:
         # `_MISSING` distinguishes "not recorded" from "recorded as None": for
-        # enable_thinking, None is a real value (leave the model's thinking mode on).
+        # enable_thinking, None means "do not pass the kwarg at all" -- which is not
+        # the same as True: templates that test `is defined` treat it as off.
         if recorded is _MISSING:
             return requested
         if implied_by_default:
@@ -146,7 +147,12 @@ def resolve_detection_settings(args: argparse.Namespace, scores: Any) -> Detecti
                                   args.system_prompt, args.system_prompt is None)
     settings.chat_template = pick("chat-template", config.get("chat_template", _MISSING),
                                   not args.no_chat_template, not args.no_chat_template)
-    requested_thinking = None if args.thinking else False
+    # `True`, not `None`: omitting the kwarg leaves `enable_thinking` undefined, and
+    # the Qwen3.5 template tests `is defined and is true` -- so `--thinking` used to
+    # do nothing there (and the artifact recorded `null`, which reads as "left on").
+    # `True` is correct for both shipped templates: Qwen3.5 turns thinking on, and
+    # Qwen3-0.6B (whose test is `is defined and is false`) is not turned off.
+    requested_thinking = True if args.thinking else False
     settings.enable_thinking = pick("enable-thinking",
                                     config.get("enable_thinking", _MISSING),
                                     requested_thinking, not args.thinking)
@@ -405,7 +411,9 @@ def cmd_detect(args: argparse.Namespace) -> int:
         threshold=args.threshold,
         pairing=args.pairing,
         chat_template=not args.no_chat_template,
-        enable_thinking=None if args.thinking else False,
+        # `True`, not `None`: see resolve_detection_settings -- omitting the kwarg
+        # leaves the Qwen3.5 template's `enable_thinking` undefined, i.e. off.
+        enable_thinking=True if args.thinking else False,
         system_prompt=args.system_prompt,
         capture_method=args.capture_method,
         argmax_domain=args.argmax_domain,

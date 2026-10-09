@@ -146,9 +146,14 @@ class DetectionConfig:
         end", as the paper puts it), so 0.0 and 1.0 are in the grid.  With only a few
         depths the endpoints carry a large share of the weight.
         """
-        cached = getattr(self, "_plan_cache", None)
-        if cached is not None:
-            return list(cached)
+        # Cache keyed on the fields that define the grid, not on identity: the config
+        # is a mutable dataclass and `as_dict()` (called from every `summary()`) used
+        # to freeze the first plan as a side effect, so a later edit to `lengths` or
+        # `limit` was silently ignored.
+        key = (tuple(self.needles), tuple(self.lengths), self.depths_per_length,
+               self.limit, self.seed)
+        if getattr(self, "_plan_cache_key", None) == key:
+            return list(self._plan_cache)
         items: list[dict[str, Any]] = []
         for n_idx, (needle, question) in enumerate(self.needles):
             for length in self.lengths:
@@ -172,6 +177,7 @@ class DetectionConfig:
                         "shortest lengths); treat this as a debugging sample, not an estimate",
                         self.limit, len(items))
         object.__setattr__(self, "_plan_cache", list(items))
+        object.__setattr__(self, "_plan_cache_key", key)
         return items
 
     def as_dict(self) -> dict[str, Any]:
@@ -527,5 +533,8 @@ def run_detection(
              run.wall_time_s, best, scores.head_score(best),
              sum(1 for i in results if i.needle_recall >= RECITED_RECALL), len(results))
     if out_dir is not None:
-        run.save(out_dir, write_instances=stream is None)
+        # The per-instance JSONL was already streamed above (`stream` exists exactly
+        # when `out_dir` does), so `save` must not write it a second time.  The flag
+        # used to read `write_instances=stream is None`, which is always False here.
+        run.save(out_dir, write_instances=False)
     return run

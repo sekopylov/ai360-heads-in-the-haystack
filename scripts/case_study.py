@@ -37,12 +37,17 @@ def top_heads(credits, info, k=5):
     return ranked[:k]
 
 
-def find_copy_step(trace, sample, head: HeadRef, pairing: str):
+def find_copy_step(trace, sample, head: HeadRef, pairing: str, domain: str = "prompt"):
     """First decoding step at which ``head`` pastes a needle token.
 
     Steps are filtered by ``applies_to`` exactly as the scorer does: the captured
     prefill row belongs to ``next_step`` only, so using it for ``same_step`` would
     draw a panel the scorer does not credit.
+
+    ``domain`` must match the run being illustrated: the scorer's criterion (2)
+    takes the argmax over the prompt by default, and over the whole row with
+    ``--argmax-domain full``.  Hard-coding the prompt here would silently look at a
+    different position than the scores being explained.
     """
     # Same set the scorer credits: the needle *text* tokenization.
     needle_set = set(sample.needle_text_ids)
@@ -57,8 +62,10 @@ def find_copy_step(trace, sample, head: HeadRef, pairing: str):
         row = step.attn.get(head.layer)
         if row is None or head.head >= row.shape[0]:
             continue
-        # Restrict to the input positions, matching the scorer's argmax domain.
-        j = int(row[head.head][:sample.length].argmax())
+        # `full` lets already-generated positions compete; the span test below keeps
+        # only prompt positions anyway, so `prompt[j]` stays in range.
+        limit = sample.length if domain == "prompt" else row.shape[1]
+        j = int(row[head.head][:limit].argmax())
         if start <= j < end and int(prompt[j]) == token:
             return step, token, j
     return None, None, None
@@ -71,6 +78,8 @@ def main() -> int:
     parser.add_argument("--length", type=int, default=1024)
     parser.add_argument("--depth", type=float, default=0.5)
     parser.add_argument("--pairing", default="next_step", choices=["next_step", "same_step"])
+    parser.add_argument("--argmax-domain", default="prompt", choices=["prompt", "full"],
+                        help="must match the detect run whose scores this illustrates")
     parser.add_argument("--max-new-tokens", type=int, default=32)
     parser.add_argument("--needle-index", type=int, default=0)
     parser.add_argument("--out", default=str(REPO_ROOT / "results"))
@@ -103,7 +112,8 @@ def main() -> int:
               f"tokens={sorted(credits[head])}")
 
     strong = ranked[0]
-    step_s, token_s, pos_s = find_copy_step(trace, sample, strong, args.pairing)
+    step_s, token_s, pos_s = find_copy_step(trace, sample, strong, args.pairing,
+                                            args.argmax_domain)
     if step_s is None:
         print("no copy step found -- try a longer context or more new tokens")
         return 1
@@ -119,14 +129,14 @@ def main() -> int:
     )
     distributions = {
         f"{strong} copying token {token_s!r} (input position {pos_s})":
-            (step_s.attn[strong.layer][strong.head].numpy(), sample.needle_span),
+            (step_s.attn[strong.layer][strong.head].cpu().numpy(), sample.needle_span),
     }
     if weak is None:
         print("no non-retrieval head has an attention row at this step; "
               "plotting the strong head only")
     else:
         distributions[f"{weak} (score {len(credits[weak]) / denom:.2f}) at the same step"] = (
-            step_s.attn[weak.layer][weak.head].numpy(), sample.needle_span,
+            step_s.attn[weak.layer][weak.head].cpu().numpy(), sample.needle_span,
         )
     fig_dir = Path(args.out) / "figures"
     save_fig(plot_attention_distribution(distributions), fig_dir / "retrieval_attention_dist.pdf")
@@ -135,6 +145,7 @@ def main() -> int:
         add_provenance({
             "model": info.name,
             "pairing": args.pairing,
+            "argmax_domain": args.argmax_domain,
             "prompt_tokens": sample.length,
             "needle_span": list(sample.needle_span),
             "generated_text": tokenizer.decode(generated, skip_special_tokens=True),

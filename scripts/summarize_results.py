@@ -101,8 +101,8 @@ def _info_from_summary(root: Path, key: str) -> dict[str, Any] | None:
 
 
 def detection_section(root: Path, keys: list[str]) -> list[str]:
-    out = ["| model | pairing | instances | recited | mean recall | top head | score | >0.1 | >0.5 |",
-           "|---|---|---|---|---|---|---|---|---|"]
+    out = ["| model | pairing | instances | recited | with copy | mean recall | top head | score | >0.1 | >0.5 |",
+           "|---|---|---|---|---|---|---|---|---|---|"]
     for key in keys:
         for pairing in ("next_step", "same_step"):
             summary = load(root / key / f"summary_{pairing}.json")
@@ -121,6 +121,7 @@ def detection_section(root: Path, keys: list[str]) -> list[str]:
             out.append(
                 f"| {at(summary, 'model', key)} | {pairing} | {instances} "
                 f"| {at(summary, 'n_instances_recited', 'n/a')}/{instances} "
+                f"| {at(summary, 'n_instances_with_copy', 'n/a')}/{instances} "
                 f"| {fmt(at(summary, 'mean_needle_recall'), 3)} "
                 f"| `{top.get('head', '?')}` | {fmt(top.get('score'))} "
                 f"| {fmt(at(lo, 'n'))}/{n or 'n/a'} "
@@ -137,7 +138,7 @@ def detection_section(root: Path, keys: list[str]) -> list[str]:
                 rec_top = at(at(summary, "top_heads_recited", []) or [{}], 0, {}) or {}
                 out.append(
                     f"| _{at(summary, 'model', key)} (recited only)_ | {pairing} | "
-                    f"{at(summary, 'n_instances_recited', 'n/a')} | (same) "
+                    f"{at(summary, 'n_instances_recited', 'n/a')} | (same) | (same) "
                     f"| {fmt(at(summary, 'mean_needle_recall'), 3)} "
                     f"| `{rec_top.get('head', '?')}` | {fmt(rec_top.get('score'))} "
                     f"| {fmt(at(rec_lo, 'n'))}/{rec_n or 'n/a'} "
@@ -261,10 +262,19 @@ def mixer_section(root: Path, keys: list[str]) -> list[str]:
         out.append("")
         out.append("| K | full-attention masked | linear masked |")
         out.append("|---|---|---|")
+        full_std = at(ablation, "full_attention_std", []) or []
+        linear_std = at(ablation, "linear_attention_std", []) or []
         for i, k in enumerate(at(ablation, "k_values", []) or []):
             full = at(ablation.get("full_attention"), i)
             linear = at(ablation.get("linear_attention"), i)
-            out.append(f"| {k} | {fmt(full, 1)} | {fmt(linear, 1)} |")
+            # The spread matters here: at K=4 the two arms are 11.2 +/- 2.1 and
+            # 14.6 +/- 18.8, i.e. not distinguishable.  The PDF had error bars; the
+            # markdown table did not.
+            out.append(f"| {k} | {fmt(full, 1)} ±{fmt(at(full_std, i), 1)} "
+                       f"| {fmt(linear, 1)} ±{fmt(at(linear_std, i), 1)} |")
+        out.append("")
+        out.append("_± is the spread across the sampled layer subsets (n_trials); "
+                   "`distinct_subsets` in the artifact says how many were distinct._")
         out.append("")
     return out
 

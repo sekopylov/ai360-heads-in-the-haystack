@@ -219,6 +219,35 @@ def test_load_keeps_exactly_one_model_resident(monkeypatch):
     assert len(cli._LOADED) == 1, "two models stayed resident"
 
 
+def test_code_sha256_ties_artifacts_to_the_uploaded_code(tmp_path):
+    """A job has no `.git`, so `git_rev` is None -- this hash is the substitute."""
+    driver = load_job_driver()
+    package = tmp_path / "retrieval_heads"
+    package.mkdir()
+    (package / "a.py").write_text("x = 1\n", encoding="utf-8")
+    (package / "b.py").write_text("y = 2\n", encoding="utf-8")
+    (package / "__pycache__").mkdir()
+    (package / "__pycache__" / "a.cpython-313.pyc").write_bytes(b"\x00")
+
+    first = driver.code_sha256(package)
+    assert first == driver.code_sha256(package), "not deterministic"
+    # Byte-compiled files must not move the hash (they are regenerated, not source).
+    (package / "__pycache__" / "a.cpython-313.pyc").write_bytes(b"\x01\x02")
+    assert driver.code_sha256(package) == first
+
+    (package / "a.py").write_text("x = 2\n", encoding="utf-8")
+    assert driver.code_sha256(package) != first
+
+
+def test_provenance_records_the_code_hash(monkeypatch):
+    from retrieval_heads.provenance import provenance
+
+    monkeypatch.delenv("RH_CODE_SHA256", raising=False)
+    assert "code_sha256" not in provenance()
+    monkeypatch.setenv("RH_CODE_SHA256", "deadbeefdeadbeef")
+    assert provenance()["code_sha256"] == "deadbeefdeadbeef"
+
+
 def test_every_command_only_reads_flags_its_parser_defines():
     """No `args.<flag>` a command reaches may be absent from its subparser.
 

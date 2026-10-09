@@ -448,12 +448,13 @@ meaningful within a family.
 * **The length grid is geometric, not uniform.** The paper samples 20 lengths
   uniformly over 1K-50K, so its long contexts carry far more weight; `paper` here is
   7 geometric lengths (210 instances) and `t4` is 5 lengths up to 16K. "The
-  mechanism reproduces" is a claim about this grid, and on the hybrid 15 of the 22
-  failures sit at the longest contexts, so the choice is load-bearing.
-* **Fig. 3's "activation frequency" is not an independent axis.** It is
-  `P(score > 0)` -- the same score thresholded -- so the figure compares an average
-  with its own indicator. The paper's version counts *tokens* within instances,
-  which `copied_tokens` now makes answerable but no figure computes yet.
+  mechanism reproduces" is a claim about this grid.
+* **Fig. 3's "activation frequency" is `P(score > 0)`** -- which is what the paper
+  defines it as ("the head activated on at least one token"), not a mean token
+  count.  So the "gap" in that figure compares a mean with a thresholded indicator
+  derived from the same scores; it is a real quantity but not an independent axis.
+  The paper's other reading -- *how many* tokens a head copies -- is what
+  `copied_tokens` records per instance, and no figure plots it yet.
 * **Masking is inference-time ablation, not pruning.** Zeroing a head's `o_proj`
   slice is exactly equivalent to zeroing its attention row (proved by test), but it
   removes neither parameters nor KV entries, so the Sec. 5 KV-compression reading
@@ -482,7 +483,13 @@ meaningful within a family.
 * **Hybrid models, one number short.** For Qwen3.5 the linear layers *cannot* be
   scored. Masking experiments (`token_mixer_ablation`) do cover them, so their
   contribution is measurable at layer granularity — just not as "retrieval
-  heads", because the object does not exist there.
+  heads", because the object does not exist there.  One result there deserves
+  stating rather than leaving in the JSON: masking a *single* linear layer scores
+  **above** the baseline (56.4 f1 against 46.4, all three sampled subsets), i.e. on
+  this 8-sample measurement silencing one Gated DeltaNet layer does not hurt NIAH.
+  With 18 linear layers and ±3.7 spread that is not "linear layers are harmful";
+  it is a reminder that the hybrid's baseline sits low for a metric reason (see the
+  masking section), so small positive deltas there are noise-level.
 * **CPU dtype.** `float32` is used by default because it is the most numerically
   trustworthy for `argmax` over attention and fits in 15 GB; on GPU, `bfloat16`
   matches the paper's setting and is much faster.

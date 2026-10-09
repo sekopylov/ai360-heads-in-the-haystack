@@ -9,6 +9,7 @@ stamp is missing or older.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from functools import lru_cache
@@ -89,6 +90,13 @@ def provenance(*, dtype: str | None = None, extra: dict[str, Any] | None = None)
         # argmax ties can flip between runs if deterministic kernels are off.
         "deterministic": _deterministic(),
     }
+    # A job uploads `local-paths` without `.git`, so `git_rev` is None there and the
+    # artifact could not be tied to a commit.  `datasphere_job.py` hashes the code it
+    # uploaded and exports it as RH_CODE_SHA256; keep the name explicit so a reader
+    # does not mistake it for a git object.
+    code_sha = os.environ.get("RH_CODE_SHA256")
+    if code_sha:
+        data["code_sha256"] = code_sha
     if dtype:
         data["dtype"] = str(dtype)
     if extra:

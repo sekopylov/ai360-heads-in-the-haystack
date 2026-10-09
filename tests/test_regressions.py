@@ -568,7 +568,7 @@ def test_layouts_match_and_grid_mode_warns(caplog):
 
 
 def test_non_finite_scores_are_dropped_from_descriptive_stats():
-    from retrieval_heads.properties import category_fractions, pie_data, score_histogram
+    from retrieval_heads.properties import category_fractions
 
     info = attention_info(1, 3)
     scores = RetrievalScores(
@@ -580,9 +580,6 @@ def test_non_finite_scores_are_dropped_from_descriptive_stats():
     assert fractions["n_heads"] == 2 and fractions["n_non_finite"] == 1
     total = sum(fractions[b]["frac"] for b in ("zero", "low", "retrieval"))
     assert abs(total - 1.0) < 1e-9, total
-
-    assert score_histogram(scores)["n_non_finite"] == 1
-    assert pie_data(scores)["n_heads"] == 2
 
 
 def test_plot_score_pie_uses_the_runs_own_threshold():

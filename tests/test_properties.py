@@ -14,8 +14,6 @@ from retrieval_heads.properties import (
     correlation_matrix,
     head_overlap,
     layer_profile,
-    pie_data,
-    score_histogram,
 )
 from retrieval_heads.scoring import RetrievalScores
 
@@ -133,13 +131,9 @@ def test_sparsity_counts_only_scoreable_heads():
     assert stats["thresholds"]["0.1"]["n"] == 2
 
 
-def test_histogram_and_pie_and_layer_profile_run():
+def test_layer_profile_runs():
     info = make_info()
     scores = make_scores({(0, 0): 0.0, (0, 1): 0.5, (2, 0): 0.0, (2, 1): 0.2}, info)
-    hist = score_histogram(scores, bins=5)
-    assert sum(hist["counts"]) == 4
-    pie = pie_data(scores)
-    assert pie["n_heads"] == 4
     prof = layer_profile(scores)
     assert [row["layer"] for row in prof["layers"]] == [0, 2]
 

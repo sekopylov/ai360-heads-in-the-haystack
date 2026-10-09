@@ -14,7 +14,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 215 tests: 198 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
+* 218 tests: 201 fast (`pytest -m "not integration"`, ~13 s), 17 integration against
   the real checkpoints. All green.
 * **The committed artifacts now match the code.** The GPU run was refreshed in two
   jobs on an NVIDIA L4, 75 instances per model:
@@ -49,6 +49,39 @@ tied to a job id) → this file (where things stand and what is left).
   exact-match, recall, prefix-recall and the *generated texts*) and the same for
   each random trial, so a specific failure can be inspected from the artifact
   instead of only its mean.
+* **Review round (the "right after the run" report), verified against the code:**
+  * `--thinking` did nothing on Qwen3.5.  It passed `None`, which *omits* the
+    `enable_thinking` kwarg, and that template tests `is defined and is true`, so the
+    flag rendered the empty ` thinking` block while the artifact recorded `null`
+    ("left on").  Now `True`, which means on for both shipped templates; pinned by a
+    test that renders with the real Qwen3.5 and Qwen3-0.6B tokenizers.
+  * `scripts/case_study.py` called `.numpy()` on a CUDA tensor (crash on the GPU box)
+    and hard-coded the prompt argmax domain.  Now `.cpu().numpy()`, plus
+    `--argmax-domain` recorded in its JSON.
+  * `build_model_info` checked coverage one way only: a module with
+    `layer_idx >= num_hidden_layers` (MTP block, wrong config) reached
+    `empty_matrix`/`aggregate_scores` and died with an IndexError.  Now rejected with
+    a message.
+  * `DetectionConfig.plan()` cached on identity, and `as_dict()` (called by every
+    `summary()`) triggered it -- so editing `lengths`/`limit` afterwards was silently
+    ignored.  The cache is keyed on the grid fields now.
+  * Dead/loose ends: `CorrelationMatrix.as_dict` carries `caveat` (the caller patched
+    it in by hand); the mixer markdown table prints ±std (the PDF already had error
+    bars); layer subsets are drawn *without replacement* and `distinct_subsets` is
+    recorded; `n_instances_with_copy` is now read (a column in the results doc);
+    `run_detection`'s always-False `write_instances=stream is None` is gone;
+    `pie_data`/`score_histogram`/`same_family_hint` (unused outside tests) removed;
+    job artifacts record `code_sha256`, since a job has no `.git` and `git_rev` was
+    always None.
+  * Claims that did **not** survive checking: `plot_score_pie` already labelled the
+    threshold as "the run's own" (`thr_label`, not the loop's last `thr`); the
+    "15 of 22 hybrid failures at the longest contexts" sentence was stale (all 75
+    instances count as recited under LCS recall) and is gone; the README's
+    `activation_freq` bullet contradicted itself and now states the paper's
+    definition (`P(score > 0)`, which is what it computes).
+  * Not done: the float32-vs-bfloat16 rank comparison (needs a GPU run), and
+    defaulting the hybrid's figure to recall (both `masking_heads.pdf` and
+    `masking_recall.pdf` ship, so the reader has both).
 * `random_retrieval_overlap` is documented for what it measures (overlap with the
   masked retrieval arm) and the honest control audit
   `random_above_threshold` was added beside it.
@@ -425,7 +458,7 @@ files will break the imports (`scoring.py`/`masking.py`/`downstream.py` import
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 215 passed (198 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 218 passed (201 fast + 17 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b
