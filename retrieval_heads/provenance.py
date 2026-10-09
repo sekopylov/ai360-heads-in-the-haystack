@@ -34,7 +34,14 @@ from typing import Any, Callable
 #: from the prompt-restricted argmax under every domain (it is unchanged for the
 #: prompt-domain artifacts in `ds-results/`, but a reader must not assume the old
 #: derivation).
-SCHEMA_VERSION = 7
+#: Bumped to 8: the argmax domain is a *reporting* dimension now.  Every domain is
+#: captured and scored in one pass, so a run writes `scores_<pairing>_<domain>` per
+#: alternative domain, the per-instance payload gained `scores_by_domain` /
+#: `argmax_domains`, the summary gained `sparsity_by_domain` /
+#: `top_heads_by_domain` / `domain_ranking_overlap`, and `argmax_domain_shift` is
+#: restricted to the rows the pairing scores (a v7 reader would compare a share
+#: computed over every captured row with one computed over scored rows).
+SCHEMA_VERSION = 8
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 

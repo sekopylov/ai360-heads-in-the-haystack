@@ -202,6 +202,27 @@ def detection_section(root: Path, keys: list[str]) -> list[str]:
                     f"{fmt(at(raw_lo, 'n'))}/{at(raw, 'n_heads')} heads above 0.1, "
                     f"against {fmt(at(lo, 'n'))}/{n or 'n/a'} under `|unique(k)|`"
                 )
+            # Schema 8 scores every captured argmax domain in the same pass, so the
+            # run says how much the "sparse" headline depends on the position set
+            # instead of leaving it to a re-run.
+            by_domain = at(summary, "sparsity_by_domain") or {}
+            if len(by_domain) > 1:
+                parts = []
+                for name, sp in sorted(by_domain.items()):
+                    b = at(at(sp, "thresholds", {}) or {}, "0.1", {}) or {}
+                    parts.append(f"`{name}` {fmt(at(b, 'n'))}/{at(sp, 'n_heads')} "
+                                 f"({100 * at(b, 'frac', 0.0):.1f}%)")
+                notes.append(f"- `{key}`/{pairing}: the >0.1 share by argmax domain: "
+                             + ", ".join(parts))
+                overlap = at(summary, "domain_ranking_overlap") or {}
+                for name, data in sorted((at(overlap, "by_domain", {}) or {}).items()):
+                    notes.append(
+                        f"- `{key}`/{pairing}: {at(data, 'overlap')}/"
+                        f"{at(overlap, 'top_k')} of the `{at(overlap, 'primary_domain')}` "
+                        f"top heads are also top under `{name}` (the masking arm ranks "
+                        f"by the primary domain, so this is how much a domain change "
+                        f"would change what it masks)"
+                    )
             if at(summary, "sparsity_recited"):
                 rec = at(summary, "sparsity_recited")
                 rec_buckets = at(rec, "thresholds", {}) or {}

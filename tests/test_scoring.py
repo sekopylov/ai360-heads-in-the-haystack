@@ -354,6 +354,100 @@ def test_argmax_domain_shift_counts_only_moved_positions():
     assert argmax_domain_shift(trace)["shifted"] == 0
 
 
+def test_argmax_domain_shift_can_be_restricted_to_the_scored_rows():
+    """Without a sample the counter covers every captured row; with one it covers
+    exactly the rows `credits_from_trace` scores (criterion (1) held, pairing
+    scope), so the share describes the same rows as the score."""
+    from retrieval_heads.scoring import argmax_domain_shift
+
+    row = torch.zeros(2, 5)
+    row[0, 0] = 0.9          # moves between domains
+    row[1, 0] = 0.9          # moves too
+    attn = {0: row.unsqueeze(0).unsqueeze(2)}
+    sample = FakeSample([11, 7, 8, 12, 13], (1, 3))     # needle ids [7, 8]
+
+    def step(index: int, fed: int, predicted: int, applies=None) -> StepTrace:
+        return StepTrace(
+            step=index, fed_token=fed, predicted_token=predicted, attn={0: row},
+            applies_to=applies,
+            argmax=argmax_positions(attn, prompt_len=4, domain="haystack", span=(1, 4)),
+            argmax_prompt=argmax_positions(attn, prompt_len=4, domain="prompt"))
+
+    # The prefill row belongs to `next_step` only, so `same_step` must skip it.
+    trace = DecodeTrace(prompt_len=4, steps=[step(0, 8, 7), step(-1, 1, 7, ("next_step",))],
+                        argmax_domain="haystack", argmax_span=(1, 4))
+
+    assert argmax_domain_shift(trace)["positions"] == 4      # both rows, both heads
+    assert argmax_domain_shift(trace, sample=sample,
+                               pairing="next_step")["positions"] == 4
+    assert argmax_domain_shift(trace, sample=sample, pairing="same_step") == \
+        {"positions": 2, "shifted": 2, "share": 1.0}, "same_step must skip the prefill"
+
+    # Criterion (1): a step whose token is not in the needle contributes nothing.
+    trace.steps.append(step(1, 1, 99))
+    assert argmax_domain_shift(trace)["positions"] == 6      # every captured row
+    assert argmax_domain_shift(trace, sample=sample,
+                               pairing="next_step")["positions"] == 4
+
+
+def test_credits_from_trace_scores_every_captured_domain():
+    """All domains come from one row, so scoring a second one is a lookup."""
+    sample = FakeSample([11, 7, 8, 12, 13], (1, 3))     # needle ids [7, 8]
+    info = make_info(num_layers=1, heads=1)
+    row = torch.zeros(1, 5)
+    row[0, 0] = 0.99         # the template sink, outside the haystack span (1, 4)
+    row[0, 2] = 0.9          # needle token 8 inside it
+    attn = {0: row.unsqueeze(0).unsqueeze(2)}
+    by_domain = {domain: argmax_positions(attn, prompt_len=4, domain=domain,
+                                          span=(1, 4) if domain == "haystack" else None)
+                 for domain in ("prompt", "full", "haystack")}
+    step = StepTrace(step=0, fed_token=1, predicted_token=8, attn={0: row},
+                     argmax=by_domain["haystack"], argmax_prompt=by_domain["prompt"],
+                     argmax_by_domain=by_domain, primary_domain="haystack")
+    trace = DecodeTrace(prompt_len=4, steps=[step], argmax_domain="haystack",
+                        argmax_span=(1, 4), domains=("prompt", "full", "haystack"))
+    for domain, expected in (("prompt", set()), ("full", set()), ("haystack", {8})):
+        credits, _, _ = credits_from_trace(trace, sample, info, pairing="next_step",
+                                           domain=domain)
+        assert credits[HeadRef(0, 0)] == expected, domain
+    # A domain that was not captured is an error, not a silent fallback.
+    with pytest.raises(ValueError, match="no argmax for domain"):
+        StepTrace(step=0, fed_token=1, predicted_token=8,
+                  argmax_by_domain={"prompt": by_domain["prompt"]},
+                  primary_domain="prompt").positions("haystack")
+
+
+def test_aggregate_scores_reads_an_alternative_domain():
+    """The per-domain matrices are the point of capturing every domain: the primary
+    comes from `scores`, an alternative from `scores_by_domain`, and the alternative's
+    activation frequency is derived as `score > 0` (its definition)."""
+    from retrieval_heads.scoring import InstanceResult, aggregate_scores
+
+    info = make_info(num_layers=1, heads=2)
+
+    def instance(hay: float, prompt: float) -> InstanceResult:
+        return InstanceResult(
+            sample={}, scores={"next_step": {"L0H0": hay, "L0H1": 0.0}},
+            scores_by_domain={"prompt": {"next_step": {"L0H0": prompt, "L0H1": 0.0}}},
+            activations={"next_step": {"L0H0": 1.0 if hay else 0.0, "L0H1": 0.0}},
+            considered={}, sink_rate={}, generated_ids=[], generated_text="",
+            needle_recall=1.0, n_steps=0,
+        )
+
+    results = [instance(0.9, 0.0), instance(0.0, 0.4)]
+    primary = aggregate_scores(results, info, pairing="next_step")
+    assert primary.score[0, 0].item() == pytest.approx(0.45)
+    alternative = aggregate_scores(results, info, pairing="next_step", domain="prompt")
+    assert alternative.score[0, 0].item() == pytest.approx(0.2)
+    assert alternative.activation_freq[0, 0].item() == pytest.approx(0.5)
+    # The raw denominator is only stored for the primary domain.
+    with pytest.raises(ValueError, match="only the primary domain"):
+        aggregate_scores(results, info, pairing="next_step", field="scores_raw",
+                         domain="prompt")
+    with pytest.raises(ValueError, match="field must be"):
+        aggregate_scores(results, info, pairing="next_step", field="nope")
+
+
 def test_match_masks_is_safe_for_a_position_beyond_the_prompt():
     """`domain="full"` can point past the prompt; the vectorised path must not index
     out of bounds (the old per-head loop skipped those before indexing)."""

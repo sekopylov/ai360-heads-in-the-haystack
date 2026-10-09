@@ -333,3 +333,33 @@ def test_plot_masking_curve_exact_match_uses_the_stored_std():
     finally:
         plt.close(fig)
 
+
+def test_hybrid_pie_title_states_both_head_bases():
+    """The panel must not show only the scoreable head count for a hybrid.
+
+    The README quotes "9 of 336 heads" (2.7%) and "68.8% of 48 scoreable heads" in one
+    paragraph; a caption that says only "48 scoreable heads / 18 linear layers" invites
+    reading the second share against the wrong denominator.
+    """
+    import matplotlib.pyplot as plt
+
+    from retrieval_heads.models import ModelInfo
+    from retrieval_heads.plotting import plot_score_pie
+
+    info = ModelInfo(
+        name="hybrid", path="h", model_type="toy", num_layers=2,
+        layer_types=["full_attention", "linear_attention"],
+        num_heads={0: 2}, num_kv_heads={0: 2}, head_dim=4, hidden_size=8,
+        max_position_embeddings=128, scoreable_layers_=[0],
+        linear_layers_=[1],
+    )
+    scores = RetrievalScores(info=info, score=torch.tensor([[0.9, 0.05], [float("nan")] * 2]),
+                             activation_freq=torch.zeros(2, 2), n_instances=1)
+    fig = plot_score_pie({"m": scores})
+    try:
+        title = fig.axes[0].get_title()
+        assert "2 scoreable heads" in title, title
+        assert "1 linear layers" in title, title
+        assert str(info.n_all_heads) in title, title      # 2 + 1*4 = 6 heads in all
+    finally:
+        plt.close(fig)

@@ -151,6 +151,12 @@ class DetectionConfig:
     #: Lengths the model's context window rejected, kept so the artifact shows the
     #: requested grid rather than only the surviving one.
     dropped_lengths: list[int] = field(default_factory=list)
+    #: Build *every* prompt before the first forward pass and validate it (the
+    #: `haystack` span must exist when that domain is the run's own).  Building is
+    #: CPU-only, so paying it up front is cheap, while a single prompt that cannot be
+    #: located otherwise aborts the stage *mid-grid* -- after the GPU time already
+    #: spent.  The prompts are kept, so the detection loop does not rebuild them.
+    preflight: bool = False
 
     @property
     def grid_size(self) -> int:
@@ -234,6 +240,50 @@ class DetectionRun:
     #: reader can rescale instead of trusting the recorded inflation ratio.  Keyed by
     #: pairing, like `conditional`.
     raw: dict[str, RetrievalScores] = field(default_factory=dict)
+
+    #: The same aggregation under every *other* captured argmax domain, keyed by
+    #: ``(pairing, domain)``.  Every domain comes out of the same decode pass (only
+    #: the argmax span differs), so which position set criterion (2) searches is a
+    #: reporting decision; the primary domain keeps the historical filenames and the
+    #: alternatives are written as `scores_<pairing>_<domain>`.
+    domains: dict[tuple[str, str], RetrievalScores] = field(default_factory=dict)
+
+    def domain_aggregates(self, scores: RetrievalScores | None = None
+                          ) -> dict[str, RetrievalScores]:
+        """``{domain: aggregate}`` for the pairing ``scores`` belongs to."""
+        scores = scores or self.scores
+        primary = (scores.meta or {}).get("argmax_domain", self.config.argmax_domain)
+        out = {primary: scores}
+        for (pairing, domain), agg in self.domains.items():
+            if pairing == scores.pairing:
+                out[domain] = agg
+        return out
+
+    def domain_ranking_overlap(self, scores: RetrievalScores | None = None,
+                               top_k: int = 10) -> dict[str, Any]:
+        """How many of the primary domain's top heads survive under each domain.
+
+        The masking arm selects the top-K *by score*, so a domain that inflates heads
+        whose credit comes only from a second-best argmax landing on a needle token
+        would change what gets masked.  This is the number that says whether that
+        happened on this grid, and it needs no second GPU run: the per-domain
+        matrices are aggregated from the same decode pass.
+        """
+        scores = scores or self.scores
+        aggregates = self.domain_aggregates(scores)
+        primary_domain = (scores.meta or {}).get("argmax_domain", self.config.argmax_domain)
+        primary = [str(h) for h in aggregates[primary_domain].ranked_heads()[:top_k]]
+        out: dict[str, Any] = {"primary_domain": primary_domain, "top_k": top_k,
+                               "by_domain": {}}
+        for domain, agg in aggregates.items():
+            if domain == primary_domain:
+                continue
+            other = [str(h) for h in agg.ranked_heads()[:top_k]]
+            out["by_domain"][domain] = {
+                "top_heads": other,
+                "overlap": len(set(primary) & set(other)),
+            }
+        return out
 
     def pairing_comparison(self, top_k: int = 10,
                            scores: RetrievalScores | None = None) -> dict[str, Any]:
@@ -326,9 +376,12 @@ class DetectionRun:
             "mean_needle_recall": (
                 sum(i.needle_recall for i in self.instances) / n if n else 0.0
             ),
-            # Attention-sink pressure: share of scored steps where a head's argmax
-            # fell on position 0.  Per-head values live in the JSONL; this is the
-            # run-level summary so the number is not write-only.
+            # Attention-sink pressure: share of scored *(head, step)* pairs whose
+            # argmax fell on position 0 (every head of a layer shares the same
+            # `considered` count, so this is the mean over heads of a per-head step
+            # share -- not the share of steps on which *any* head pointed there).
+            # Per-head values live in the JSONL; this is the run-level summary so the
+            # number is not write-only.
             "mean_sink_rate": (
                 sum(i.sink_rate.get(scores.pairing, {}).get("__overall__", 0.0)
                     for i in self.instances) / n if n else 0.0
@@ -374,6 +427,21 @@ class DetectionRun:
                 for h in scores.ranked_heads()[:20]
             ],
             "pairing_comparison": self.pairing_comparison(scores=scores),
+            # The >0.1 share under every captured domain.  The headline "retrieval
+            # heads are a few percent of heads" is a property of the position set as
+            # much as of the model (a template token at position 0 can win criterion
+            # (2) for most heads), so the run reports each reading instead of the
+            # configured one alone.
+            "sparsity_by_domain": {
+                domain: agg.sparsity()
+                for domain, agg in self.domain_aggregates(scores).items()
+            },
+            "top_heads_by_domain": {
+                domain: [{"head": str(h), "score": agg.head_score(h)}
+                         for h in agg.ranked_heads()[:10]]
+                for domain, agg in self.domain_aggregates(scores).items()
+            },
+            "domain_ranking_overlap": self.domain_ranking_overlap(scores),
             "aligned_top_heads": self.aligned_ranking(scores),
             "n_planned": self.n_planned,
             "model_info": self.model_info.as_dict(),
@@ -402,6 +470,11 @@ class DetectionRun:
         # rather than a rescaled approximation.
         for pairing, agg in self.raw.items():
             agg.save(out / f"scores_{pairing}_raw")
+        # Every captured argmax domain, so the position set criterion (2) searched is
+        # a reporting decision with an artifact behind each reading (the primary
+        # domain already went to `scores_<pairing>` above).
+        for (pairing, domain), agg in self.domains.items():
+            agg.save(out / f"scores_{pairing}_{domain}")
         if self.secondary is not None:
             self.secondary.save(out / f"scores_{self.secondary.pairing}")
             save_json(add_provenance(self.summary(self.secondary),
@@ -409,6 +482,55 @@ class DetectionRun:
                       out / f"summary_{self.secondary.pairing}.json")
         log.info("detection run written to %s", out)
         return out
+
+
+def _summed_domain_shift(results: Sequence[InstanceResult],
+                         pairing: str) -> dict[str, Any]:
+    """Sum the per-instance argmax-domain shift for one pairing.
+
+    The per-instance counter is scoped to the rows that pairing scores (criterion (1)
+    held), so it must be summed per pairing -- copying the primary pairing's number
+    onto the `same_step` sidecar would describe a different token set.
+    """
+    total = shifted = 0
+    for result in results:
+        entry = (result.meta.get("argmax_domain_shift") or {}).get(pairing) or {}
+        total += int(entry.get("positions", 0))
+        shifted += int(entry.get("shifted", 0))
+    return {
+        "positions": total,
+        "shifted": shifted,
+        "share": (shifted / total) if total else 0.0,
+        "n_instances": len(results),
+        "reference": "prompt",
+        "pairing": pairing,
+        "restricted_to": "rows this pairing scores (criterion (1) held)",
+    }
+
+
+def _build_sample(tokenizer: Any, item: dict[str, Any], config: DetectionConfig,
+                  corpus: Sequence[str] | None) -> Any:
+    """Build one planned instance (CPU-only: filler, insertion, tokenization).
+
+    Extracted so the optional preflight builds exactly what the detection loop would
+    have built, rather than a second implementation that can drift from it.
+    """
+    # A fresh builder per instance, seeded by the instance's own seed: the seed is
+    # recorded in every artifact, so it has to be the one that actually produced the
+    # filler (a single shared builder ignored it).
+    builder = HaystackBuilder(corpus, seed=item["seed"])
+    return build_needle_sample(
+        tokenizer,
+        needle=item["needle"],
+        question=item["question"],
+        target_tokens=item["target_tokens"],
+        depth=item["depth"],
+        builder=builder,
+        chat_template=config.chat_template,
+        enable_thinking=config.enable_thinking,
+        system_prompt=config.system_prompt,
+        seed=item["seed"],
+    )
 
 
 def run_detection(
@@ -442,6 +564,28 @@ def run_detection(
     )
 
     assert_needles_disjoint()
+    # Optional preflight: build every prompt and check its invariants before the first
+    # forward pass.  One prompt whose context cannot be located verbatim (so the
+    # `haystack` span is missing) otherwise aborts the stage mid-grid, after the GPU
+    # time already spent -- and at paper scale that is hours.  The build is CPU-only,
+    # and the samples are kept, so this costs one build rather than two.
+    prebuilt: dict[int, Any] = {}
+    if config.preflight:
+        log.info("preflight: building all %d prompts (CPU only) before the first "
+                 "forward pass", len(plan))
+        for item in plan:
+            sample = _build_sample(tokenizer, item, config, corpus)
+            if config.argmax_domain == "haystack" and sample.haystack_span is None:
+                raise ValueError(
+                    f"preflight failed on instance {item['index']} "
+                    f"(needle {item['needle_index']}, length {item['target_tokens']}, "
+                    f"depth {item['depth']}): the rendered prompt does not contain the "
+                    f"haystack verbatim, so the `haystack` argmax domain has no span. "
+                    f"Fix the prompt/template or run with --argmax-domain prompt."
+                )
+            prebuilt[item["index"]] = sample
+        log.info("preflight ok: %d prompts built, haystack span present for every one",
+                 len(prebuilt))
     results: list[InstanceResult] = []
     started = time.time()
     # Stream every instance to disk as it finishes: a paper-scale run is tens of
@@ -461,22 +605,8 @@ def run_detection(
 
     try:
         for item in iterator:
-            # A fresh builder per instance, seeded by the instance's own seed: the
-            # seed is recorded in every artifact, so it has to be the one that
-            # actually produced the filler (a single shared builder ignored it).
-            builder = HaystackBuilder(corpus, seed=item["seed"])
-            sample = build_needle_sample(
-                tokenizer,
-                needle=item["needle"],
-                question=item["question"],
-                target_tokens=item["target_tokens"],
-                depth=item["depth"],
-                builder=builder,
-                chat_template=config.chat_template,
-                enable_thinking=config.enable_thinking,
-                system_prompt=config.system_prompt,
-                seed=item["seed"],
-            )
+            sample = prebuilt.get(item["index"]) or _build_sample(tokenizer, item,
+                                                                  config, corpus)
             result = score_instance(
                 model, info, sample, tokenizer,
                 max_new_tokens=config.max_new_tokens,
@@ -537,16 +667,15 @@ def run_detection(
     }
     # How much the argmax domain moved criterion (2): summed over instances, so a
     # reader can see whether `haystack` was a no-op or a real change on this grid.
-    shifts = [r.meta.get("argmax_domain_shift") or {} for r in results]
-    shift_positions = sum(int(s.get("positions", 0)) for s in shifts)
-    shift_shifted = sum(int(s.get("shifted", 0)) for s in shifts)
-    scores.meta["argmax_domain_shift"] = {
-        "positions": shift_positions,
-        "shifted": shift_shifted,
-        "share": (shift_shifted / shift_positions) if shift_positions else 0.0,
-        "n_instances": len(shifts),
-        "reference": "prompt",
-    }
+    # The per-instance counter is restricted to the rows this pairing actually scores
+    # (criterion (1) held), so the share describes the same rows as the score; the
+    # `restricted_to` field says so in the artifact.
+    scores.meta["argmax_domain_shift"] = _summed_domain_shift(results, config.pairing)
+    # Which domains the capture could produce.  `haystack` is absent when a rendered
+    # prompt did not contain the context verbatim, i.e. when the domain is undefined
+    # rather than merely empty.
+    scores.meta["argmax_domains_captured"] = sorted(
+        {d for r in results for d in (r.meta.get("argmax_domains") or [])})
     # Where the attention sink sits relative to the haystack.  Criterion (2) asks
     # whether the argmax is a *needle* token, so a sink inside `x` suppresses credit
     # and one before `x` (a chat template's first tokens) does not -- the same model
@@ -578,6 +707,11 @@ def run_detection(
             # Without this the `same_step` sidecar had no config/corpus, unlike the
             # primary one.
             secondary.meta = dict(scores.meta)
+            # ... but the shift is pairing-specific now (the two pairings score
+            # different token sets), so the copy above must be corrected rather than
+            # left claiming the primary pairing's rows.
+            secondary.meta["argmax_domain_shift"] = _summed_domain_shift(
+                results, secondary.pairing)
             # The raw view of the secondary pairing too: the two pairings credit
             # different token sets, so the raw denominator cannot be derived from the
             # primary one.
@@ -585,8 +719,52 @@ def run_detection(
                                              threshold=config.threshold,
                                              field="scores_raw")
             secondary_raw.meta = dict(scores.meta)
+            secondary_raw.meta["argmax_domain_shift"] = _summed_domain_shift(
+                results, secondary.pairing)
             secondary_raw.meta["denominator"] = "raw_token_count"
             raw_aggs[secondary_raw.pairing] = secondary_raw
+
+    # Every captured argmax domain, from the same per-instance dicts: the argmaxes
+    # were all captured in the same forward pass, so this costs one CPU pass per
+    # domain and no GPU time, and the run reports each reading of criterion (2)
+    # instead of the configured one alone.  `scores_by_domain` holds the domains
+    # *other* than the primary, so the primary is not aggregated twice.
+    alternative_domains = sorted({d for r in results for d in r.scores_by_domain})
+    domain_scores: dict[tuple[str, str], RetrievalScores] = {}
+    for domain in alternative_domains:
+        agg = aggregate_scores(results, info, pairing=config.pairing,
+                               threshold=config.threshold, domain=domain)
+        agg.meta = dict(scores.meta)
+        agg.meta["argmax_domain"] = domain
+        agg.meta["domain_is_primary"] = False
+        # The run-level shift describes how far the *primary* domain moved away from
+        # prompt; copying it onto another domain's sidecar would mislabel it.  The
+        # prompt matrix is the reference, so its own shift is zero by definition.
+        agg.meta["argmax_domain_shift"] = (
+            {"reference": "prompt", "share": 0.0,
+             "note": "this matrix *is* the prompt reference"}
+            if domain == "prompt" else
+            {"reference": "prompt", "share": None,
+             "note": "not recorded for a non-primary domain; see the summary's "
+                     "sparsity_by_domain and domain_ranking_overlap"}
+        )
+        domain_scores[(config.pairing, domain)] = agg
+        share = agg.sparsity()["thresholds"].get(str(config.threshold), {}).get("frac", 0.0)
+        primary_share = scores.sparsity()["thresholds"].get(
+            str(config.threshold), {}).get("frac", 0.0)
+        log.info("%s domain (not the run's own): %.1f%% of heads above %.2f vs %.1f%% "
+                 "for %s", domain, 100 * share, config.threshold,
+                 100 * primary_share, config.argmax_domain)
+    # The same domains for the other pairing, when it exists: the two pairings credit
+    # different token sets, so a domain's effect on one says nothing about the other.
+    if secondary is not None:
+        for domain in alternative_domains:
+            agg = aggregate_scores(results, info, pairing=secondary.pairing,
+                                   threshold=config.threshold, domain=domain)
+            agg.meta = dict(scores.meta)
+            agg.meta["argmax_domain"] = domain
+            agg.meta["domain_is_primary"] = False
+            domain_scores[(secondary.pairing, domain)] = agg
 
     # Same matrices, restricted to instances the model actually solved: without this
     # a model that fails NIAH more often looks "less sparse" for reasons unrelated to
@@ -614,7 +792,7 @@ def run_detection(
     run = DetectionRun(
         scores=scores, instances=results, config=config, model_info=info,
         wall_time_s=time.time() - started, secondary=secondary, n_planned=len(plan),
-        conditional=conditional, raw=raw_aggs,
+        conditional=conditional, raw=raw_aggs, domains=domain_scores,
     )
     # The flag lives in InstanceResult.meta (`sample` is the NIAH sample dict and has
     # no such key), so reading `r.sample` made this warning unreachable.

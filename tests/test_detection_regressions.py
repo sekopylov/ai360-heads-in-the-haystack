@@ -293,6 +293,14 @@ def test_run_detection_aggregates_streams_and_writes_conditional(tmp_path, monke
             aligned_scores={"next_step": {"L0H0": 0.9, "L0H1": 0.2},
                             "same_step": {"L0H0": 0.8, "L0H1": 0.1}},
             copied_tokens={"next_step": {"L0H0": [11, 12]}, "same_step": {"L0H0": [11]}},
+            # The alternative domains the same decode pass captured.  `scores` is the
+            # primary (`haystack` by default), so this map holds the complement.
+            scores_by_domain={
+                "prompt": {"next_step": {"L0H0": 0.9 if recited else 0.4, "L0H1": 0.0},
+                           "same_step": {"L0H0": 0.8 if recited else 0.3, "L0H1": 0.0}},
+                "full": {"next_step": {"L0H0": 0.9 if recited else 0.4, "L0H1": 0.0},
+                         "same_step": {"L0H0": 0.8 if recited else 0.3, "L0H1": 0.0}},
+            },
         )
 
     monkeypatch.setattr(detection, "build_needle_sample", fake_build)
@@ -338,6 +346,26 @@ def test_run_detection_aggregates_streams_and_writes_conditional(tmp_path, monke
     assert run.raw["next_step"].score[0, 0] == pytest.approx(0.3)
     assert run.raw["next_step"].score[0, 0] < run.scores.score[0, 0]
     assert run.raw["next_step"].meta["denominator"] == "raw_token_count"
+
+    # Every captured argmax domain is aggregated from the same per-instance map and
+    # written beside the primary matrix, so the "sparse" headline can be read against
+    # the position set instead of being pinned by the run's own flag.
+    assert set(run.domains) == {("next_step", "prompt"), ("next_step", "full"),
+                                ("same_step", "prompt"), ("same_step", "full")}
+    assert (tmp_path / "scores_next_step_prompt.npz").exists()
+    assert (tmp_path / "scores_same_step_full.npz").exists()
+    by_domain = summary["sparsity_by_domain"]
+    assert set(by_domain) == {"haystack", "prompt", "full"}, by_domain
+    assert by_domain["haystack"] == run.scores.sparsity()
+    # 0.9 on the recited instance and 0.4 on the other -> 0.65, above the primary's
+    # 0.45: the prompt domain credits a head the haystack domain does not.
+    assert run.domains[("next_step", "prompt")].score[0, 0] == pytest.approx(0.65)
+    assert run.domains[("next_step", "prompt")].meta["argmax_domain"] == "prompt"
+    assert run.domains[("next_step", "prompt")].meta["domain_is_primary"] is False
+    assert summary["top_heads_by_domain"]["prompt"][0]["head"] == "L0H0"
+    # The derived activation frequency is exact (`activation_freq` *is* P(score > 0)).
+    assert run.domains[("next_step", "prompt")].activation_freq[0, 0] == pytest.approx(1.0)
+    assert run.domains[("next_step", "prompt")].activation_freq[0, 1] == pytest.approx(0.0)
 
 
 def test_detection_config_plan_is_cached(caplog):
@@ -515,3 +543,143 @@ def test_cross_kind_layer_idx_collision_is_fatal():
     with pytest.raises(RuntimeError, match="both"):
         discover_modules(Both())
 
+
+def test_detection_saves_and_summarises_every_argmax_domain(tmp_path):
+    """Which position set criterion (2) searches is a reporting decision.
+
+    Every domain is captured in the same forward pass, so the run must write a matrix
+    per domain and say how much the "sparse" headline moves with it -- otherwise the
+    choice is baked into an expensive run that cannot be re-read.
+    """
+    from retrieval_heads.detection import DetectionConfig, DetectionRun
+
+    info = attention_info(2, 2)
+    primary = RetrievalScores(
+        info=info, score=torch.tensor([[0.9, 0.2], [0.3, 0.0]]),
+        activation_freq=torch.zeros(2, 2), n_instances=1, pairing="next_step",
+        meta={"argmax_domain": "haystack"},
+    )
+    alt = RetrievalScores(
+        info=info, score=torch.tensor([[0.1, 0.9], [0.0, 0.0]]),
+        activation_freq=torch.zeros(2, 2), n_instances=1, pairing="next_step",
+        meta={"argmax_domain": "prompt"},
+    )
+    run = DetectionRun(
+        scores=primary, instances=[], config=DetectionConfig(), model_info=info,
+        domains={("next_step", "prompt"): alt},
+    )
+    run.save(tmp_path)
+    assert (tmp_path / "scores_next_step.npz").exists()
+    assert (tmp_path / "scores_next_step_prompt.npz").exists()
+    assert (tmp_path / "scores_next_step_prompt.json").exists()
+
+    summary = run.summary()
+    by_domain = summary["sparsity_by_domain"]
+    assert set(by_domain) == {"haystack", "prompt"}, by_domain
+    assert by_domain["haystack"] == primary.sparsity()
+    assert by_domain["prompt"] == alt.sparsity()
+    # The masking arm ranks by the primary domain, so the summary says how much the
+    # alternative domain would change the set it masks.  (The summary's own overlap
+    # uses the top 10, which here is every head; the ranking difference is visible at
+    # top_k=1, where the two domains pick different heads.)
+    overlap = run.domain_ranking_overlap(top_k=1)
+    assert overlap["primary_domain"] == "haystack"
+    assert overlap["by_domain"]["prompt"]["top_heads"] == ["L0H1"]
+    assert overlap["by_domain"]["prompt"]["overlap"] == 0
+    assert summary["domain_ranking_overlap"]["primary_domain"] == "haystack"
+    assert set(summary["top_heads_by_domain"]) == {"haystack", "prompt"}
+
+
+def _preflight_harness(monkeypatch, *, span_for):
+    """A fake build/score pair that records the order of the two calls."""
+    import logging
+    from types import SimpleNamespace
+
+    from retrieval_heads import detection
+    from retrieval_heads.scoring import InstanceResult
+
+    info = attention_info(1, 2)
+    order: list[str] = []
+
+    def fake_build(tokenizer, *, needle, question, target_tokens, depth, builder,
+                   chat_template=True, enable_thinking=False, system_prompt=None, seed=0):
+        order.append("build")
+        # 1-based build count, so a test can make a *specific* instance fail without
+        # depending on the plan's seed arithmetic.
+        index = sum(1 for entry in order if entry == "build")
+        return SimpleNamespace(
+            needle_span=(1, 3), needle_text=needle, question=question, depth=depth,
+            length=target_tokens, target_tokens=target_tokens, seed=seed,
+            n_needle_tokens=2, n_unique_needle_tokens=2,
+            input_ids=torch.zeros(1, target_tokens, dtype=torch.long),
+            haystack_span=span_for(index),
+            as_dict=lambda: {"needle_text": needle, "n_needle_tokens": 2,
+                             "n_unique_needle_tokens": 2},
+        )
+
+    def fake_score(model, info_, sample, tokenizer, **kwargs):
+        order.append("score")
+        return InstanceResult(
+            sample={"n_needle_tokens": 2, "n_unique_needle_tokens": 2,
+                    "n_unique_needle_text_tokens": 2},
+            meta={"eos_reached": True, "truncated": False},
+            scores={"next_step": {"L0H0": 0.5, "L0H1": 0.0},
+                    "same_step": {"L0H0": 0.4, "L0H1": 0.0}},
+            scores_raw={"next_step": {"L0H0": 0.5, "L0H1": 0.0},
+                        "same_step": {"L0H0": 0.4, "L0H1": 0.0}},
+            activations={"next_step": {"L0H0": 1.0, "L0H1": 0.0},
+                         "same_step": {"L0H0": 1.0, "L0H1": 0.0}},
+            considered={}, sink_rate={"next_step": {"__overall__": 0.0}},
+            generated_ids=[1], generated_text="x", needle_recall=1.0, n_steps=1,
+            aligned_scores={"next_step": {"L0H0": 0.5, "L0H1": 0.0},
+                            "same_step": {"L0H0": 0.4, "L0H1": 0.0}},
+            copied_tokens={"next_step": {"L0H0": [1]}, "same_step": {"L0H0": [1]}},
+        )
+
+    monkeypatch.setattr(detection, "build_needle_sample", fake_build)
+    monkeypatch.setattr(detection, "score_instance", fake_score)
+    return info, order, logging
+
+
+def test_preflight_builds_every_prompt_before_the_first_forward(monkeypatch):
+    """The whole point of the preflight: all CPU work, then the GPU work.
+
+    A prompt whose haystack cannot be located used to abort `detect` mid-grid, after
+    the GPU time already spent; building everything first turns that into a failure
+    before the first forward pass.
+    """
+    from retrieval_heads.detection import DetectionConfig, run_detection
+
+    info, order, _ = _preflight_harness(monkeypatch, span_for=lambda index: (0, 4))
+    config = DetectionConfig(lengths=[64], depths_per_length=2, needles=[("n", "q")],
+                             preflight=True)
+    run = run_detection(None, None, info, config, progress=False)
+
+    assert order == ["build", "build", "score", "score"], order
+    assert run.summary()["config"]["preflight"] is True
+    assert run.summary()["n_instances"] == 2
+
+
+def test_preflight_fails_before_any_gpu_work(monkeypatch):
+    """A missing haystack span must stop the run before the first forward pass."""
+    from retrieval_heads.detection import DetectionConfig, run_detection
+
+    # The second instance's prompt cannot be located verbatim, so `haystack` has no
+    # span (the builder records that in `haystack_span_verbatim`).
+    info, order, _ = _preflight_harness(
+        monkeypatch, span_for=lambda index: None if index == 2 else (0, 4))
+    config = DetectionConfig(lengths=[64], depths_per_length=2, needles=[("n", "q")],
+                             preflight=True)
+    with pytest.raises(ValueError, match="preflight failed on instance"):
+        run_detection(None, None, info, config, progress=False)
+    assert order == ["build", "build"], "a forward pass ran before the preflight ended"
+
+    # Without the flag the two phases interleave: the first instance is scored before
+    # the second prompt is even built, which is why one bad prompt costs the GPU time
+    # already spent.  (The real `score_instance` is what refuses the missing span --
+    # see `test_haystack_domain_runs_end_to_end_on_the_tiny_hybrid`; this fake scorer
+    # has no span check of its own.)
+    order.clear()
+    run_detection(None, None, info, DetectionConfig(
+        lengths=[64], depths_per_length=2, needles=[("n", "q")]), progress=False)
+    assert order == ["build", "score", "build", "score"], order

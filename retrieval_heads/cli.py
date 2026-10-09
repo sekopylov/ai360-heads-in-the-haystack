@@ -42,7 +42,10 @@ DEFAULT_THRESHOLD = 0.1
 #: the dense control 285 of 448 heads put their argmax on prompt position 0 -- a
 #: template token -- so those scores were a *lower* bound.  `ds-results/` was
 #: produced under ``prompt`` and records that in every artifact; pass
-#: ``--argmax-domain prompt`` to reproduce it.
+#: ``--argmax-domain prompt`` to reproduce it.  This flag picks the run's *own*
+#: domain (the historical filenames and the ablations' ranking); every captured
+#: domain is scored from the same pass and written beside it, because which position
+#: set criterion (2) searches is a reporting decision, not a compute one.
 DEFAULT_ARGMAX_DOMAIN = "haystack"
 #: Sentinel: "detect did not record this field" (None can be a real value).
 _MISSING = object()
@@ -470,6 +473,7 @@ def cmd_detect(args: argparse.Namespace) -> int:
         seed=args.seed,
         limit=args.limit,
         dropped_lengths=dropped_lengths,
+        preflight=args.preflight,
     )
     if args.corpus:
         from retrieval_heads.haystack import load_corpus
@@ -602,6 +606,11 @@ def cmd_mask(args: argparse.Namespace) -> int:
     curve.meta["needles"] = [{"needle": n, "question": q} for n, q in eval_needles]
     curve.meta["needle_source"] = "eval"       # never in DETECTION_NEEDLES
     curve.meta["depths_per_length"] = args.depths
+    # The sample count is lengths x depths x needles, and until now only the last two
+    # were recorded: after an A100 run (3 lengths) and a t4 run (2) the two trees were
+    # indistinguishable on the axis that matters most for NLI cost.
+    curve.meta["lengths"] = list(lengths)
+    curve.meta["n_samples_per_point"] = len(lengths) * args.depths * len(eval_needles)
     curve.meta["seed"] = args.seed
     # The conditions the *heads were chosen under* (detect) and the ones this
     # ablation ran under; if they differ the artifact says so instead of hiding it.
@@ -634,6 +643,12 @@ def cmd_mask(args: argparse.Namespace) -> int:
                         "needle_source": "eval", "seed": args.seed,
                         "model": info.name, "max_new_tokens": args.max_new_tokens,
                         "prefill_chunk": normalize_prefill_chunk(args.prefill_chunk),
+                        # The ablation runs on the same sample set as the curve beside
+                        # it, so it records the same axes (a reader should not have to
+                        # cross-reference `masking_curve.json` to know the lengths).
+                        "lengths": list(lengths), "depths_per_length": args.depths,
+                        "needles": [{"needle": n, "question": q} for n, q in eval_needles],
+                        "n_samples": len(samples),
                         "chat_template": settings.chat_template,
                         "system_prompt": settings.system_prompt,
                         "corpus": "custom" if corpus else "synthetic",
@@ -686,7 +701,8 @@ def cmd_qa(args: argparse.Namespace) -> int:
                          prefill_chunk=normalize_prefill_chunk(args.prefill_chunk),
                          enable_thinking=settings.enable_thinking,
                          chat_template=settings.chat_template,
-                         system_prompt=settings.system_prompt)
+                         system_prompt=settings.system_prompt,
+                         data_path=args.data)
     save_json(add_provenance(result, dtype=info.dtype), out_dir / "task_qa.json")
     return 0
 
@@ -717,7 +733,8 @@ def cmd_cot(args: argparse.Namespace) -> int:
                           prefill_chunk=normalize_prefill_chunk(args.prefill_chunk),
                           enable_thinking=settings.enable_thinking,
                           chat_template=settings.chat_template,
-                          system_prompt=settings.system_prompt)
+                          system_prompt=settings.system_prompt,
+                          data_path=args.data)
     save_json(add_provenance(result, dtype=info.dtype), out_dir / "task_cot.json")
     return 0
 
@@ -878,7 +895,10 @@ def build_parser() -> argparse.ArgumentParser:
                         "(default) is the paper's `a in R^{|x|}` over the context span "
                         "(filler + needle, no question or template), 'prompt' also "
                         "lets the question and template compete, 'full' also allows "
-                        "the already-generated tokens")
+                        "the already-generated tokens.  Every captured domain is "
+                        "scored in the same pass and written as its own "
+                        "scores_<pairing>_<domain> matrix; this flag picks which one "
+                        "the run's own files and the ablations use")
     p.add_argument("--capture-impl", default="eager",
                    help="attention kernel used while capturing (eager required)")
     p.add_argument("--prefill-impl", default="sdpa")
@@ -887,6 +907,11 @@ def build_parser() -> argparse.ArgumentParser:
                         "memory when float32 SDPA falls back to the matmul kernel")
     p.add_argument("--corpus", default=None, help="text file of filler sentences")
     p.add_argument("--limit", type=int, default=None, help="cap the number of instances")
+    p.add_argument("--preflight", action="store_true",
+                   help="build every planned prompt (CPU only) and validate it before "
+                        "the first forward pass; a prompt whose context cannot be "
+                        "located verbatim otherwise aborts the stage mid-grid, after "
+                        "the GPU time already spent")
     p.set_defaults(func=cmd_detect)
 
     p = sub.add_parser("mask", help="mask top-K retrieval heads vs K random heads")

@@ -218,20 +218,75 @@ def test_a100_profile_keeps_a_memory_bound_and_the_paper_grid():
     # The domain is pinned, not inherited from the code default: a job's artifacts
     # must stay explainable if that default ever moves.
     assert detect[detect.index("--argmax-domain") + 1] == "haystack", detect
+    # The expensive run builds all 270 prompts before the first forward pass, so one
+    # prompt whose haystack cannot be located verbatim fails in minutes rather than
+    # hours.  The L4 scales leave it off (there a mid-grid failure costs minutes).
+    assert "--preflight" in detect, detect
+    for profile in ("paper", "t4", "laptop"):
+        assert "--preflight" not in driver.SCALES[profile]["detect"], profile
 
-    # The ablation sample set is what `retrieval_std` is measured over.  The A100
-    # spends the same 15-sample budget as the t4 run's 5, but spread over three
-    # held-out needles x five depths instead of one needle x ten depths, because
-    # needle identity is the larger source of variance.
+    # The ablation sample set is what `retrieval_std` is measured over, and its size
+    # is lengths x depths x needles -- an earlier assertion multiplied only the last
+    # two, so the "same 15-sample budget" comment was wrong by 3x (the a100 mask runs
+    # at three lengths).
     mask = driver.SCALES["a100"]["mask"]
     assert mask[mask.index("--depths") + 1] == "5", mask
     assert mask[mask.index("--needles") + 1] == "3", mask
-    assert int(mask[mask.index("--depths") + 1]) * int(mask[mask.index("--needles") + 1]) == 15, mask
+
+    def flag_list(argv: list[str], flag: str) -> list[str]:
+        """Values of a `nargs="*"` flag: everything up to the next `--flag`."""
+        out: list[str] = []
+        for token in argv[argv.index(flag) + 1:]:
+            if token.startswith("--"):
+                break
+            out.append(token)
+        return out
+
+    a100_lengths = flag_list(mask, "--lengths")
+    per_point = (len(a100_lengths) * int(mask[mask.index("--depths") + 1])
+                 * int(mask[mask.index("--needles") + 1]))
+    assert a100_lengths == ["4096", "8192", "16384"], a100_lengths
+    assert per_point == 45, (per_point, mask)
+    # ... and it is 4.5x the t4 run's set, which is what the cost comment must say.
+    # The t4 scale sets neither `--depths` nor `--needles`, so the CLI defaults (5 and
+    # one held-out needle) apply: 2 x 5 x 1 = 10.
+    t4_mask = driver.SCALES["t4"]["mask"]
+    assert "--depths" not in t4_mask and "--needles" not in t4_mask, t4_mask
+    t4_per_point = len(flag_list(t4_mask, "--lengths")) * 5
+    assert t4_per_point == 10, (t4_per_point, t4_mask)
 
     def lengths(profile: str) -> list[str]:
-        argv = driver.SCALES[profile]["detect"]
-        start = argv.index("--lengths") + 1
-        return [token for token in argv[start:] if not token.startswith("--")]
+        return flag_list(driver.SCALES[profile]["detect"], "--lengths")
 
     assert lengths("a100") == lengths("paper"), "the A100 grid drifted from `paper`"
 
+
+def test_driver_can_override_the_grid_for_a_preflight():
+    """The a100 config's own advice ("try a short length first") must be executable.
+
+    The scale table is what a job runs, so without a passthrough the preflight meant
+    editing `SCALES` and remembering to revert it -- and the revert is exactly the
+    kind of edit that silently ships.
+    """
+    from pathlib import Path
+
+    driver = load_job_driver()
+    argv = driver.stage_argv("detect", profile="a100", models=["m"], prefix=Path("ds"),
+                             seed=0, lengths=[1024, 4096], limit=60)[0]
+    start = argv.index("--lengths")
+    assert argv[start + 1:start + 3] == ["1024", "4096"], argv
+    assert "49152" not in argv, "the scale's lengths were extended, not replaced"
+    assert argv[argv.index("--limit") + 1] == "60"
+
+    # `--limit` is a `detect` flag only: appending it to another stage would make
+    # argparse exit, so the override must not do that.
+    mask = driver.stage_argv("mask", profile="a100", models=["m"], prefix=Path("ds"),
+                             seed=0, lengths=[1024], limit=60)[0]
+    assert "--limit" not in mask, mask
+    assert mask[mask.index("--lengths") + 1] == "1024", mask
+
+    # With no override the scale is untouched.
+    plain = driver.stage_argv("detect", profile="a100", models=["m"], prefix=Path("ds"),
+                              seed=0)[0]
+    assert plain == ["detect", "--model", "m", "--out", "ds/m", "--seed", "0",
+                     *driver.SCALES["a100"]["detect"]], plain

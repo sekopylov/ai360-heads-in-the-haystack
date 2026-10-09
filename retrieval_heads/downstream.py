@@ -419,12 +419,17 @@ def qa_ablation(
     enable_thinking: bool | None = False,
     chat_template: bool = True,
     system_prompt: str | None = None,
+    data_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Extractive QA: baseline, retrieval heads masked, random heads masked.
 
     The retrieval arm is the top K heads *by score*, and the random arm is drawn
     from heads at or below the threshold, so both remove exactly the same number
     of heads and the control contains no retrieval heads.
+
+    ``data_path`` is recorded in the payload: the built-in items are a pipeline check
+    and a `--data file.jsonl` run is a measurement, and without the path the two
+    artifacts differed only in ``n_samples``.
     """
     baseline_scores = extractive_qa_scores(model, tokenizer, info, samples,
                                            max_new_tokens=max_new_tokens,
@@ -436,6 +441,11 @@ def qa_ablation(
     log.info("QA baseline F1=%.1f", baseline)
     rng = np.random.default_rng(seed)
     out: dict[str, Any] = {"task": "extractive_qa", "baseline_f1": baseline,
+                           # Which dataset produced these numbers.  The built-ins are
+                           # a pipeline check, not a benchmark, and without the path a
+                           # real-dataset artifact was indistinguishable from them.
+                           "data_path": str(data_path) if data_path else None,
+                           "dataset": "builtin" if data_path is None else "file",
                            # Per-sample, so a drop can be attributed to every item or
                            # to one outlier instead of only being a mean.
                            "baseline_f1s": baseline_scores,
@@ -529,11 +539,13 @@ def cot_ablation(
     enable_thinking: bool | None = False,
     chat_template: bool = True,
     system_prompt: str | None = None,
+    data_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Reasoning accuracy with/without CoT, and with/without retrieval heads.
 
     Same matched-arm rule as :func:`qa_ablation`: top-K by score against K heads
-    drawn from the non-retrieval pool.
+    drawn from the non-retrieval pool.  ``data_path`` is recorded for the same reason
+    as in :func:`qa_ablation` -- the built-in arithmetic items are a pipeline check.
     """
     retrieval_ranked = scores.ranked_heads()
     pool, contaminated = control_pool(scores)
@@ -547,6 +559,8 @@ def cot_ablation(
     rng = np.random.default_rng(seed)
     out: dict[str, Any] = {"task": "cot_reasoning", "n_samples": len(samples), "k": k,
                            "k_effective": k_eff, "n_scoreable_heads": info.n_scoreable_heads,
+                           "data_path": str(data_path) if data_path else None,
+                           "dataset": "builtin" if data_path is None else "file",
                            "n_non_retrieval_heads": len(pool),
                            "random_control_contaminated": contaminated,
                            "model": info.name, "max_new_tokens": max_new_tokens,

@@ -66,13 +66,20 @@ def test_the_committed_dense_run_stays_in_a_paper_like_band():
 
 
 def test_every_stage_and_profile_builds_parseable_argv(driver):
-    """Every argv the driver would run must parse cleanly."""
+    """Every argv the driver would run must parse cleanly.
+
+    `case-study` is the one stage that is a standalone script rather than a
+    `retrieval_heads.cli` subcommand (it needs the real attention rows), so it is
+    checked by its own test below instead of against this parser.
+    """
     parser = build_parser()
     models = ["qwen3.5-0.8b", "qwen3-0.6b"]
     prefix = Path("ds-results")
     checked = 0
     for profile in sorted(driver.SCALES):
         for stage in driver.STAGES:
+            if stage == "case-study":
+                continue
             for argv in driver.stage_argv(stage, profile=profile, models=models,
                                           prefix=prefix, seed=7):
                 parsed = parser.parse_args(argv)
@@ -82,6 +89,33 @@ def test_every_stage_and_profile_builds_parseable_argv(driver):
                     assert parsed.seed == 7, f"{profile}/{stage} lost --seed"
                 checked += 1
     assert checked > 0
+
+
+def test_case_study_stage_targets_the_script_and_the_runs_own_conditions(driver):
+    """Fig. 1 is a stage now: it must run the script against the run it illustrates.
+
+    `--scores <run dir>` is what makes the script reuse the recorded conditions, and
+    `run_cli` must dispatch the stage to the script rather than to `cli.main` (whose
+    parser has no `case-study` subcommand).
+    """
+    calls: list[tuple] = []
+    original = driver.run_script
+    driver.run_script = lambda stage, script, argv: calls.append((stage, script, argv))
+    try:
+        driver.run_cli("case-study", ["--model", "m", "--scores", "ds/m", "--out", "ds/m"])
+    finally:
+        driver.run_script = original
+    assert len(calls) == 1
+    stage, script, argv = calls[0]
+    assert stage == "case-study" and script.name == "case_study.py"
+    assert argv == ["--model", "m", "--scores", "ds/m", "--out", "ds/m"]
+
+    for argv in driver.stage_argv("case-study", profile="a100", models=["m", "n"],
+                                  prefix=Path("ds"), seed=0):
+        assert argv[argv.index("--model") + 1] in {"m", "n"}
+        model = argv[argv.index("--model") + 1]
+        assert argv[argv.index("--scores") + 1] == f"ds/{model}", argv
+        assert argv[argv.index("--out") + 1] == f"ds/{model}", argv
 
 
 def test_seed_is_accepted_before_and_after_the_subcommand(driver):
@@ -462,3 +496,36 @@ def test_every_command_only_reads_flags_its_parser_defines():
         namespace = vars(parser.parse_args([command, "--model", "m"]))
         missing = sorted(reachable_flags(function.__name__) - set(namespace))
         assert not missing, f"{command}: {function.__name__} reaches undefined flags {missing}"
+
+
+def test_run_script_executes_in_process_and_tolerates_no_figure(tmp_path):
+    """The case-study stage runs a script, not a CLI subcommand.
+
+    Four properties matter: it really runs the file with the argv it was handed; the
+    script's `sys.exit(main())` means a clean 0 is success (the driver marks a stage
+    failed on *any* SystemExit); its "no copy step found" signal (exit 1) only warns,
+    because it is the last stage and aborting there would discard a finished run; and
+    any other non-zero exit still fails the stage.
+    """
+    driver = load_job_driver()
+    script = tmp_path / "s.py"
+    out = tmp_path / "out.txt"
+    script.write_text(
+        "import sys, pathlib\n"
+        "pathlib.Path(sys.argv[1]).write_text(' '.join(sys.argv[2:]))\n",
+        encoding="utf-8",
+    )
+    driver.run_script("case-study", script, [str(out), "a", "b"])
+    assert out.read_text(encoding="utf-8") == "a b"
+    assert sys.argv[0] != str(script), "sys.argv was left pointing at the script"
+
+    script.write_text("import sys\nsys.exit(0)\n", encoding="utf-8")
+    driver.run_script("case-study", script, [])          # success
+
+    script.write_text("import sys\nsys.exit(1)\n", encoding="utf-8")
+    driver.run_script("case-study", script, [])          # warns, does not raise
+
+    script.write_text("import sys\nsys.exit(3)\n", encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        driver.run_script("case-study", script, [])
+    assert exc.value.code == 3

@@ -304,14 +304,23 @@ def test_haystack_domain_is_a_lower_bound_of_the_prompt_domain(qwen3):
 
     assert haystack.meta["argmax_domain"] == "haystack"
     assert haystack.meta["argmax_span"] == list(sample.haystack_span)
-    shift = haystack.meta["argmax_domain_shift"]
+    assert haystack.meta["argmax_domains"] == ["prompt", "full", "haystack"]
+    # The shift is per pairing now (the two pairings score different token sets), and
+    # it is restricted to the rows the pairing scores.
+    shift = haystack.meta["argmax_domain_shift"]["next_step"]
     assert shift["positions"] > 0 and 0.0 <= shift["share"] <= 1.0
+    assert set(haystack.meta["argmax_domain_shift"]) == {"next_step", "same_step"}
     for head in info.scoreable_heads:
         key = str(head)
         assert haystack.scores["next_step"][key] >= prompt.scores["next_step"][key] - 1e-9, (
             f"{head}: the haystack domain lost credit ({haystack.scores['next_step'][key]} < "
             f"{prompt.scores['next_step'][key]}); the span is not a subset of the prompt"
         )
+        # The prompt domain comes out of the *same* pass, so the sidecar must equal a
+        # run that was configured for it: the alternative is captured, not re-derived.
+        assert haystack.scores_by_domain["prompt"]["next_step"][key] == pytest.approx(
+            prompt.scores["next_step"][key]
+        ), head
     # The sink diagnostic is domain-independent: it is the same prompt argmax.
     assert haystack.sink_rate["next_step"]["__overall__"] == pytest.approx(
         prompt.sink_rate["next_step"]["__overall__"])

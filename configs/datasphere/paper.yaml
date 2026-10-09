@@ -1,7 +1,7 @@
 name: rh-paper
 desc: paper-scale grid on GPU
 
-cmd: python3 scripts/datasphere_job.py --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile paper --dtype bfloat16 --stages describe,detect,mask,qa,cot,compare,figures --out-prefix ds-results
+cmd: python3 scripts/datasphere_job.py --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile paper --dtype bfloat16 --stages describe,detect,mask,qa,cot,compare,figures,case-study --out-prefix ds-results
 
 inputs:
   - models:

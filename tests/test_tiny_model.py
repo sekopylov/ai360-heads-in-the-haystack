@@ -276,3 +276,51 @@ def test_haystack_domain_runs_end_to_end_on_the_tiny_hybrid(tiny_hybrid):
     sample.haystack_span = None
     with pytest.raises(ValueError, match="no haystack_span"):
         score_instance(model, info, sample, max_new_tokens=2, argmax_domain="haystack")
+
+
+def test_one_pass_captures_every_argmax_domain(tiny_hybrid):
+    """Every domain comes from the same forward pass, so scoring all of them is free.
+
+    The capture must hold an argmax per domain, each inside its own position set, and
+    `score_instance` must record the alternatives beside the primary matrix instead of
+    requiring a second run.
+    """
+    from retrieval_heads.haystack import NeedleSample
+    from retrieval_heads.scoring import score_instance
+
+    model, info = tiny_hybrid
+    ids = _ids(length=24)
+    sample = NeedleSample(
+        prompt_text="", input_ids=ids, needle_span=(8, 12), needle_text="n",
+        question="q", depth=0.5, target_tokens=24, haystack_tokens=24, seed=0,
+        haystack_span=(3, 20), meta={"needle_text_ids": ids[0, 8:12].tolist()},
+    )
+    start, end = sample.haystack_span
+    trace, _ = decode_with_attention(model, info, sample.input_ids, max_new_tokens=2,
+                                     argmax_domain="haystack",
+                                     argmax_span=sample.haystack_span, stop_on_eos=False)
+    assert trace.domains == ("prompt", "full", "haystack")
+    for step in trace.steps:
+        assert set(step.argmax_by_domain) == {"prompt", "full", "haystack"}
+        assert step.positions("haystack") is step.argmax_by_domain["haystack"]
+        for positions in step.positions("haystack").values():
+            assert start <= int(positions.min()) and int(positions.max()) < end
+        for positions in step.positions("prompt").values():
+            assert 0 <= int(positions.min()) and int(positions.max()) < ids.shape[1]
+        # `positions()` with no argument is the scoring domain.
+        assert step.positions() is step.argmax_by_domain["haystack"]
+
+    result = score_instance(model, info, sample, max_new_tokens=2, argmax_domain="haystack")
+    # The primary is `scores`; the alternatives are the complement, so nothing is
+    # duplicated in the JSONL.
+    assert set(result.scores_by_domain) == {"prompt", "full"}
+    assert result.meta["argmax_domains"] == ["prompt", "full", "haystack"]
+    for domain, per_pairing in result.scores_by_domain.items():
+        assert set(per_pairing) == {"next_step", "same_step"}, domain
+        assert set(per_pairing["next_step"]) == {str(h) for h in info.scoreable_heads}
+    # A head's credit can only grow when the argmax searches a larger set: the prompt
+    # domain contains the haystack span, so every haystack credit is also a prompt one.
+    for head in info.scoreable_heads:
+        key = str(head)
+        assert (result.scores["next_step"][key]
+                <= result.scores_by_domain["prompt"]["next_step"][key] + 1e-9), head

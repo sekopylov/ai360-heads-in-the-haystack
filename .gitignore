@@ -37,8 +37,10 @@ ds-smoke-results/
 
 # Staging tree for a resumed job: the previous run's artifacts are uploaded via
 # `local-paths` so the remaining stages can reuse them (a copy, never the tracked
-# ds-results/).
+# ds-results/).  `ds-a100-resume/` is the A100 counterpart, staged from a finished
+# `ds-results-a100/` tree.
 ds-resume/
+ds-a100-resume/
 
 # Windows "downloaded from the internet" metadata, pure noise in a repo
 *:Zone.Identifier

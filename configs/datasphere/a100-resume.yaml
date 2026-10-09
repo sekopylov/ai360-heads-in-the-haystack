@@ -1,0 +1,54 @@
+name: rh-a100-resume
+desc: remaining stages (qa,cot,compare,figures) on the A100, reusing a finished a100 run's detect/mask
+
+# Why this config exists
+# ----------------------
+# `mask` is the A100 run's most expensive stage (its sample set is 3 lengths x 5 depths
+# x 3 needles = 45 samples per point, against the t4 run's 10), so a failure in a later
+# stage must not cost the heavy stages again.  `t4-resume.yaml` is the same idea for the
+# L4 scale; this is its A100 counterpart, and it exists because the a100 tree has a
+# different `--out-prefix` and scale, which `t4-resume.yaml` hard-codes.
+
+# How the previous artifacts reach the job
+# ----------------------------------------
+# `local-paths` uploads local directories into the job's working directory, so the
+# staged tree `ds-a100-resume/` arrives at /job/ds-a100-resume and `--out-prefix
+# ds-a100-resume` makes every stage read and write exactly that tree:
+#   qa/cot   -> --out  ds-a100-resume/<model>      (needs scores_*.npz + sidecars)
+#   compare  -> --runs ds-a100-resume/<models> --out ds-a100-resume
+#   figures  -> --runs ds-a100-resume/<models> --out ds-a100-resume/figures
+# Nothing is written to the shared project disk; `outputs` brings the merged tree back.
+#
+# Before launching, stage the artifacts from the finished run:
+#   cp -r <downloaded>/ds-results-a100/. ds-a100-resume/
+# (`ds-a100-resume/` is gitignored.)
+
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages qa,cot,compare,figures --out-prefix ds-a100-resume
+
+flags:
+  - attach-project-disk
+
+inputs:
+  - models:
+      var: WEIGHTS
+
+outputs:
+  - ds-a100-resume
+
+env:
+  vars:
+    PYTORCH_ALLOC_CONF: expandable_segments:True
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+      - ds-a100-resume
+
+cloud-instance-types:
+  - g2.1               # 28 vCPU, 1x A100 80 GB

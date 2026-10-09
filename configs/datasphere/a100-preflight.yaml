@@ -1,0 +1,55 @@
+name: rh-a100-preflight
+desc: short A100 preflight -- two lengths, both argmax domains, no mask stage
+
+# Why this config exists
+# ----------------------
+# `a100.yaml` pins the paper's `haystack` argmax domain, which had never been measured
+# at any scale before the grid was written, and its own comment says the first A100 job
+# should start with `--stages describe,detect` at a short length.  Until the driver
+# learned `--lengths`/`--limit` that advice was not executable without editing `SCALES`
+# (and remembering to revert it), so the preflight lived in a comment.
+#
+# What it answers, for a few minutes of A100 instead of a few hours:
+#   * does the SDPA flash backend actually work on sm_80?  The venv probe ran on an L4
+#     (sm_89), so "flash works on an A100" was an inference from the wheel's arch list;
+#   * how far apart are the `haystack` and `prompt` domains on the real grid?  Since
+#     round seven every captured domain is scored in the same pass, so this run writes
+#     `scores_<pairing>_prompt.*` beside `scores_<pairing>.*` and reports the >0.1 share
+#     of each (plus `domain_ranking_overlap`, i.e. how much a domain change would change
+#     the set the masking arm masks);
+#   * does the sink sit inside or outside `x` on this prompt?  `sink_in_haystack` says
+#     so, and it is the number that decides whether `--no-chat-template` is needed to
+#     reproduce the paper's geometry (add it to the detect flags below to measure that
+#     variant too -- it is a different prompt, so it cannot be derived from this run).
+#
+# Grid: 3 needles x 2 lengths x 10 depths = 60 instances per model, capped by
+# `--limit 60` so the count is explicit.  The full run is `a100.yaml`.
+
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages describe,detect --lengths 1024 4096 --limit 60 --out-prefix ds-preflight
+
+flags:
+  - attach-project-disk
+
+inputs:
+  - models:
+      var: WEIGHTS
+
+outputs:
+  - ds-preflight
+
+env:
+  vars:
+    PYTORCH_ALLOC_CONF: expandable_segments:True
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+
+cloud-instance-types:
+  - g2.1               # 28 vCPU, 1x A100 80 GB

@@ -125,7 +125,11 @@ Artifacts and logs come back with
 `local-paths`), `t4-venv.yaml` (refresh the project-disk venv, run no stage),
 `cuda-probe.yaml` (read-only `--inspect-dir` audit), `a100.yaml` (the `paper` grid on
 one A100 with 8192-token prefill chunks and a 96-token detect budget; the A100 costs 2.32x
-the L4 per hour, so it is for long-context runs, not for iteration), `laptop.yaml`,
+the L4 per hour, so it is for long-context runs, not for iteration),
+`a100-preflight.yaml` (two lengths, `describe,detect` only — the cheap measurement of
+the hardware and of the argmax-domain/sink geometry the full run would otherwise
+gamble on), `a100-resume.yaml` (the A100 counterpart of `t4-resume.yaml`, so a failure
+in a late stage does not re-pay for `mask`), `laptop.yaml`,
 `paper.yaml` and `smoke.yaml`.  Everything non-obvious about this path — the pip
 crash that shapes the requirements file, the `cmd` grammar, why the cached venv
 cannot be the entry point, what the "T4" slot actually hands out — is written up
@@ -202,14 +206,24 @@ the search space:
 | `full` | prompt + already-generated positions |
 
 All three come out of the same capture -- the rows are identical, only the argmax
-changes -- so this is a reporting decision like the pairing, not extra compute.  The
-span is recovered from the same character offsets the needle span uses
-(`NeedleSample.haystack_span`) and validated at build time; each artifact records the
-domain, the span, and `argmax_domain_shift` (how many `(layer, head, step)` argmax
-positions the domain moved relative to `prompt`).  `sink_rate` is deliberately taken
-from the **prompt**-restricted argmax under every domain, because under `haystack`
-position 0 is ineligible and a sink rate read off the scoring argmax would be a
-structural zero rather than a measurement.
+changes -- so the choice is a *reporting* decision like the pairing, and the code
+treats it as one: `detect` scores **every captured domain in the same pass** and
+writes a matrix per domain (`scores_<pairing>_<domain>.npz|.json`; the domain named
+by `--argmax-domain` also keeps the historical `scores_<pairing>.*` names and is what
+the ablations rank heads by).  Each summary carries `sparsity_by_domain`,
+`top_heads_by_domain` and `domain_ranking_overlap` (how many of the primary domain's
+top-10 heads survive under each other domain), so "retrieval heads are a few percent
+of heads" can be read against the position set instead of being an artifact of it.
+The span is recovered from the same character offsets the needle span uses
+(`NeedleSample.haystack_span`) and validated at build time; a prompt that does not
+contain the context verbatim has no `haystack` domain, and the instance records which
+domains it could be scored in (`argmax_domains`).  `argmax_domain_shift` (how many
+scored `(layer, head, step)` positions the domain moved relative to `prompt`) is
+counted over exactly the rows each pairing scores and is recorded per pairing, so it
+describes the same rows as `scores`; `sink_rate` is deliberately
+taken from the **prompt**-restricted argmax under every domain, because under
+`haystack` position 0 is ineligible and a sink rate read off the scoring argmax would
+be a structural zero rather than a measurement.
 
 ### Detection grid
 
@@ -230,6 +244,15 @@ instances per model).
 Filler text is generated from a seeded word list (offline, deterministic);
 `--corpus FILE` swaps in a real corpus such as the Paul Graham essays.
 
+`detect --preflight` builds **every** planned prompt (CPU only) and checks its
+invariants before the first forward pass, then reuses those prompts for the run.  It
+exists because `score_instance` refuses a sample whose `haystack` span is missing
+(the rendered prompt did not contain the context verbatim), and without the flag that
+refusal lands mid-grid -- after the GPU time already spent, which at paper scale is
+hours.  The `a100` scale turns it on; the L4 scales leave it off, where a mid-grid
+failure costs minutes.  `scripts/datasphere_job.py --lengths/--limit` are the other
+preflight knobs: they override the scale's grid so a short run needs no `SCALES` edit.
+
 ---
 
 ## Code map
@@ -239,23 +262,29 @@ Filler text is generated from a seeded word list (offline, deterministic);
 | `retrieval_heads/models.py` | — | **architecture-aware head discovery**: separates softmax attention from linear/recurrent mixers |
 | `retrieval_heads/haystack.py` | 3 | needle insertion at a given depth; token span recovered from character offsets |
 | `retrieval_heads/attention.py` | 3, 4.1 | attention capture (`patch` by default, keyed by `layer_idx`; public `output_attentions` as the alternative) and head / token-mixer ablation hooks |
-| `retrieval_heads/scoring.py` | 3 | the retrieval score: two criteria, both pairings, the argmax domain and its span, dense layer × head matrices under both denominator conventions (`scores_*` and `scores_*_raw`) |
+| `retrieval_heads/scoring.py` | 3 | the retrieval score: two criteria, both pairings, every argmax domain captured in one pass (a matrix per domain) and its span, dense layer × head matrices under both denominator conventions (`scores_*` and `scores_*_raw`) |
 | `retrieval_heads/detection.py` | 3 | the detection driver and its configurable grid |
 | `retrieval_heads/properties.py` | 4 | sparsity buckets, activation-frequency gap, Pearson correlation, head-set overlap |
 | `retrieval_heads/masking.py` | 4.1, 5 | top-K vs random-K masking curves; full-attention vs linear layer ablation |
 | `retrieval_heads/downstream.py` | 5 | extractive QA and CoT reasoning with and without masking |
-| `retrieval_heads/plotting.py` | all figures | the `figures` stage writes `ring_graph`, `score_distribution`, `heat_map`, `corr_map`, `layer_profile`, `masking_heads`, `masking_recall`, `mixer_ablation`, `task_qa`, `task_cot`; the paper's Fig. 1 (`retrieval_attention_dist.pdf`) comes from `scripts/case_study.py` instead, which is not part of any stage |
-| `retrieval_heads/cli.py` | — | `describe / detect / mask / qa / cot / compare / figures` |
+| `retrieval_heads/plotting.py` | all figures | the `figures` stage writes `ring_graph`, `score_distribution`, `heat_map`, `corr_map`, `layer_profile`, `masking_heads`, `masking_recall`, `mixer_ablation`, `task_qa`, `task_cot`; the paper's Fig. 1 (`retrieval_attention_dist.pdf`) comes from `scripts/case_study.py`, which is the `case-study` driver stage (it needs the real attention rows, so it runs while the model is resident; `paper.yaml`, `t4-cached.yaml` and `a100.yaml` list it, and it can be run by hand too) |
+| `retrieval_heads/cli.py` | — | `describe / detect / mask / qa / cot / compare / figures` (the driver adds `case-study`, which runs `scripts/case_study.py` in-process so Fig. 1 reuses the resident model) |
 
 ### Implementation notes worth knowing
 
 * **Prefill cheap, decode precise.** Attention maps are only needed at decoding
   steps, where `q_len = 1`. The prefill therefore runs on `sdpa` and only the
   decode steps on `eager`. A captured row costs `(heads, kv_len)` instead of
-  `(heads, seq, seq)`, so *capture* memory stays flat in context length (the
-  masking/ablation stage does not: each masked layer clones its `o_proj` input, so
-  its peak grows with context length times the number of masked layers) — the difference
-  between running at 4K and at 50K on one machine.
+  `(heads, seq, seq)`, so *capture* memory stays flat in context length.  The
+  masking/ablation stage allocates more -- each masked layer clones its `o_proj`
+  input, i.e. one extra `(seq, hidden)` tensor -- but the clones do not accumulate:
+  each is consumed and released inside its own layer's `o_proj` call, so the peak
+  does not grow with the number of masked layers.  Measured on a synthetic 8-layer
+  stack at 8192 tokens (peak RSS of one forward, one process per configuration):
+  405.6 MB with one masked layer against 405.8 MB with eight, at `hidden=4096`; at
+  `hidden=1024` it is 106.8 against 107.1 MB.  What *does* grow is the ablation's
+  compute, with contexts x K values x trials -- the difference between running at
+  4K and at 50K on one machine.
 * **Masking a head = zeroing its `o_proj` input slice.** A head's attention
   output only ever touches `[h·d : (h+1)·d]` of what enters `o_proj`, so zeroing
   that slice is *exactly* equivalent to zeroing the head's attention row, with no
@@ -308,7 +337,7 @@ every field those rounds added: `masking_curve.json` has no `retrieval_truncated
 `distinct_subsets` (so the note under that table describes what a re-run would
 record); and the provenance has neither `git_rev` (the job had no `.git`) nor
 `code_sha256` (added after the run), so the numbers cannot be tied to a revision from
-the artifacts alone.  `SCHEMA_VERSION` is now **7** for exactly this reason, so
+the artifacts alone.  `SCHEMA_VERSION` is now **8** for exactly this reason, so
 `warn_if_stale` says "artifact predates the current fields" instead of "schema 5,
 fine".  A `mask` + `qa` + `cot` re-run fills all of it in; no *number* in the tables
 below changes with the new fields, with one exception worth stating: the control
@@ -323,8 +352,11 @@ span, without the question or the chat template), and the job scales pin it
 explicitly.  A re-run under the new default will move the detection numbers -- that is
 the point of the change, since `prompt` lets a template token win criterion (2) for
 most dense heads -- and `argmax_domain_shift` in the new artifacts records how far the
-argmax moved.  Every artifact records the domain it used, so this tree stays
-self-describing, and `--argmax-domain prompt` reproduces it exactly.
+argmax moved.  Since schema 8 the domain is not even a decision the *run* makes alone:
+every captured domain is scored from the same pass and written as its own matrix, so
+the new tree carries the `prompt` reading too and the two can be compared directly.
+Every artifact records the domain it used, so this tree stays self-describing, and
+`--argmax-domain prompt` reproduces it exactly.
 
 ### Detection
 
@@ -389,13 +421,17 @@ reproduction should quote one without the other.
 Needle-in-a-Haystack, retrieval heads vs random heads.  The per-trial numbers below
 are the ones that matter; a mean over three trials hides how erratic the control is.
 
-The sample set behind these numbers is small and was hard-coded until now: three
-lengths x five relative depths x **one** held-out needle = 15 samples per point, so
-`retrieval_std` is the spread over exactly those.  `mask` now takes `--depths` and
-`--needles` (the A100 scale asks for 3 needles x 5 depths = 15 samples, which spreads
-the same budget over three (question, needle) pairs instead of ten depths of one), and
-`EVAL_NEEDLES` now holds three held-out needles, so `--needles 3` is a real request
-rather than a clamp.
+The sample set behind these numbers is small and was hard-coded until now: the `t4`
+scale's two lengths x five relative depths x **one** held-out needle = **10** samples
+per point (the artifact says `n_samples: 10`; the CLI's own default is one length x
+five depths = 5), so `retrieval_std` is the spread over exactly those.  `mask` now
+takes `--depths` and `--needles` and records all three axes (`lengths`,
+`depths_per_length`, `needles`, `n_samples_per_point`) -- the count is their product,
+which is easy to get wrong: an earlier version of this paragraph, of the `a100` scale
+comment and of a test all multiplied only depths x needles and so called the A100's
+45-sample set "15".  The A100 scale asks for three lengths x 5 depths x 3 needles =
+**45** samples per point (4.5x the t4 run's 10), and `EVAL_NEEDLES` now holds three
+held-out needles, so `--needles 3` is a real request rather than a clamp.
 
 | model | baseline | K (share of heads) | retrieval | random trials |
 |---|---|---|---|---|
@@ -517,12 +553,19 @@ meaningful within a family.
     `--argmax-domain prompt` to reproduce that tree.
   * `full`: also allows already-generated positions, which makes a head's credit
     depend on how much the model happened to generate.
-  Switching domains needs no extra forward pass (the captured rows are identical),
-  and each instance records `argmax_domain_shift`: the share of
-  `(layer, head, step)` positions whose argmax the domain moved relative to `prompt`,
-  which is the direct measure of how much the choice matters on that grid.
+  Switching domains needs no extra forward pass (the captured rows are identical), so
+  a run scores all of them: the matrix per domain is written beside the primary one,
+  and the summary reports each domain's `sparsity`, top heads and
+  `domain_ranking_overlap` (how many of the primary's top-10 survive).  Each instance
+  records `argmax_domains` (which domains its prompt supports) and
+  `argmax_domain_shift`: per pairing, the share of *scored* `(layer, head, step)`
+  positions whose argmax the domain moved relative to `prompt`, which is the direct
+  measure of how much the choice matters on that grid.
   `mean_sink_rate` is still computed from the *prompt*-restricted argmax under every
   domain, so the 0.759 below does not become a structural zero under the new default.
+  It is a share of scored *(head, step)* pairs, not of steps: `considered` is the same
+  for every head of a layer, so the two readings differ whenever some heads point
+  elsewhere.
 * **Where the attention sink sits relative to `x` changes the answer by an order of
   magnitude, and that is a property of the prompt, not of the model.**  Criterion (2)
   requires the argmax to be a *needle* token, so a sink at sequence position 0 that
@@ -539,6 +582,11 @@ meaningful within a family.
   is a prompt-domain, sink-*outside* number, and a template-free run is not
   automatically "the paper's 3-6%" either -- on that instance the plain prompt also
   cost needle recall (0.40 against 1.00), so the model was partly failing the task.
+  Note that the per-domain matrices do **not** remove this axis: the template decides
+  whether position 0 is inside `x` at all, so `haystack`-with-template and
+  `haystack`-without are different measurements, not two readings of one.  The A100
+  preflight (`configs/datasphere/a100-preflight.yaml`) exists to price that axis
+  before the full grid.
 * **The random control is drawn from the non-retrieval pool, as the paper does.**
   `tex-src` says "masking out random *non-retrieval* heads" (intro and Sec. 4), and
   `control_pool` implements exactly that: everything above the threshold is
@@ -590,9 +638,12 @@ meaningful within a family.
   does not follow directly.
 * **`mean_sink_rate` is "argmax at prompt position 0"**, which under a chat template
   is a template token rather than necessarily a BOS sink.  It is not a footnote:
-  **0.759 on Qwen3-0.6B** (0.035 on the hybrid) means that in three of four steps
-  where criterion (1) applies at all, the argmax sits on position 0, so criterion
-  (2) can only fire in the remaining quarter.  Every absolute score, and the 0.1
+  **0.759 on Qwen3-0.6B** (0.035 on the hybrid) means that in three of four scored
+  *(head, step)* pairs where criterion (1) applies at all, the argmax sits on position
+  0, so criterion (2) can only fire in the remaining quarter.  (It is a share of
+  head-step pairs, not of steps: `considered` counts steps and is the same for every
+  head of a layer, so the two readings differ whenever some heads point elsewhere.)
+  Every absolute score, and the 0.1
   threshold with it, is conditioned on that -- which is another reason the shares
   are not comparable to the paper's.  The number is measured from the
   *prompt*-restricted argmax whatever `--argmax-domain` scores, so it stays
@@ -600,6 +651,15 @@ meaningful within a family.
   sink rate read off the scoring argmax would be a structural zero).  `exact_match` in
   the artifacts is a normalised-contains check (NIAH convention), not character-exact
   equality.
+* **The argmax is taken over probabilities in the model's own dtype.**  On GPU that is
+  `bfloat16` (`eager_attention_forward` returns the softmax cast back to the query
+  dtype), so two positions whose probabilities differ by less than a bf16 ulp tie and
+  `torch.argmax` deterministically returns the first.  This is the paper's own
+  regime and `provenance.deterministic` is `false` for a reason, but it means a
+  near-tie can move criterion (2) without the model changing: the CPU runs use
+  `float32`, so a GPU/CPU difference in the low-order heads is expected rather than a
+  bug.  `argmax_domain_shift` compares *domains*, not dtypes, and cannot answer it --
+  that comparison is still pending (it needs one same-instance GPU run).
 * **Generation budget is now recorded on both sides.**  `detect` always had
   `n_instances_truncated` (11/75 on the hybrid at a 48-token budget); the ablations
   now carry `retrieval_truncated`/`random_truncated_mean` per K as well, because a

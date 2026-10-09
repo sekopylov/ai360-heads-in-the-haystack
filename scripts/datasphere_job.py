@@ -84,17 +84,24 @@ SCALES: dict[str, dict[str, list[str]]] = {
     "a100": {
         "detect": ["--profile", "paper", "--argmax-domain", "haystack",
                    "--prefill-chunk", "8192", "--max-new-tokens", "96",
+                   # Build all 270 prompts (CPU only) before the first forward pass:
+                   # one prompt whose haystack cannot be located verbatim would
+                   # otherwise abort the stage hours into the run.  The `paper`/`t4`
+                   # scales leave it off -- there a mid-grid failure costs minutes.
+                   "--preflight",
                    "--lengths", "1024", "2048", "4096", "8192", "16384",
                    "24576", "32768", "40960", "49152"],
         "mask": ["--k-frac", "0.01", "0.02", "0.04", "0.08", "0.17", "0.33",
                  "--lengths", "4096", "8192", "16384", "--random-trials", "5",
                  # The detection grid uses 10 depths; the ablation default is 5, which
                  # is the weakest part of the causal measurement (`retrieval_std` is the
-                 # spread over exactly these samples).  3 held-out needles x 5 depths is
-                 # the same 15-sample budget as 1 needle x 10 depths, spread over three
-                 # (question, needle) pairs -- needle identity is the larger source of
-                 # variance, so this is the more honest set.  (It is 1.5x the t4 run's
-                 # 5 samples, which is why the depth count comes down.)
+                 # spread over exactly these samples).  The sample count is
+                 # lengths x depths x needles -- 3 x 5 x 3 = 45 per point here, against
+                 # the t4 run's 2 x 5 x 1 = 10 -- so this is 4.5x the t4 budget, not the
+                 # "same 15 samples" an earlier comment claimed (that counted only
+                 # depths x needles and ignored the three lengths).  Needle identity is
+                 # the larger source of variance, so the budget goes to three
+                 # (question, needle) pairs rather than ten depths of one.
                  "--depths", "5", "--needles", "3", "--prefill-chunk", "8192"],
         "qa": ["--k-frac", "0.04", "0.08", "0.17", "--random-trials", "5",
                "--prefill-chunk", "8192"],
@@ -103,9 +110,10 @@ SCALES: dict[str, dict[str, list[str]]] = {
     },
 }
 
-STAGES = ("describe", "detect", "mask", "qa", "cot", "compare", "figures")
+STAGES = ("describe", "detect", "mask", "qa", "cot", "compare", "figures",
+          "case-study")
 #: Stages that need a loaded model (and therefore benefit from the one-model cache).
-MODEL_STAGES = ("describe", "detect", "mask", "qa", "cot")
+MODEL_STAGES = ("describe", "detect", "mask", "qa", "cot", "case-study")
 #: Stages that read every model's artifacts and need no model at all.
 MODEL_FREE_STAGES = ("compare", "figures")
 
@@ -148,6 +156,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--dtype", default=None, choices=["float32", "bfloat16"],
                         help="override the registry dtype (bfloat16 on GPU)")
     parser.add_argument("--seed", type=int, default=0)
+    # Preflight overrides: the scale still defines the grid, and these two flags
+    # replace/limit the axes named, so "try the A100 on a short length first" is a
+    # command line rather than an edit to `SCALES` that must be reverted.
+    parser.add_argument("--lengths", type=int, nargs="*", default=None,
+                        help="replace the --lengths values of every stage that has them "
+                             "(a preflight at 1024 4096, say)")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="cap `detect` to the first N instances in grid order "
+                             "(ignored by stages that have no such flag)")
     args = parser.parse_args(argv)
     if not args.bootstrap_venv and not args.inspect_dir and not (args.weights or args.download_weights):
         parser.error("one of --weights / --download-weights is required "
@@ -537,6 +554,38 @@ def override_dtype(models: list[str], dtype: str) -> None:
           f"(runtime registry {runtime})")
 
 
+def run_script(stage: str, script: Path, argv: list[str]) -> None:
+    """Run a standalone script in this process, reusing the resident model.
+
+    ``scripts/case_study.py`` (the paper's Fig. 1) imports ``_load`` from
+    ``retrieval_heads.cli``, and that module keeps one model resident -- so running it
+    in-process means the figure costs no second weight load, which is what made it
+    worth making a stage at all.  The script ends with ``sys.exit(main())``, so exit 0
+    is success, exit 1 is its own "no copy step found" signal for a figure it cannot
+    draw (warn and continue: it is the last stage, and aborting there would throw away
+    a finished run), and anything else fails the stage.
+    """
+    import runpy
+
+    print(f"\n[entry] === {stage}: {script} {' '.join(argv)}", flush=True)
+    saved = sys.argv
+    sys.argv = [str(script), *argv]
+    try:
+        runpy.run_path(str(script), run_name="__main__")
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 1
+        if code == 0:
+            return
+        if code == 1:
+            print(f"[entry] stage {stage} produced no figure ({exc!r}); continuing",
+                  flush=True)
+            return
+        print(f"[entry] stage {stage} exited with {exc!r}", flush=True)
+        raise SystemExit(code) from exc
+    finally:
+        sys.argv = saved
+
+
 def run_cli(stage: str, argv: list[str]) -> None:
     """Execute one stage **in this process**.
 
@@ -551,6 +600,10 @@ def run_cli(stage: str, argv: list[str]) -> None:
     which is how the detect/mask artifacts of a failed run were salvaged.
     """
     from retrieval_heads import cli
+
+    if stage == "case-study":
+        run_script(stage, Path(__file__).with_name("case_study.py"), argv)
+        return
 
     print(f"\n[entry] === {stage}: {' '.join(argv)}", flush=True)
     try:
@@ -626,6 +679,31 @@ def stage_plan(stages: list[str], models: list[str]) -> list[tuple[str, str | No
     return plan
 
 
+def apply_grid_overrides(argv: list[str], *, lengths: list[int] | None = None,
+                         limit: int | None = None) -> list[str]:
+    """Replace a stage's `--lengths` values and/or append `--limit`.
+
+    The scales in `SCALES` are what a *job* runs, so until now the advice in
+    `configs/datasphere/a100.yaml` ("start with a short length before the full grid")
+    could not be followed without editing the scale table -- and forgetting to revert
+    that edit.  These two flags make a preflight a command-line decision: the grid
+    still comes from the scale, and only the axes named here are overridden.
+    """
+    if lengths is not None:
+        values = [str(value) for value in lengths]
+        if "--lengths" in argv:
+            start = argv.index("--lengths")
+            end = start + 1
+            while end < len(argv) and not argv[end].startswith("--"):
+                end += 1
+            argv = argv[:start] + ["--lengths", *values] + argv[end:]
+        else:
+            argv = [*argv, "--lengths", *values]
+    if limit is not None and "--limit" not in argv:
+        argv = [*argv, "--limit", str(limit)]
+    return argv
+
+
 def stage_argv(
     stage: str,
     *,
@@ -633,6 +711,8 @@ def stage_argv(
     models: list[str],
     prefix: Path,
     seed: int,
+    lengths: list[int] | None = None,
+    limit: int | None = None,
 ) -> list[list[str]]:
     """Build the ``retrieval_heads.cli`` argument lists for one stage.
 
@@ -640,6 +720,10 @@ def stage_argv(
     job: a mismatch here otherwise costs a DataSphere round trip (tens of seconds
     with the cached venv, minutes when the environment is built) before it
     surfaces, and that already happened once with ``--seed``.
+
+    ``lengths``/``limit`` are the preflight overrides (see
+    :func:`apply_grid_overrides`); ``limit`` is silently ignored by stages that have
+    no such flag.
     """
     runs = {key: prefix / key for key in models}
     scales = SCALES[profile]
@@ -647,21 +731,31 @@ def stage_argv(
     if stage == "describe":
         return [["describe", "--model", key, "--out", str(runs[key])] for key in models]
     if stage == "detect":
+        flags = apply_grid_overrides(list(scales["detect"]), lengths=lengths, limit=limit)
         return [
             ["detect", "--model", key, "--out", str(runs[key]),
-             "--seed", str(seed), *scales["detect"]]
+             "--seed", str(seed), *flags]
             for key in models
         ]
     if stage in ("mask", "qa", "cot"):
+        # `--limit` is a `detect` flag only (it caps the instance grid); passing it to
+        # a stage without one would make argparse exit.
+        flags = apply_grid_overrides(list(scales[stage]), lengths=lengths)
         return [
             [stage, "--model", key, "--out", str(runs[key]),
-             "--seed", str(seed), *scales[stage]]
+             "--seed", str(seed), *flags]
             for key in models
         ]
     if stage == "compare":
         if len(runs) < 2:
             return []
         return [["compare", "--runs", *[str(p) for p in runs.values()], "--out", str(prefix)]]
+    if stage == "case-study":
+        # The paper's Fig. 1 needs the real attention rows and therefore a model, which
+        # the driver already has resident at this point; `--scores` reuses the run's own
+        # recorded conditions, and the per-model `--out` keeps two models' JSON apart.
+        return [["--model", key, "--scores", str(runs[key]), "--out", str(runs[key])]
+                for key in models]
     if stage == "figures":
         return [["figures", "--runs", *[str(p) for p in runs.values()],
                  "--out", str(prefix / "figures")]]
@@ -712,10 +806,16 @@ def main(argv: list[str] | None = None) -> int:
     # so `git_rev` is None and this hash is the only link back to a revision.
     os.environ["RH_CODE_SHA256"] = code_sha256(Path("retrieval_heads"), Path("scripts"))
     print(f"[entry] code_sha256={os.environ['RH_CODE_SHA256']}", flush=True)
+    if args.lengths is not None and not args.lengths:
+        raise SystemExit("--lengths was given but empty; pass at least one length")
+    if args.lengths is not None or args.limit is not None:
+        print(f"[entry] grid override: lengths={args.lengths} limit={args.limit} "
+              f"(the scale's own values are replaced, not extended)", flush=True)
     for stage, model in stage_plan(stages, args.models):
         targets = [model] if model else args.models
         for cli_argv in stage_argv(stage, profile=args.profile, models=targets,
-                                   prefix=prefix, seed=args.seed):
+                                   prefix=prefix, seed=args.seed,
+                                   lengths=args.lengths, limit=args.limit):
             record_stage_state(prefix, stage, model, "running")
             try:
                 run_cli(stage, cli_argv)

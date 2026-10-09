@@ -140,7 +140,11 @@ def plot_score_pie(scores_by_model: Mapping[str, RetrievalScores],
                    textprops={"fontsize": 7})
         title = f"{name}\n{scores.info.n_scoreable_heads} scoreable heads"
         if scores.info.is_hybrid:
-            title += f" / {len(scores.info.linear_layers)} linear layers"
+            # Both head bases in the caption: the README quotes "2.7% of 336" and
+            # "68.8% of 48" in one paragraph, and a panel that shows only 48 invites
+            # reading the second number as the first's denominator.
+            title += (f" / {len(scores.info.linear_layers)} linear layers "
+                      f"({scores.info.n_all_heads} heads in all)")
         title += f"\n>0.5 (the paper's caption): {n_half} ({100 * n_half / n_total:.1f}%)"
         ax.set_title(title, fontsize=8)
     for ax in axes.ravel()[n:]:

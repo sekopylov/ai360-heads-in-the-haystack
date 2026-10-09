@@ -1,7 +1,9 @@
 # HANDOFF — state of the retrieval-heads reproduction
 
-**Working document, deliberately not committed.** It is a snapshot for whoever
-picks this up next, not part of the deliverable. Delete it when it goes stale.
+**Working document.** It is a snapshot for whoever picks this up next, not part of
+the deliverable — and it is versioned with the code (the header used to say
+"deliberately not committed", which stopped being true at the initial commit and has
+been wrong in every round since). Delete it when it goes stale.
 
 Read in this order: `README.md` (what this is, how to run it) →
 `docs/datasphere-findings.md` (19 recorded divergences from the infra doc, each
@@ -14,7 +16,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 253 tests: 236 fast (`pytest -m "not integration"`, ~10 s), 17 integration against
+* 270 tests: 252 fast (`pytest -m "not integration"`, ~10 s), 18 integration against
   the real checkpoints. All green.
 * **The committed artifacts now match the code.** The GPU run was refreshed in two
   jobs on an NVIDIA L4, 75 instances per model:
@@ -81,6 +83,100 @@ tied to a job id) → this file (where things stand and what is left).
   exact-match, recall, prefix-recall and the *generated texts*) and the same for
   each random trial, so a specific failure can be inspected from the artifact
   instead of only its mean.
+* **Review round (the seventh report: the pre-A100 review), verified against the code:**
+  * **B1 -- the argmax domain is now a *reporting* dimension, not a run-level choice.**
+    The reviewer's main point survived checking: `a100.yaml` pinned `haystack`, which
+    had never been measured at any scale, and the run's headline ("a few percent of
+    heads") is a property of the position set as much as of the model.  Rather than
+    gamble the grid, `decode_with_attention` now captures **every** domain from the
+    same row (`StepTrace.argmax_by_domain`; no extra forward pass), `credits_from_trace`
+    takes `domain=`, and `score_instance` scores all of them: `scores` stays the
+    run's own domain (historical filenames, and what the ablations rank heads by) while
+    `scores_by_domain` holds the complement, `run_detection` aggregates each into
+    `scores_<pairing>_<domain>.npz|.json`, and the summary carries
+    `sparsity_by_domain`, `top_heads_by_domain` and `domain_ranking_overlap` (how many
+    of the primary domain's top-10 survive under each other domain -- i.e. how much a
+    domain change would change what `mask` masks).  `SCHEMA_VERSION` is 8.
+    The reviewer's cost estimate was wrong in mechanism and size: the JSONL does not
+    carry per-step argmax positions at all, so the growth is one extra per-head score
+    vector per alternative domain (~+30 KB/instance), not "20-40 MB per model" from
+    duplicating an argmax map.
+  * **It does not remove the *template* axis, and the config now says so.**  Whether
+    position 0 is inside `x` is decided by the prompt, so `haystack`-with-template and
+    `haystack`-without are different measurements, not two readings of one.  The
+    preflight below is what prices that axis.
+  * **B2 -- the ablation sample count was wrong by 3x in three places.**  The count is
+    `lengths x depths x needles`; the README, the `a100` scale comment and a test all
+    multiplied only the last two, so the A100's 3x5x3 = **45** samples per point was
+    called "15" (and the t4 run's 2x5x1 = 10 was called 5).  Fixed in all three, the
+    assertion now computes the product from the flag list, and the artifact records
+    `lengths` / `n_samples_per_point` (`mixer_ablation.json` too) -- the two trees were
+    previously indistinguishable on the axis that dominates the stage's cost.
+  * **B3 -- `task_qa.json` / `task_cot.json` now record `data_path` (and
+    `dataset: builtin|file`).**  Without it a real-dataset artifact differed from the
+    built-in stand-ins only in `n_samples`.  The reviewer's other suggestion there
+    (don't spend A100 time on 8 hand-written items) is a judgement call: the stage is
+    minutes against hours for `mask`, and it completes the tree, so it stays.
+  * **B5 -- the config's own preflight advice is now executable.**  The driver gained
+    `--lengths` (replaces each stage's values) and `--limit` (detect only), so the
+    "start at a short length" line in `a100.yaml` is a command line instead of an edit
+    to `SCALES` that must be reverted; `configs/datasphere/a100-preflight.yaml` runs
+    `describe,detect` at 1024/4096 with `--limit 60`, and `a100-resume.yaml` is the
+    A100 counterpart of `t4-resume.yaml` (staging tree `ds-a100-resume/`, gitignored)
+    so a late-stage failure does not re-pay for the 45-sample `mask` stage.
+  * **B5, second half -- `detect --preflight` builds every prompt before the first
+    forward pass.**  `score_instance` refuses a sample whose `haystack` span is
+    missing (a prompt that does not contain the context verbatim), and without the
+    flag that refusal aborts `detect` mid-grid, after the GPU time already spent.  The
+    flag builds all planned prompts (CPU only), validates them, and keeps them so the
+    loop does not rebuild; `SCALES['a100']['detect']` turns it on and the L4 scales
+    leave it off (there a mid-grid failure costs minutes).  Two tests pin the
+    ordering: with the flag the order is build, build, score, score; without it,
+    build, score, build, score.
+  * **B4 -- Fig. 1 is a stage now.**  `case-study` is the one driver stage that runs a
+    standalone script: `run_cli` dispatches it to `scripts/case_study.py` via `runpy`
+    **in-process**, so it reuses the resident model (the script imports
+    `retrieval_heads.cli._load`, which keeps one model) and costs one 1024-token
+    instance rather than a second GPU session.  Its `--scores <model dir>` reuses the
+    run's recorded conditions, `--out <model dir>` keeps two models' JSON apart, and
+    the script's "no copy step found" exit (1) only warns, because aborting the last
+    stage would discard a finished run.  `paper.yaml`, `t4-cached.yaml` and `a100.yaml`
+    list the stage.
+  * **Minor 1 -- `argmax_domain_shift` now counts the rows the score counts.**
+    It takes `sample`/`pairing` and applies the same `applies_to` + criterion-(1)
+    filter as `credits_from_trace`, so the recorded share describes the scored rows
+    (the artifact says `restricted_to`); called without them it still counts every
+    captured row, which is the capture-level property.  It is recorded **per pairing**
+    (the two pairings score different token sets), and `summary_same_step.json` /
+    `scores_same_step_raw.json` carry their own sum instead of a copy of the primary
+    pairing's.
+  * **Minor 6 -- the hybrid pie caption states both head bases**
+    (`48 scoreable heads / 18 linear layers (336 heads in all)`), so the README's
+    "2.7% of 336" and "68.8% of 48" cannot be read against the wrong denominator.
+  * **Minor 7 -- `mean_sink_rate` is documented as a share of scored *(head, step)*
+    pairs**, not of steps (`considered` is identical across a layer's heads, so the two
+    readings differ whenever some heads point elsewhere).
+  * **Minor 3 did NOT survive checking: `HeadMasker`'s clones do not accumulate.**
+    The reviewer claimed the masking peak grows as `seq x hidden x #masked_layers`
+    (~1 GB at K=148/16K); the clone is created inside the `o_proj` pre-hook, consumed
+    by that layer's `o_proj` call and released before the next layer runs, so the peak
+    overhead is one `(seq, hidden)` tensor.  Measured (one process per configuration,
+    `ru_maxrss` of one forward on a synthetic 8-layer stack at 8192 tokens): 405.6 MB
+    with one masked layer against 405.8 MB with eight at `hidden=4096`, and 106.8 vs
+    107.1 MB at `hidden=1024`.  The README carried the same wrong sentence and is
+    fixed; what grows is the ablation's *compute*, not its peak.
+  * **Minor 2 (bf16 argmax ties) is now stated** in the README's limitations: the
+    argmax runs over probabilities in the model's dtype, so near-ties can move
+    criterion (2) without the model changing, and `argmax_domain_shift` compares
+    domains rather than dtypes (that comparison still needs one GPU run).
+  * **Minor 4 (the dense control cannot see 40K/49K) is left as-is, deliberately.**
+    Adding 40000 would give it one more long point but would also break the property
+    the config rests on ("the A100 grid is `paper`'s grid"), and the dense model's
+    40960-token window is a model property, already documented.  The reviewer's
+    suggestion is a real limitation, not a defect to patch quietly.
+  * Left as judgement calls for the launch: whether to run `--no-chat-template` (the
+    paper's geometry, worse needle recall on the probed instance), and whether to trim
+    the A100 stage list to skip the 8-item `qa`/`cot` pipeline check.
 * **Review round (the sixth report: B1 + C6 + the offline backlog), verified against
   the code:**
   * **B1 -- the `haystack` argmax domain is implemented and is now the default.**
@@ -459,11 +555,13 @@ tied to a job id) → this file (where things stand and what is left).
   `layer_idx` and cannot be misled by attention-map ordering.
 
 **Not done.** Paper-scale grid, real datasets, the Paul Graham haystack, and a
-re-run of the current code (which now defaults to the `haystack` argmax domain, so a
-re-run's detection numbers are expected to move). Details in §6.
+re-run of the current code (which now defaults to the `haystack` argmax domain and
+writes a matrix per captured domain, so a re-run's detection numbers are expected to
+move and its tree will carry both readings). Details in §6.
 
 Branch: **`Nikita-prog-art`**. `main` on the remote is untouched. See
-`git log --oneline -1` for HEAD; the working tree holds the round-six changes.
+`git log --oneline -1` for HEAD; the working tree holds the round-seven changes
+(committed, not pushed).
 
 ---
 
@@ -584,7 +682,12 @@ Each item says what to do, not just what is missing.  Everything that could be
 finished offline is done, including round six (the `haystack` argmax domain and its
 default, numeric answer comparison, three held-out eval needles, per-sample QA
 spread, the raw-denominator matrices, the small guards, the aliased-`eager` patch,
-the reproduce-script parity check, and the test-file split).  What is left needs a
+the reproduce-script parity check, and the test-file split) and round seven (the
+argmax domain as a reporting dimension with a matrix per domain, the ablation
+sample-count corrections and the `lengths` provenance, `data_path` on the QA/CoT
+artifacts, the driver's `--lengths`/`--limit` preflight overrides plus the
+`a100-preflight`/`a100-resume` configs, `case-study` as a stage, and the
+`argmax_domain_shift`/pie-caption/sink-wording/bf16 notes).  What is left needs a
 GPU run, external data, or a judgement call.
 
 Known measurement limits, in the artifacts themselves rather than hidden:
@@ -593,7 +696,8 @@ default is 5 samples per point -- still not a statistically powered curve, which
 what the paper-scale grid is for.  K in the retrieval arm is capped by the control
 pool size; the artifact records both requested `k_values` and realized
 `k_effective`, and `summarize_results.py` prints "K →k_eff".  `scripts/case_study.py`
-(Fig. 1) is still not a job stage, so it has to be run by hand.
+(Fig. 1) is the `case-study` driver stage now (run in-process, so it reuses the
+resident model) and can still be run by hand.
 `aligned_scores` are now ranked in `summary_*.json` (`aligned_top_heads`) and shown
 as the "Strict-aligned matching" section of `summarize_results.py`.  Both pairings
 now score exactly the generated stream: the prefill row is `next_step`-only and the
@@ -624,8 +728,11 @@ Left as-is on purpose (recorded rather than fixed):
   path's own namespace problem -- `type(module).__module__` vs `forward.__globals__`
   vs an imported module object -- was fixed in round six.)
 * `HeadMasker` clones the whole `o_proj` input per masked layer: an out-of-place
-  slice assign allocates the same bytes, so there is no cheap win here, and the peak
-  still grows with context length x masked layers.
+  slice assign allocates the same bytes, so there is no cheap win here.  The clone
+  dies with its own layer's `o_proj` call, so the *peak* does **not** grow with the
+  number of masked layers -- it is one `(seq, hidden)` tensor (measured: 405.6 MB at
+  one masked layer against 405.8 MB at eight, synthetic 8-layer stack, 8192 tokens,
+  `hidden=4096`).  What grows is the ablation's compute (contexts x K x trials).
 
 Done in round six, kept here because the items used to be in this list:
 
@@ -666,11 +773,14 @@ matrix.
 2. **Paper-scale grid.** `--profile paper` with
    `--lengths 1024 … 49152` and 10 depths. VRAM is fine with bf16 + chunking, but
    budget the time; consider `gt4i.1` vs `g2.1` (A100) for the widest contexts.
-   Edit `SCALES["paper"]` in `scripts/datasphere_job.py` or add a config. Lengths
-   past a model's `max_position_embeddings` are now dropped with a warning.
+   `configs/datasphere/a100.yaml` is the ready-made run, `a100-preflight.yaml` is the
+   cheap first step, and the driver now takes `--lengths`/`--limit` so neither needs a
+   `SCALES` edit. Lengths past a model's `max_position_embeddings` are dropped with a
+   warning.
 3. **Real datasets.** `--data file.jsonl` on `qa`/`cot`:
    `{"context","question","answer"}` and `{"question","answer"}`. The built-ins are
-   calibrated stand-ins, not benchmarks.
+   calibrated stand-ins, not benchmarks; the artifact now records `data_path`/`dataset`,
+   so a real-dataset run is distinguishable from them.
 4. **Paul Graham haystack.** The canonical NIAH haystack corpus is at
    `source/PaulGrahamEssays/*.txt`; `--corpus <file>` uses it on `detect` and now
    also on `mask` (so detection and the causal experiment share a haystack, and the
@@ -679,9 +789,15 @@ matrix.
 5. **A run under the new `haystack` default.**  Everything that was "stored but not
    reported" is reported now: both pairings have per-head tables, `same_step` has its
    own `scores_same_step.*` / `summary_same_step.json`, `aligned_top_heads` is in the
-   summary and printed by `summarize_results.py`, and the raw-denominator matrices are
-   emitted.  What is pending is the *numbers* from a run that uses the current default
-   (`haystack`), since the committed tree is `prompt`-domain -- i.e. the A100 job.
+   summary and printed by `summarize_results.py`, the raw-denominator matrices are
+   emitted, and **every captured argmax domain is scored and written**
+   (`scores_<pairing>_<domain>.*` + `sparsity_by_domain`/`domain_ranking_overlap`), so
+   the run answers the domain question instead of pinning it.  What is pending is the
+   *numbers* from a run that uses the current default (`haystack`), since the committed
+   tree is `prompt`-domain -- i.e. the A100 job.  The one thing the domain matrices do
+   **not** settle is the chat template: whether position 0 is inside `x` is a property
+   of the prompt, so `--no-chat-template` is a separate measurement (the preflight
+   config is where to price it).
 6. **`flash-linear-attention` is installed on the project disk; `causal-conv1d` is
    deliberately absent** (the job image ships only CUDA 11.8 against a cu128 torch, so
    the extension cannot be compiled there; see `run-in-datasphere.md` §3.3).  Speed
@@ -725,7 +841,7 @@ matrix.
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 253 passed (236 fast + 17 integration)
+.venv/bin/python -m pytest -q                     # 270 passed (252 fast + 18 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

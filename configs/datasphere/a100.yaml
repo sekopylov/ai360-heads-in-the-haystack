@@ -19,6 +19,10 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 #     hybrid's 75 instances at the t4 grid; a truncated instance scores lower --
 #     0.684 against 0.793 on the top head -- because the model answers and then keeps
 #     narrating, which is where the extra needle-token copies would come from).
+#   * `--preflight` for detect: all 270 prompts are built and validated (CPU only)
+#     before the first forward pass, because one prompt whose haystack cannot be
+#     located verbatim would otherwise abort the stage hours into the run.  The L4
+#     scales leave it off.
 #
 # Open decision the launcher must make: the sink geometry.  The `a100` scale pins
 # `--argmax-domain haystack` (the paper's `a in R^{|x|}`), but with the chat template
@@ -31,6 +35,14 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 # faithful geometry is `--no-chat-template`, but it is a different (and on a base
 # model, partly failing) task.  Add `--no-chat-template` to the detect flags below to
 # choose it; the run records `sink_in_haystack` either way.
+#
+# Note the *domain* axis is no longer part of this decision: since round seven every
+# captured domain is scored in the same pass and written as its own matrix
+# (`scores_<pairing>_<domain>`), and the summary reports `sparsity_by_domain` and
+# `domain_ranking_overlap`.  The template axis is a property of the prompt, so it
+# cannot be derived from this run -- price it first with `a100-preflight.yaml`
+# (describe,detect at two lengths, ~minutes), which reports the same per-domain
+# matrices plus `sink_in_haystack` on the real grid.
 #
 # Honest note on the grid: the paper's own detection grid is 20 lengths sampled
 # uniformly over 1K-50K (with 10 depths and 3 needle sets, ~600 instances per model);
@@ -51,11 +63,16 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 #     -- without it the hybrid's 18 linear layers run the reference PyTorch path;
 #   * `torch arch list` includes sm_80.  The SDPA flash-backend probe in the venv job
 #     ran on an L4 (sm_89), so "flash works on sm_80" is still an inference from the
-#     wheel's arch list, not a measurement on an A100 -- the first A100 job should
-#     therefore start with `--stages describe,detect` at a short length before the
-#     full grid.
+#     wheel's arch list, not a measurement on an A100 -- run
+#     `configs/datasphere/a100-preflight.yaml` (describe,detect at 1024/4096,
+#     `--limit 60`) before the full grid; it is minutes and it answers the hardware
+#     question and the sink-geometry question on the real grid.
+#
+# Also here: `a100-resume.yaml` re-runs only the tail (`qa,cot,compare,figures`) on a
+# finished tree, because `mask` is the stage that costs real money (45 samples per
+# point).
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages describe,detect,mask,qa,cot,compare,figures --out-prefix ds-results-a100
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages describe,detect,mask,qa,cot,compare,figures,case-study --out-prefix ds-results-a100
 
 flags:
   - attach-project-disk

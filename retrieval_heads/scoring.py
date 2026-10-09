@@ -64,6 +64,12 @@ from retrieval_heads.utils import HeadRef, eos_ids, get_logger, save_json
 log = get_logger("scoring")
 
 PAIRINGS = ("next_step", "same_step")
+#: Every position set criterion (2)'s argmax may search.  All of them are captured
+#: from the same attention rows in one pass (only the span searched differs), so the
+#: domain is a *reporting* decision like `pairing`, not a compute decision: the run
+#: scores each of them and writes a matrix per domain, and the one named by
+#: `--argmax-domain` keeps the historical filenames.
+ARGMAX_DOMAINS = ("prompt", "full", "haystack")
 
 
 # --------------------------------------------------------------------------- trace
@@ -85,9 +91,9 @@ def argmax_positions(attn: dict[int, torch.Tensor], *, prompt_len: int,
     artifact.  Returned positions stay absolute indices into the prompt (the span
     offset is added back), because criterion (2) indexes the prompt with them.
     """
-    if domain not in ("prompt", "full", "haystack"):
+    if domain not in ARGMAX_DOMAINS:
         raise ValueError(
-            f"argmax_domain must be 'prompt', 'full' or 'haystack', got {domain!r}"
+            f"argmax_domain must be one of {ARGMAX_DOMAINS}, got {domain!r}"
         )
     if domain == "haystack":
         if span is None:
@@ -114,18 +120,38 @@ def argmax_positions(attn: dict[int, torch.Tensor], *, prompt_len: int,
     return out
 
 
-def argmax_domain_shift(trace: "DecodeTrace") -> dict[str, Any]:
+def argmax_domain_shift(trace: "DecodeTrace", *, domain: str | None = None,
+                        sample: "NeedleSample | None" = None,
+                        pairing: str | None = None) -> dict[str, Any]:
     """How far the scoring domain moves criterion (2)'s argmax.
 
-    Counts every ``(layer, head)`` of every captured step; ``shifted`` is the number
-    whose domain argmax differs from the prompt-restricted one.  This is the cheap
-    evidence for how much ``haystack`` changes the score: the captured rows are
-    identical in every domain, so the counter costs one comparison and no forward
-    pass, and it is recorded per instance and averaged into the run's summary.
+    ``shifted`` is the number of ``(layer, head)`` argmax positions in ``domain``
+    (default: the trace's scoring domain) that differ from the prompt-restricted
+    one; ``positions`` is the number compared.  This is the cheap evidence for how
+    much the domain matters: the captured rows are identical in every domain, so the
+    counter costs one comparison and no forward pass.
+
+    With ``sample`` and ``pairing`` the walk covers exactly the rows
+    :func:`credits_from_trace` scores for that pairing -- the step contributes to it
+    and criterion (1) holds -- so the share describes the same rows as the score.
+    Without them it counts every captured row, which is the property of the *capture*
+    (the prefill row and the last unemitted row included) rather than of the score.
     """
+    domain = domain or trace.argmax_domain
+    needle_set: set[int] | None = None
+    if sample is not None:
+        if pairing is None:
+            raise ValueError("argmax_domain_shift needs `pairing` when `sample` is given")
+        needle_set = set(getattr(sample, "needle_text_ids", None) or sample.needle_ids)
     total = shifted = 0
     for step in trace.steps:
-        positions = step.positions()
+        if needle_set is not None:
+            if step.applies_to is not None and pairing not in step.applies_to:
+                continue
+            token = step.fed_token if pairing == "same_step" else step.predicted_token
+            if token not in needle_set:          # criterion (1)
+                continue
+        positions = step.positions(domain)
         prompt_positions = step.prompt_positions(trace.prompt_len)
         for layer, argmax in positions.items():
             reference = prompt_positions.get(layer)
@@ -163,6 +189,8 @@ class StepTrace:
     #: generated token).
     applies_to: tuple[str, ...] | None = None
     #: layer -> (heads,) int64 argmax positions; empty when only rows are stored.
+    #: This is the *scoring* domain (``primary_domain``), kept under its historical
+    #: name so every reader that predates ``argmax_by_domain`` keeps working.
     argmax: dict[int, torch.Tensor] = field(default_factory=dict)
     #: layer -> (heads,) argmax over the *prompt* alone, whatever domain scored this
     #: step.  The sink diagnostic reads this, not `argmax`: under the `haystack`
@@ -170,12 +198,42 @@ class StepTrace:
     #: construction, so a sink rate derived from the domain argmax would be a
     #: structural zero rather than a measurement.
     argmax_prompt: dict[int, torch.Tensor] = field(default_factory=dict)
+    #: domain -> layer -> (heads,) argmax.  Every domain is captured from the same
+    #: row, so scoring each of them costs no forward pass and the artifact can report
+    #: all of them instead of baking one in (see ``ARGMAX_DOMAINS``).
+    argmax_by_domain: dict[str, dict[int, torch.Tensor]] = field(default_factory=dict)
+    #: The domain ``argmax`` holds; only needed for the no-argument ``positions()``.
+    primary_domain: str = "prompt"
 
-    def positions(self) -> dict[int, torch.Tensor]:
-        """Per-head most-attended position, from the stored indices or the rows."""
-        if self.argmax:
+    def positions(self, domain: str | None = None) -> dict[int, torch.Tensor]:
+        """Per-head most-attended position, from the stored indices or the rows.
+
+        ``domain=None`` returns the scoring domain (``primary_domain``); passing a
+        domain name returns that domain's argmax from the per-domain map, which is
+        what the per-domain scoring reads.
+        """
+        if domain is None:
+            if self.argmax:
+                return self.argmax
+            if "prompt" in self.argmax_by_domain:
+                return self.argmax_by_domain["prompt"]
+            return {layer: row.argmax(dim=-1) for layer, row in self.attn.items()}
+        if domain in self.argmax_by_domain:
+            return self.argmax_by_domain[domain]
+        if not self.argmax_by_domain:
+            # A hand-built step (tests, old artifacts) recorded no domain map: either
+            # a single argmax, which *is* the scoring domain whatever name the caller
+            # asks under, or only the rows.
+            if self.argmax:
+                return self.argmax
+            if self.attn:
+                return {layer: row.argmax(dim=-1) for layer, row in self.attn.items()}
+        if domain == self.primary_domain and self.argmax:
             return self.argmax
-        return {layer: row.argmax(dim=-1) for layer, row in self.attn.items()}
+        raise ValueError(
+            f"this step has no argmax for domain {domain!r} (captured: "
+            f"{sorted(self.argmax_by_domain) or [self.primary_domain]})"
+        )
 
     def prompt_positions(self, prompt_len: int) -> dict[int, torch.Tensor]:
         """Per-head most-attended *prompt* position, independent of the domain."""
@@ -206,6 +264,10 @@ class DecodeTrace:
     #: The token span the ``haystack`` domain searched (absolute prompt indices);
     #: recorded so a reader can see exactly which positions were eligible.
     argmax_span: tuple[int, int] | None = None
+    #: Which domains were actually captured for this trace.  ``haystack`` is dropped
+    #: when the sample has no span (a prompt that does not contain the context
+    #: verbatim), because that domain has nothing to search there.
+    domains: tuple[str, ...] = ARGMAX_DOMAINS
 
     @property
     def kv_len(self) -> int:
@@ -268,9 +330,10 @@ def decode_with_attention(
     prompt (this function's default), the prompt plus generated positions (``full``),
     or the haystack alone (``haystack``, which needs ``argmax_span``).  The captured
     rows are identical in all three cases -- this is a scoring decision, not a compute
-    one -- so switching domains costs no extra forward pass.  The default here is
-    ``prompt`` only because this layer has no sample and so no haystack span; the
-    sample-aware :func:`score_instance` defaults to the paper's ``haystack``.
+    one -- so *every* domain is captured here from the same row (one extra argmax
+    each), and the caller can score all of them.  The default here is ``prompt`` only
+    because this layer has no sample and so no haystack span; the sample-aware
+    :func:`score_instance` defaults to the paper's ``haystack``.
     """
     if max_new_tokens <= 0:
         raise ValueError(
@@ -294,9 +357,9 @@ def decode_with_attention(
             "argmax_domain='haystack' needs argmax_span (the sample's haystack_span); "
             "without it criterion (2) has no haystack to search"
         )
-    if argmax_domain not in ("prompt", "full", "haystack"):
+    if argmax_domain not in ARGMAX_DOMAINS:
         raise ValueError(
-            f"argmax_domain must be 'prompt', 'full' or 'haystack', got {argmax_domain!r}"
+            f"argmax_domain must be one of {ARGMAX_DOMAINS}, got {argmax_domain!r}"
         )
     if argmax_span is not None:
         start, end = argmax_span
@@ -305,22 +368,25 @@ def decode_with_attention(
                 f"argmax_span {argmax_span} is not a non-empty range inside the prompt "
                 f"(prompt_len={prompt_len})"
             )
+    # Capture every domain the row supports.  `haystack` needs the span; without it
+    # that domain is not merely empty but undefined, so it is dropped (and the trace
+    # records which domains it actually has).
+    captured = tuple(d for d in ARGMAX_DOMAINS
+                     if d != "haystack" or argmax_span is not None)
     recorder = AttentionRecorder(model, info, method=capture_method)
     trace = DecodeTrace(prompt_len=prompt_len, argmax_domain=argmax_domain,
-                        argmax_span=argmax_span)
+                        argmax_span=argmax_span, domains=captured)
 
     def capture(attn_tensors: dict[int, torch.Tensor]):
-        """(rows, argmax, prompt argmax): rows only when asked for."""
-        indices = argmax_positions(attn_tensors, prompt_len=prompt_len,
-                                   domain=argmax_domain, span=argmax_span)
-        # The sink diagnostic needs the prompt-restricted argmax under *every*
-        # domain, so it is captured unconditionally (one extra argmax over an
-        # already-materialised row, no extra forward pass).
-        prompt_indices = argmax_positions(attn_tensors, prompt_len=prompt_len,
-                                          domain="prompt")
+        """(rows, per-domain argmax): rows only when asked for."""
+        indices = {
+            domain: argmax_positions(attn_tensors, prompt_len=prompt_len,
+                                     domain=domain, span=argmax_span)
+            for domain in captured
+        }
         rows = ({layer: tensor[0, :, 0, :].detach()
                  for layer, tensor in attn_tensors.items()} if store_rows else {})
-        return rows, indices, prompt_indices
+        return rows, indices
 
     restore = set_attn_implementation(model, prefill_impl)
     try:
@@ -349,7 +415,7 @@ def decode_with_attention(
             logits = last_out.logits[:, -1, :]
             cache = last_out.past_key_values
             trace.prefill_logits = logits.detach()
-            last_rows, last_idx, last_prompt_idx = capture(last_attn)
+            last_rows, last_idx = capture(last_attn)
             trace.steps.append(
                 StepTrace(
                     step=-1,
@@ -357,8 +423,10 @@ def decode_with_attention(
                     predicted_token=int(logits.argmax(-1)[0]),
                     attn=last_rows,
                     applies_to=("next_step",),
-                    argmax=last_idx,
-                    argmax_prompt=last_prompt_idx,
+                    argmax=last_idx[argmax_domain],
+                    argmax_prompt=last_idx.get("prompt", {}),
+                    argmax_by_domain=last_idx,
+                    primary_domain=argmax_domain,
                 )
             )
 
@@ -379,15 +447,17 @@ def decode_with_attention(
                 cache = step_out.past_key_values
                 row_logits = step_out.logits[:, -1, :]
                 predicted = int(row_logits.argmax(-1)[0])
-                step_rows, step_idx, step_prompt_idx = capture(attn)
+                step_rows, step_idx = capture(attn)
                 trace.steps.append(
                     StepTrace(
                         step=step,
                         fed_token=fed,
                         predicted_token=predicted,
                         attn=step_rows,
-                        argmax=step_idx,
-                        argmax_prompt=step_prompt_idx,
+                        argmax=step_idx[argmax_domain],
+                        argmax_prompt=step_idx.get("prompt", {}),
+                        argmax_by_domain=step_idx,
+                        primary_domain=argmax_domain,
                     )
                 )
                 nxt = row_logits.argmax(-1, keepdim=True)
@@ -489,6 +559,7 @@ def credits_from_trace(
     *,
     pairing: str = "next_step",
     sink_position: int = 0,
+    domain: str | None = None,
 ) -> tuple[dict[HeadRef, set[int]], dict[HeadRef, int], dict[HeadRef, int]]:
     """Apply the paper's two criteria to a trace.
 
@@ -499,12 +570,18 @@ def credits_from_trace(
     therefore ``P(argmax == prompt position 0 | criterion (1) held)``, not a share of
     *all* decoding steps -- and "position 0" is the first prompt token, which under a
     chat template is a template token rather than necessarily a BOS sink.  That
-    argmax is the prompt-restricted one whatever ``argmax_domain`` scored, so the
+    argmax is the prompt-restricted one whatever ``domain`` scored, so the
     diagnostic stays comparable across domains (under ``haystack`` position 0 is not
     even eligible).
+
+    ``domain`` selects criterion (2)'s search space (default: the trace's scoring
+    domain).  Both ``credits`` and ``considered`` are domain-independent except for
+    the argmax, and the captured rows are the same, so scoring a second domain is one
+    extra pass over indices already in memory.
     """
     if pairing not in PAIRINGS:
         raise ValueError(f"pairing must be one of {PAIRINGS}, got {pairing!r}")
+    domain = domain or trace.argmax_domain
 
     # ONE definition of "a needle token": the tokenization of the needle text (the
     # paper's k).  An earlier version unioned this with the prompt-span ids, which
@@ -530,7 +607,7 @@ def credits_from_trace(
         if token not in needle_set:          # criterion (1)
             continue
         prompt_positions = step.prompt_positions(trace.prompt_len)
-        for layer, argmax in step.positions().items():  # argmax: (heads,)
+        for layer, argmax in step.positions(domain).items():  # argmax: (heads,)
             if layer not in info.num_heads:
                 # The patch capture stores whatever called eager_attention_forward,
                 # which can include a module (e.g. a vision tower) this model does
@@ -571,6 +648,7 @@ def credits_aligned(
     info: ModelInfo,
     *,
     pairing: str = "next_step",
+    domain: str | None = None,
 ) -> dict[HeadRef, set[int]]:
     """Stricter variant: the *longest common subsequence* alignment with the needle.
 
@@ -583,6 +661,7 @@ def credits_aligned(
     # The same "needle token" set as `credits_from_trace`: walking the prompt-span
     # ids instead made this variant systematically lower for a reason that had
     # nothing to do with in-order strictness (the span's last token could be fused).
+    domain = domain or trace.argmax_domain
     needle_ids = list(getattr(sample, "needle_text_ids", None) or sample.needle_ids)
     # Steps this pairing actually scores (the prefill row that produces the first
     # generated token belongs to next_step only), so stream positions line up
@@ -604,7 +683,7 @@ def credits_aligned(
         token = stream[pos]
         # `token == needle_ids[needle_index]` by construction of the walk, so there
         # is nothing to filter here (the old `if token not in needle_set` was dead).
-        for layer, argmax in step.positions().items():
+        for layer, argmax in step.positions(domain).items():
             if layer not in info.num_heads:
                 continue
             heads = _validated_head_count(info, layer, argmax)
@@ -646,6 +725,13 @@ class InstanceResult:
     #: whenever the needle has no repeated token; strictly lower otherwise.  Free:
     #: the numerator is already computed, only the divisor differs.
     scores_raw: dict[str, dict[str, float]] = field(default_factory=dict)
+    #: domain -> pairing -> {head: score} for every captured domain *other than* the
+    #: one in ``meta['argmax_domain']`` (which is `scores`, the primary).  All domains
+    #: come out of one decode pass, so which one is "the" domain is a reporting
+    #: decision; the run aggregates each of them into its own matrix, and the primary
+    #: keeps the historical filenames.  Storing the alternatives beside the primary
+    #: would double the JSONL for no information, so the map holds the complement.
+    scores_by_domain: dict[str, dict[str, dict[str, float]]] = field(default_factory=dict)
     meta: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -656,6 +742,7 @@ class InstanceResult:
             "sample": self.sample,
             "scores": self.scores,
             "scores_raw": self.scores_raw,
+            "scores_by_domain": self.scores_by_domain,
             "aligned_scores": self.aligned_scores,
             "copied_tokens": self.copied_tokens,
             "activations": self.activations,
@@ -804,6 +891,9 @@ def score_instance(
     denom_raw = max(len(text_ids), 1)
     scores: dict[str, dict[str, float]] = {}
     scores_raw: dict[str, dict[str, float]] = {}
+    #: domain -> pairing -> scores for the *other* captured domains; the primary is
+    #: `scores` above (see `InstanceResult.scores_by_domain`).
+    scores_by_domain: dict[str, dict[str, dict[str, float]]] = {}
     activations: dict[str, dict[str, float]] = {}
     considered_out: dict[str, dict[str, int]] = {}
     aligned_out: dict[str, dict[str, float]] = {}
@@ -813,11 +903,16 @@ def score_instance(
     # Fig. 3 claims are about *tokens*, which an aggregate score cannot answer.
     copied_tokens: dict[str, dict[str, list[int]]] = {}
 
+    # Every domain the capture has, primary first so `scores` is the run's own
+    # domain and the alternatives land in `scores_by_domain`.
+    domains = [argmax_domain] + [d for d in trace.domains if d != argmax_domain]
+
     for p in pairings:
-        credits, sinks, considered = credits_from_trace(trace, sample, info, pairing=p)
+        credits, sinks, considered = credits_from_trace(trace, sample, info, pairing=p,
+                                                        domain=argmax_domain)
         # The strict in-order variant costs nothing extra (no forward passes), so
         # it is stored next to the paper's rule for every run.
-        aligned = credits_aligned(trace, sample, info, pairing=p)
+        aligned = credits_aligned(trace, sample, info, pairing=p, domain=argmax_domain)
         scores[p] = {str(h): len(credits[h]) / denom for h in info.scoreable_heads}
         scores_raw[p] = {str(h): len(credits[h]) / denom_raw for h in info.scoreable_heads}
         aligned_out[p] = {str(h): len(aligned[h]) / denom for h in info.scoreable_heads}
@@ -828,14 +923,28 @@ def score_instance(
         copied_tokens[p] = {str(h): sorted(credits[h])
                             for h in info.scoreable_heads if credits[h]}
         rates = {str(h): sinks[h] / max(considered[h], 1) for h in info.scoreable_heads}
+        # The run-level rate is over *(head, step)* pairs: `considered` is identical
+        # for every head of a layer (it counts steps, not heads), so this is the mean
+        # over heads of each head's step share.  It is *not* the share of steps on
+        # which any head pointed at the sink, and the two differ whenever some heads
+        # point elsewhere.
         rates["__overall__"] = total_sink / total_considered
         sink_rates[p] = rates
+        # The same criteria under the other position sets.  No extra forward pass:
+        # the rows are already captured and only the argmax differs, so this is the
+        # whole cost of making the domain a reporting decision.
+        for domain in domains[1:]:
+            alt = credits_from_trace(trace, sample, info, pairing=p, domain=domain)
+            scores_by_domain.setdefault(domain, {})[p] = {
+                str(h): len(alt[0][h]) / denom for h in info.scoreable_heads
+            }
 
     text = tokenizer.decode(generated, skip_special_tokens=True) if tokenizer is not None else ""
     return InstanceResult(
         sample=sample.as_dict(),
         scores=scores,
         scores_raw=scores_raw,
+        scores_by_domain=scores_by_domain,
         activations=activations,
         considered=considered_out,
         sink_rate=sink_rates,
@@ -851,10 +960,19 @@ def score_instance(
               # `haystack_span`, but recording it here ties the *score* to the
               # domain it was computed in even if the sample dict is edited.
               "argmax_span": list(argmax_span) if argmax_span is not None else None,
+              # Which domains this instance could be scored in (the `haystack` one is
+              # absent when the prompt did not contain the context verbatim).
+              "argmax_domains": list(trace.domains),
               # How many (layer, head, step) argmax positions the domain moved
               # relative to the prompt-restricted one -- the direct measure of what
-              # `haystack` changes, free because the rows are the same.
-              "argmax_domain_shift": argmax_domain_shift(trace),
+              # `haystack` changes, free because the rows are the same.  Restricted to
+              # the rows each pairing scores, so the share describes the same rows as
+              # `scores` rather than the whole capture; per pairing because the two
+              # pairings score different token sets (the same mistake `sink_rate` had).
+              "argmax_domain_shift": {
+                  p: argmax_domain_shift(trace, sample=sample, pairing=p)
+                  for p in pairings
+              },
               "eos_reached": trace.stopped_on_eos,
               "truncated": not trace.stopped_on_eos,
               # The old prefix-anchored diagnostic, kept so the change is auditable.
@@ -1015,15 +1133,28 @@ def aggregate_scores(
     pairing: str = "next_step",
     threshold: float = 0.1,
     field: str = "scores",
+    domain: str | None = None,
 ) -> RetrievalScores:
     """Average per-instance retrieval scores into dense layer x head matrices.
 
     ``field`` selects which per-instance mapping to average: ``"scores"`` (the
     unique-token denominator, the paper's default reading) or ``"scores_raw"`` (the
     per-token one).  One implementation, so the two matrices cannot drift apart.
+
+    ``domain`` selects criterion (2)'s search space: ``None`` (or the instance's own
+    ``meta['argmax_domain']``) reads ``field``, i.e. the primary matrix the run was
+    configured for; any other captured domain reads that domain's per-instance scores
+    from ``scores_by_domain``.  The raw denominator is only stored for the primary
+    domain, so ``field="scores_raw"`` with an alternative ``domain`` is rejected
+    rather than silently averaged with the wrong divisor.
     """
     if field not in ("scores", "scores_raw"):
         raise ValueError(f"field must be 'scores' or 'scores_raw', got {field!r}")
+    if domain is not None and field != "scores":
+        raise ValueError(
+            f"only the primary domain stores the raw-denominator scores; got "
+            f"field={field!r} with domain={domain!r}"
+        )
     # Accumulate in zeros, then hide non-scoreable entries behind NaN.  (Adding
     # into a NaN-filled matrix would poison every entry it touches.)
     score = torch.zeros((info.num_layers, info.max_heads), dtype=torch.float32)
@@ -1031,11 +1162,23 @@ def aggregate_scores(
     n = 0
     for result in results:
         n += 1
-        values = getattr(result, field)[pairing]
+        if domain is None:
+            values = getattr(result, field)[pairing]
+            active = result.activations[pairing]
+        else:
+            values = result.scores_by_domain[domain][pairing]
+            # `activation_freq` is *defined* as P(score > 0) (see the README), and the
+            # primary path computes it that way, so deriving it here is exact rather
+            # than an approximation -- and it saves storing a second indicator matrix
+            # per instance.
+            active = None
         for head in info.scoreable_heads:
             key = str(head)
-            score[head.layer, head.head] += values[key]
-            activation[head.layer, head.head] += result.activations[pairing][key]
+            value = values[key]
+            score[head.layer, head.head] += value
+            activation[head.layer, head.head] += (
+                (1.0 if value > 0.0 else 0.0) if active is None else active[key]
+            )
     if n == 0:
         raise ValueError("no instances to aggregate")
     score /= n
