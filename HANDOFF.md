@@ -766,16 +766,44 @@ Ordered by how expensive they were to rediscover.
 
 ## 6. Pending work
 
-Each item says what to do, not just what is missing.  Everything that could be
+### Launch sequence for the A100 (the one thing that needs a decision)
+
+1. **Preflight, both geometries** (minutes each, `describe,detect` at 1024/4096 with
+   `--limit 60`): `configs/datasphere/a100-preflight.yaml` (chat template) and
+   `a100-preflight-notemplate.yaml` (paper geometry).  Launch them as two jobs.
+2. **Read four numbers per model** from each `summary_next_step.json`:
+   `sparsity_by_domain`, `retrieval_pool_by_domain`, `sink_in_haystack`,
+   `n_instances_recited`/`mean_needle_recall`.  The CPU probe already predicts them
+   (README's sink-geometry bullet: dense 38% with the template vs 6% without, hybrid
+   75-77% either way, pool 11-12 for the hybrid) -- the preflight's job is to confirm
+   them at 1024/4096 tokens, where the context is longer than the probe's 512.
+3. **Decide the geometry.**  Both are defensible and they answer different questions:
+   with the template the models solve the task (recall 1.00) and the dense model's
+   share is inflated by the sink; without it the dense share lands in the paper's
+   3-6% band but the dense model recovers only ~0.55 of the needle.  Reporting both
+   is the honest option; if only one is run, say which and why in the results doc.
+4. **Launch `a100.yaml`** (the full grid; it pins `--argmax-domain haystack`,
+   `--max-new-tokens 96` for detect *and* mask, `--preflight`, and runs
+   `describe,detect,mask,qa,cot,compare,figures,case-study`).  `--no-chat-template` can
+   be added to the driver's cmd line for the other geometry.
+5. **If a late stage fails**, stage the downloaded tree as `ds-a100-resume/` and launch
+   `a100-resume.yaml` -- it re-runs only `qa,cot,compare,figures`, because `mask` is
+   the stage that costs real money (45 samples per point x 6 K x 6 arms).
+
+Each item below says what to do, not just what is missing.  Everything that could be
 finished offline is done, including round six (the `haystack` argmax domain and its
 default, numeric answer comparison, three held-out eval needles, per-sample QA
 spread, the raw-denominator matrices, the small guards, the aliased-`eager` patch,
-the reproduce-script parity check, and the test-file split) and round seven (the
+the reproduce-script parity check, and the test-file split), round seven (the
 argmax domain as a reporting dimension with a matrix per domain, the ablation
 sample-count corrections and the `lengths` provenance, `data_path` on the QA/CoT
 artifacts, the driver's `--lengths`/`--limit` preflight overrides plus the
 `a100-preflight`/`a100-resume` configs, `case-study` as a stage, and the
-`argmax_domain_shift`/pie-caption/sink-wording/bf16 notes).  What is left needs a
+`argmax_domain_shift`/pie-caption/sink-wording/bf16 notes) and round eight (the mask
+generation budget, `logits_to_keep`, the `--no-chat-template` driver flag and the
+template-free preflight, the recomputed truncation numbers, the subset-domain
+aggregation, the K-collapse warning, `prompt_tokens`, the pie threshold label, and
+the domain-ordering theorem with its property test).  What is left needs a
 GPU run, external data, or a judgement call.
 
 Known measurement limits, in the artifacts themselves rather than hidden:
