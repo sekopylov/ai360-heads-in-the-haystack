@@ -84,26 +84,39 @@ class Copy(HeadMetric):
 
 
 class SpanMass(HeadMetric):
-    """The attention mass of the head on the span, averaged over the generated tokens."""
+    """
+    The attention mass of the head on the span, averaged over the generated tokens.
+    span_tokens_only: averaged over the steps whose generated token occurs in the span, 0 without such steps, the
+    mass of a step limited to [0, 1]. This is needle_attention_mass_v1 of the branch c0.
+    """
 
-    def __init__(self, name, span="needle"):
-        self.name, self.span = name, span
+    def __init__(self, name, span="needle", span_tokens_only=False):
+        self.name, self.span, self.span_tokens_only = name, span, span_tokens_only
 
     def start(self, input_ids, spans, span_names):
         self.i, self.total, self.n = span_names.index(self.span), 0.0, 0
+        s, e = spans[self.span]
+        self.tokens = {int(t) for t in input_ids[s:e]} if self.span_tokens_only else None
 
     def step(self, step):
-        self.total = self.total + step["span_mass"][..., self.i].astype(np.float64)
+        mass = step["span_mass"][..., self.i].astype(np.float64)
+        self.shape = mass.shape
+        if self.tokens is not None:
+            if step["token"] not in self.tokens:
+                return
+            mass = np.clip(mass, 0.0, 1.0)
+        self.total = self.total + mass
         self.n += 1
 
     def end(self):
-        return self.total / self.n
+        return self.total / self.n if self.n else np.zeros(self.shape)
 
 
 def head_metrics(limits=()):
     """The metrics over the whole answer and, as name@limit, over its first `limit` tokens for every limit."""
     def make(suffix):
-        return [Copy("copy_count" + suffix, distinct=False), Copy("copy_recall" + suffix, distinct=True), SpanMass("needle_mass" + suffix)]
+        return [Copy("copy_count" + suffix, distinct=False), Copy("copy_recall" + suffix, distinct=True), SpanMass("needle_mass" + suffix),
+                SpanMass("needle_attention_mass" + suffix, span_tokens_only=True)]
     metrics = make("")
     for limit in limits:
         for m in make(f"@{limit}"):

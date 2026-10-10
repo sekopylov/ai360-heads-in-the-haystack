@@ -7,6 +7,9 @@ python -m rh.limits results/new/qwen3_detect
 
 Choose a limit: writes head_score_<metric>@<limit>.json, the file to pass to --mask_file:
 python -m rh.limits results/new/qwen3_detect --select 128
+
+The head rankings are compared by copy_count; by another head metric with --metric:
+python -m rh.limits results/new/qwen3_detect --metric needle_attention_mass
 """
 import argparse
 import json
@@ -17,7 +20,7 @@ import numpy as np
 from . import spool
 from .metrics import rank
 
-HEAD_METRICS = ("copy_count", "copy_recall", "needle_mass")
+HEAD_METRICS = ("copy_count", "copy_recall", "needle_mass", "needle_attention_mass")
 
 
 def load(out):
@@ -49,12 +52,13 @@ if __name__ == "__main__":
     parser.add_argument("out", help="--out folder of rh.run")
     parser.add_argument("--reference", type=int, default=None, help="limit the head rankings are compared with; default: the largest")
     parser.add_argument("--select", type=int, default=None, help="write the head_score files of this limit")
+    parser.add_argument("--metric", default="copy_count", choices=HEAD_METRICS, help="head metric whose rankings are compared over the limits")
     args = parser.parse_args()
 
     samples, limits, heads = load(args.out)
     reference = args.reference or limits[-1]
     assert reference in limits, f"{reference} is not among the limits {limits}"
-    ref_scores = head_scores(samples, heads, "copy_count", reference)
+    ref_scores = head_scores(samples, heads, args.metric, reference)
     ref_mean = ref_scores.mean(0).ravel() if ref_scores is not None else None
     top = lambda v, k: set(np.argsort(-v, kind="stable")[:k])
 
@@ -63,14 +67,14 @@ if __name__ == "__main__":
         at = [s["by_limit"][str(limit)] for s in samples]
         row = {"limit": limit, "samples": len(at), "truncated": float(np.mean([a["truncated"] for a in at])),
                "success": float(np.mean([a["success"] for a in at])), "mean_rouge1_recall": float(np.mean([a["rouge1_recall"] for a in at]))}
-        scores = head_scores(samples, heads, "copy_count", limit)
+        scores = head_scores(samples, heads, args.metric, limit)
         if scores is not None and ref_mean is not None:
             mean = scores.mean(0).ravel()
             row.update({"heads_above_0.1": int((mean > 0.1).sum()), "spearman": float(np.corrcoef(rank(mean), rank(ref_mean))[0, 1]),
                         **{f"top{k}": len(top(mean, k) & top(ref_mean, k)) for k in (10, 20, 50)}})
         rows.append(row)
 
-    print(f"{len(samples)} samples; head rankings by copy_count are compared with the limit {reference}")
+    print(f"{len(samples)} samples; head rankings by {args.metric} are compared with the limit {reference}")
     header = f"{'limit':>6} {'truncated':>10} {'success':>8} {'rouge':>7}"
     if "spearman" in rows[0]:
         header += f" {'heads>0.1':>10} {'spearman':>9} {'top10':>6} {'top20':>6} {'top50':>6}"
