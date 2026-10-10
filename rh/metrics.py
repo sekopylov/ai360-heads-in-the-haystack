@@ -16,6 +16,9 @@ Results in --out:
     summary.json             aggregate over the samples
     head_score_<metric>.json per-head scores of the successful samples, in the format of the authors' head_score;
                              head_score_masked_<metric>.json when the run had masked heads
+
+Head metrics of every sample: copy_count, copy_recall, needle_mass, needle_attention_mass. A sample of a task with
+inserts (hard_niah) has also the attention to the needle sentence and to the inserts, see insert_metrics().
 """
 import argparse
 import glob
@@ -112,8 +115,80 @@ class SpanMass(HeadMetric):
         return self.total / self.n if self.n else np.zeros(self.shape)
 
 
-def head_metrics(limits=()):
-    """The metrics over the whole answer and, as name@limit, over its first `limit` tokens for every limit."""
+COMPETING = ("distractor", "lure", "noise")   # roles of the inserts that compete with the needle
+SUPPORTING = ("value", "evidence")            # roles of the inserts that hold a part of the answer
+
+
+class GroupMass(HeadMetric):
+    """
+    The attention mass of the head on a group of spans, averaged over the generated tokens: the sum over the group
+    or, with largest, the largest span of the group. Zeros when the group is empty.
+    """
+
+    def __init__(self, name, spans, largest=False):
+        self.name, self.spans, self.largest = name, spans, largest
+
+    def start(self, input_ids, spans, span_names):
+        self.idx, self.total, self.n = [span_names.index(s) for s in self.spans], 0.0, 0
+
+    def step(self, step):
+        mass = step["span_mass"][..., self.idx].astype(np.float64)
+        if self.idx:
+            self.total = self.total + (mass.max(-1) if self.largest else mass.sum(-1))
+        else:
+            self.total = np.zeros(mass.shape[:-1])
+        self.n += 1
+
+    def end(self):
+        return self.total / self.n
+
+
+class GroupCopy(HeadMetric):
+    """
+    copy_count over a group of spans: the number of steps at which the top-1 attention of the head is on a token of
+    one of the spans and that token is the generated one. It is divided by the length of `per` (the answer in the
+    needle) for every group, so the values of different groups compare directly with each other and with copy_count.
+    """
+
+    def __init__(self, name, spans, per="needle"):
+        self.name, self.spans, self.per = name, spans, per
+
+    def start(self, input_ids, spans, span_names):
+        self.input_ids = input_ids
+        self.inside = np.zeros(len(input_ids), dtype=bool)
+        for s in self.spans:
+            self.inside[spans[s][0]:spans[s][1]] = True
+        self.length, self.hits = spans[self.per][1] - spans[self.per][0], 0.0
+
+    def step(self, step):
+        idx = np.clip(step["topk_idx"][..., 0], 0, len(self.input_ids) - 1)
+        self.hits = self.hits + (self.inside[idx] & (self.input_ids[idx] == step["token"]))
+
+    def end(self):
+        return self.hits / self.length
+
+
+def insert_metrics(meta):
+    """
+    The metrics of a sample with inserts; meta["inserts"]: name of the span -> role. Over the whole answer.
+        needle_sentence_mass   mass on the whole needle sentence (needle_mass is on the answer inside it)
+        competing_mass         mass on all competing inserts together: distractors, lures and noise
+        competing_max_mass     mass on the competing insert that gets the most at the step: one insert against one needle
+        supporting_mass        mass on the inserts that hold a part of the answer: values and evidence
+        copy_sentence          copying from the needle sentence
+        copy_competing         copying from the competing inserts
+    """
+    group = lambda roles: [name for name, insert in meta["inserts"].items() if insert["role"] in roles]
+    return [SpanMass("needle_sentence_mass", span="needle_sentence"), GroupMass("competing_mass", group(COMPETING)),
+            GroupMass("competing_max_mass", group(COMPETING), largest=True), GroupMass("supporting_mass", group(SUPPORTING)),
+            GroupCopy("copy_sentence", ["needle_sentence"]), GroupCopy("copy_competing", group(COMPETING))]
+
+
+def head_metrics(limits=(), meta=None):
+    """
+    The metrics over the whole answer and, as name@limit, over its first `limit` tokens for every limit; for a
+    sample with inserts also insert_metrics().
+    """
     def make(suffix):
         return [Copy("copy_count" + suffix, distinct=False), Copy("copy_recall" + suffix, distinct=True), SpanMass("needle_mass" + suffix),
                 SpanMass("needle_attention_mass" + suffix, span_tokens_only=True)]
@@ -122,6 +197,8 @@ def head_metrics(limits=()):
         for m in make(f"@{limit}"):
             m.limit = limit
             metrics.append(m)
+    if meta and "inserts" in meta:
+        metrics += insert_metrics(meta)
     return metrics
 
 
@@ -167,7 +244,7 @@ def process_sample(sample_path, out, wait, delete, limits=()):
     prefix = sample_path[:-len(".sample.npz")]
     input_ids, info = spool.read_sample(sample_path)
     span_names = sorted(info["spans"])
-    metrics, started, chunk = head_metrics(limits), False, 0
+    metrics, started, chunk = head_metrics(limits, info["meta"]), False, 0
     done_path = f"{prefix}.done.json"
     while True:
         chunk_path = f"{prefix}.{chunk:06d}{spool.STEPS}"
