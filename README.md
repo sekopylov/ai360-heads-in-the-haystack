@@ -149,15 +149,22 @@ together they are `a100.yaml`'s stage list, so nothing runs twice), `laptop.yaml
 prints whether `fla`/`causal_conv1d` are importable) and `--verify-hashes` (the
 checkpoint digests are recomputed).  The two continuation configs (`a100-mask`,
 `a100-resume`) additionally pass `--resume`, which skips every `(stage, model)` that
-`run_state.json` records as `ok`, with its artifact present *and* the same command line
-(the argv is recorded with each stage, so a relaunch with a changed `--lengths` or
-`--no-chat-template` re-runs it instead of keeping an artifact from another grid) — the
-first split launch lost the hybrid's 75-minute `mask` to a crash in the stage after it,
-and a relaunch must not buy it twice.  The flag only appears where the tree it reads is
-staged by `local-paths` (`a100-detect` *produces* that tree and must start from an empty
-prefix, or stale artifacts would ride along into the collected output); the monolithic
-configs and the preflights leave it off, because a fresh full run must never skip a stage
-on the strength of a stale file.  Everything non-obvious about this path — the pip
+`run_state.json` records as `ok`, with its artifact present *and* the same fingerprint
+(recorded per stage: the stage's own command line plus the run-level conditions its argv
+cannot see — the grid overrides, `dtype`, `seed`, the measurement package's hash and the
+registry entries the run uses, so a relaunch with a changed `--lengths`,
+`--no-chat-template` or checkpoint setting re-runs the stage instead of keeping an
+artifact from another measurement) — the first split launch lost the hybrid's 75-minute
+`mask` to a crash in the stage after it, and a relaunch must not buy it twice.  The flag
+only appears where the tree it reads is staged by `local-paths` (`a100-detect` *produces*
+that tree and must start from an empty prefix, or stale artifacts would ride along into
+the collected output); the monolithic configs and the preflights leave it off, because a
+fresh full run must never skip a stage on the strength of a stale file.  One consequence
+worth knowing when reading a log: the prefix is part of every stage's argv, so the *first*
+resume of a tree staged under a different directory name (`a100-resume`'s
+`ds-results-a100` → `ds-a100-resume`) re-runs that config's whole stage list — the safe
+direction, two minutes there, and the config says so.  Everything non-obvious about this
+path — the pip
 crash that shapes the requirements file, the `cmd` grammar, why the cached venv
 cannot be the entry point, what the "T4" slot actually hands out — is written up
 in [`docs/datasphere-findings.md`](docs/datasphere-findings.md).

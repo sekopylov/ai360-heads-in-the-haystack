@@ -752,6 +752,46 @@ def test_resume_skips_only_a_stage_that_is_ok_and_left_its_artifact(driver, tmp_
         json.dumps({"drawn": ["ring_graph.pdf"], "failed": {}}), encoding="utf-8")
     assert ("figures", None) in driver.completed_stages(prefix)
 
+    # A manifest that is valid JSON but not an object must mean "do not skip", not an
+    # AttributeError before the first stage of the next run.
+    (prefix / "figures" / "manifest.json").write_text("[]", encoding="utf-8")
+    assert driver.completed_stages(prefix) == {}
+    (prefix / "figures" / "manifest.json").write_text("null", encoding="utf-8")
+    assert driver.completed_stages(prefix) == {}
+
+
+def test_resume_says_so_when_there_is_no_command_to_compare(driver, tmp_path, monkeypatch,
+                                                            capsys):
+    """`compare` with one model builds no argv; the resume path must not claim to run it.
+
+    `stage_argv("compare", ...)` returns `[]` for a single model (it needs two runs to
+    compare), and the mismatch branch used to print "running it" and then do nothing --
+    which is a lie in the log of the run that is supposed to be auditable.
+    """
+    import json
+
+    prefix = tmp_path / "ds"
+    prefix.mkdir()
+    (prefix / "correlation.json").write_text("{}", encoding="utf-8")
+    _write_run_state(prefix, [{"stage": "compare", "model": None, "status": "ok",
+                               "argv": "compare --runs ds/a ds/b --out ds"}])
+    assert ("compare", None) in driver.completed_stages(prefix)
+
+    monkeypatch.setattr(driver, "report_environment", lambda: None)
+    monkeypatch.setattr(driver, "prepare_models", lambda args: None)
+    monkeypatch.setattr(driver, "code_sha256", lambda *roots: "deadbeef")
+    ran: list[str] = []
+    monkeypatch.setattr(driver, "run_cli", lambda stage, argv: ran.append(stage))
+
+    assert driver.main(["--weights", "/w", "--models", "qwen3-0.6b", "--stages",
+                        "compare", "--out-prefix", str(prefix), "--resume"]) == 0
+    assert ran == []
+    out = capsys.readouterr().out
+    assert "no command to run" in out, out
+    assert "running it" not in out, out
+    assert json.loads((prefix / "run_state.json").read_text(encoding="utf-8"))[
+        "stages"][-1]["status"] == "ok", "the existing record was left alone"
+
 
 def test_the_fingerprint_covers_what_a_stage_argv_cannot_see():
     """A derived stage's argv is paths, so the *conditions* must be fingerprinted too.
@@ -771,7 +811,7 @@ def test_the_fingerprint_covers_what_a_stage_argv_cannot_see():
     def inputs(**over):
         base = dict(profile="a100", models=["m", "n"], dtype="bfloat16", seed=0,
                     lengths=[4096, 8192, 16384], limit=None, no_chat_template=False,
-                    measurement_sha256="cafe")
+                    measurement_sha256="cafe", registry_sha256="f00d")
         base.update(over)
         return driver.run_inputs_fingerprint(**base)
 
@@ -787,18 +827,78 @@ def test_the_fingerprint_covers_what_a_stage_argv_cannot_see():
         for changed in (inputs(lengths=[1024, 4096]), inputs(no_chat_template=True),
                         inputs(dtype="float32"), inputs(seed=1), inputs(limit=60),
                         inputs(profile="t4"), inputs(models=["m"]),
-                        inputs(measurement_sha256="beef")):
+                        inputs(measurement_sha256="beef"),
+                        inputs(registry_sha256="beef")):
             assert fingerprint(stage, base) != fingerprint(stage, changed), stage
 
     # The weights directory is deliberately *not* part of it: a job's input dir is named
-    # per job (`/job/weights_<random>`), so including it would disable resume entirely;
-    # the checkpoints' identity is pinned by `--verify-hashes` instead.
+    # per job (`/job/weights_<random>`), so including it would disable resume entirely.
+    # What pins the checkpoint's identity instead is the registry entry hash (the digest
+    # `--verify-hashes` re-checks) and the effective dtype.
     assert "weights" not in base
+    assert "registry_sha256" in base
+
+    # The registry hash covers only the models this run uses, so an edit to some other
+    # model cannot force a 75-minute `mask` to run again.
+    real = load_job_driver()
+    assert real.registry_fingerprint(["qwen3-0.6b"]) != real.registry_fingerprint(
+        ["qwen3.5-0.8b"])
+    assert real.registry_fingerprint(["qwen3-0.6b"]) == real.registry_fingerprint(
+        ["qwen3-0.6b"])
 
     # `shlex.join`, not a space join: an argument with a space must not make two
     # different commands look alike.
     assert driver.stage_fingerprint(["mask", "--out", "ds/a b"], base) != \
         driver.stage_fingerprint(["mask", "--out", "ds/a", "b"], base)
+
+
+#: Driver inputs that are deliberately outside the resume fingerprint, with the reason.
+#: The list is not documentation-only: the test below fails when `parse_args` grows a
+#: dest, so every new flag has to be classified rather than forgotten.
+NOT_IN_FINGERPRINT: dict[str, str] = {
+    "weights": "names a job-local input dir (/job/weights_<random>); identity is the "
+               "registry hash plus --verify-hashes",
+    "download_weights": "same as --weights, by download instead of mount",
+    "out_prefix": "it is in every stage's argv, and it is where run_state.json lives",
+    "stages": "the stage list is the thing being resumed; each stage is decided on its own",
+    "resume": "the flag itself",
+    "bootstrap_venv": "environment setup, not a measurement condition",
+    "use_venv": "environment setup",
+    "inspect_dir": "read-only audit job: it runs no stage",
+    "project_home": "read-only survey path",
+    "verify_hashes": "hardening: it makes a bad checkpoint fail loudly, it moves no number",
+}
+
+
+def test_every_driver_input_is_classified_for_the_resume_fingerprint():
+    """A new driver flag must not silently escape the fingerprint.
+
+    Two review rounds in a row found the same class of bug -- an input that changes what a
+    stage *measures* without appearing in its argv (`--lengths` for the derived stages,
+    then `dtype`/the registry) -- and each time the fix was a hand-written list.  This is
+    the tripwire: every `parse_args` dest is either a field of
+    `run_inputs_fingerprint` or named in :data:`NOT_IN_FINGERPRINT` with a reason.  A new
+    flag fails here until someone decides which it is.
+    """
+    import json
+
+    driver = load_job_driver()
+    args = driver.parse_args(["--weights", "/w"])
+    dests = set(vars(args))
+
+    fields = set(json.loads(driver.run_inputs_fingerprint(
+        profile=args.profile, models=args.models, dtype=args.dtype, seed=args.seed,
+        lengths=args.lengths, limit=args.limit,
+        no_chat_template=args.no_chat_template, measurement_sha256="x",
+        registry_sha256="y")))
+
+    assert fields - dests == {"measurement_sha256", "registry_sha256"}
+    classified = (fields - {"measurement_sha256", "registry_sha256"})
+    assert dests == classified | set(NOT_IN_FINGERPRINT), (
+        "unclassified driver inputs: "
+        f"{sorted(dests - classified - set(NOT_IN_FINGERPRINT))}; "
+        f"stale entries: {sorted((classified | set(NOT_IN_FINGERPRINT)) - dests)}"
+    )
 
 
 def test_main_resume_actually_skips_the_stage(driver, tmp_path, monkeypatch, capsys):
@@ -837,7 +937,8 @@ def test_main_resume_actually_skips_the_stage(driver, tmp_path, monkeypatch, cap
     ran.clear()
     run_inputs = driver.run_inputs_fingerprint(
         profile="laptop", models=["qwen3-0.6b"], dtype=None, seed=0, lengths=None,
-        limit=None, no_chat_template=False, measurement_sha256="deadbeef")
+        limit=None, no_chat_template=False, measurement_sha256="deadbeef",
+        registry_sha256=driver.registry_fingerprint(["qwen3-0.6b"]))
     fingerprint = driver.stage_fingerprint(
         driver.stage_argv("mask", profile="laptop", models=["qwen3-0.6b"],
                           prefix=prefix, seed=0)[0], run_inputs)

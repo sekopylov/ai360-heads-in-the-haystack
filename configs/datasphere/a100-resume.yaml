@@ -28,12 +28,17 @@ desc: remaining stages (compare,figures,case-study) on the A100, reusing a finis
 #   cp -r <downloaded>/ds-results-a100/. ds-a100-resume/
 # (`ds-a100-resume/` is gitignored.)
 #
-# `--resume` skips every (stage, model) whose `run_state.json` entry is `ok` and whose
-# artifact is present in the staged tree, so re-launching after a late failure costs only
-# the stages that actually failed.  Since the staged tree already holds `mask`, this is
-# what turns "the tail crashed" into "the tail re-runs".  It is opt-in: the monolithic
-# `a100.yaml`/`a100-notemplate.yaml` leave it off so a fresh full run can never skip a
-# stage on the strength of a stale artifact.
+# `--resume` skips every (stage, model) whose `run_state.json` entry is `ok`, whose
+# artifact is present in the staged tree *and* whose recorded command matches.  That last
+# condition has a consequence worth knowing before reading a log: the staging directory is
+# renamed (`ds-results-a100/` -> `ds-a100-resume/`), and the prefix is inside every stage's
+# argv, so the **first** launch here re-runs the whole tail -- the records it inherited
+# were made under the other prefix and cannot be compared.  That is the safe direction
+# (the tail is two minutes and you asked for it), and it is not "only the failed stage":
+# once *this* config has written records, re-launching it does skip what finished, because
+# then the prefixes agree.  It is opt-in: the monolithic `a100.yaml`/`a100-notemplate.yaml`
+# leave it off so a fresh full run can never skip a stage on the strength of a stale
+# artifact.
 
 cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --resume --stages compare,figures,case-study --out-prefix ds-a100-resume
 

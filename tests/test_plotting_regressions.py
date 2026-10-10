@@ -334,6 +334,46 @@ def test_cmd_figures_records_a_figure_it_could_not_draw(tmp_path, monkeypatch):
     assert manifest["drawn"], "the other figures were still drawn"
 
 
+def test_the_manifest_says_which_files_a_failed_figure_left_behind(tmp_path, monkeypatch):
+    """`drawn` means "the pdf+png pair was written"; a failure between them must say so.
+
+    `save_fig` writes the pdf first and the png second, so a failure can leave a real pdf
+    on disk while the manifest lists the name as failed and not drawn.  For `--resume`
+    that is the safe direction (a non-empty `failed` re-runs the stage), but a reader of
+    the artifact would otherwise see something different from what is in the directory.
+    """
+    import json
+
+    import retrieval_heads.cli as cli
+    import retrieval_heads.plotting as plotting
+
+    run = tmp_path / "m"
+    run.mkdir()
+    info = attention_info(1, 2)
+    RetrievalScores(info=info, score=torch.tensor([[0.9, 0.1]]),
+                    activation_freq=torch.zeros(1, 2), n_instances=1).save(
+        run / "scores_next_step")
+
+    real_save_fig = plotting.save_fig
+
+    def half_broken(fig, path):
+        """Leave the pdf and no png, then die -- what a png-write failure looks like."""
+        real_save_fig(fig, path)
+        path.with_suffix(".png").unlink()
+        raise RuntimeError("png encoder exploded")
+
+    monkeypatch.setattr(plotting, "save_fig", half_broken)
+    out = tmp_path / "figs"
+    assert cli.main(["figures", "--runs", str(run), "--out", str(out)]) == 0
+    manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    assert "ring_graph.pdf" not in manifest["drawn"]
+    assert "png encoder exploded" in manifest["failed"]["ring_graph.pdf"]
+    assert "(written: ring_graph.pdf)" in manifest["failed"]["ring_graph.pdf"], manifest
+    # ... and the file really is there, which is what the note claims.
+    assert (out / "ring_graph.pdf").exists()
+    assert not (out / "ring_graph.png").exists()
+
+
 def test_plot_task_cot_gets_a_figure_title():
     import matplotlib.pyplot as plt
 

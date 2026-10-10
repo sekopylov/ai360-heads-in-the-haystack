@@ -852,7 +852,14 @@ def cmd_figures(args: argparse.Namespace) -> int:
             drawn.append(name)
         except Exception as exc:  # noqa: BLE001 - a figure must never kill the stage
             log.warning("skipping figure %s: %s", name, exc)
-            failed[name] = f"{type(exc).__name__}: {exc}"
+            # `save_fig` writes the pdf first and the png second, so a failure here can
+            # leave the pdf behind.  `drawn` means "the pair was written"; say which files
+            # actually exist rather than letting the manifest imply neither does.
+            stem = (fig_dir / name).with_suffix("")
+            written = [p.name for p in (stem.with_suffix(".pdf"), stem.with_suffix(".png"))
+                       if p.exists()]
+            failed[name] = f"{type(exc).__name__}: {exc}" + (
+                f" (written: {', '.join(written)})" if written else "")
 
     if runs:
         safe("ring_graph.pdf", lambda: plot_score_pie(runs))

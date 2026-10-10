@@ -188,29 +188,53 @@ class StageRecord(NamedTuple):
     code_sha256: str | None   # the *full* hash (scripts included), for the warning only
 
 
+def registry_fingerprint(models: list[str]) -> str:
+    """The registry entries this run actually uses, for the resume fingerprint.
+
+    ``configs/models.json`` decides two things no stage's argv carries: which files a
+    checkpoint *is* (``--verify-hashes`` checks them against it, and a mismatch aborts
+    the job before any stage) and the dtype when ``--dtype`` is not passed.  Hashing only
+    the entries in use means an edit to some other model does not invalidate a finished
+    stage, while a change to this run's model does -- the alternative was to trust a
+    registry that nothing hashes at all.
+    """
+    from retrieval_heads.cli import resolve_model
+
+    used = {key: resolve_model(key)[1] for key in models}
+    blob = json.dumps(used, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()[:16]
+
+
 def run_inputs_fingerprint(*, profile: str, models: list[str], dtype: str | None,
                            seed: int, lengths: list[int] | None, limit: int | None,
-                           no_chat_template: bool, measurement_sha256: str) -> str:
+                           no_chat_template: bool, measurement_sha256: str,
+                           registry_sha256: str) -> str:
     """The run-level conditions a stage's own argv does not carry.
 
     Fingerprinting the stage argv alone is not enough, and the gap is not hypothetical:
     ``compare``, ``figures`` and ``case-study`` take only paths, so a relaunch with a
     different ``--lengths`` re-runs ``mask`` (its argv changed) and then *skips* the
     derived stages -- a tree half from each grid, reported as a success.  ``dtype``
-    changes the arithmetic without appearing in any stage's argv, and
-    ``measurement_sha256`` is the hash of the package that computes the numbers, so an
-    ``ok`` recorded by another revision of ``retrieval_heads/`` is not trusted either.
+    changes the arithmetic without appearing in any stage's argv,
+    ``measurement_sha256`` is the hash of the package that computes the numbers, and
+    ``registry_sha256`` covers the effective checkpoint/dtype settings (see
+    :func:`registry_fingerprint`), so an ``ok`` recorded under any of those being
+    different is not trusted.
 
     Deliberately absent: ``--weights`` (a job's input directory is named per job, so
-    including it would disable resume entirely; the checkpoints' identity is pinned by
-    ``--verify-hashes`` against ``configs/models.json``, which every A100 config passes)
-    and ``--out-prefix`` (it is in every stage's argv, and it is where the state file
-    itself lives).
+    including it would disable resume entirely; the checkpoints' identity is what
+    ``registry_sha256`` and ``--verify-hashes`` pin) and ``--out-prefix`` (it is in every
+    stage's argv, and it is where the state file itself lives).  Note the consequence of
+    the latter: staging a tree under a *different* prefix -- which
+    ``a100-resume.yaml`` does by design -- makes every recorded argv differ, so the first
+    resume of a foreign tree re-runs its whole stage list.  That is the safe direction
+    and it is cheap (the config lists only the tail), but it is not "only the failed
+    stage", and the config says so.
     """
     return json.dumps({
         "profile": profile, "models": models, "dtype": dtype, "seed": seed,
         "lengths": lengths, "limit": limit, "no_chat_template": no_chat_template,
-        "measurement_sha256": measurement_sha256,
+        "measurement_sha256": measurement_sha256, "registry_sha256": registry_sha256,
     }, sort_keys=True)
 
 
@@ -240,6 +264,10 @@ def _artifact_is_complete(stage: str, directory: Path) -> bool:
         payload = json.loads(
             (directory / STAGE_ARTIFACTS[stage][0]).read_text(encoding="utf-8"))
     except (OSError, ValueError):
+        return False
+    if not isinstance(payload, dict):
+        # Same principle as `run_state.json`: a file that is not the expected shape means
+        # "do not skip", never "crash before the first stage".
         return False
     return not payload.get(key)
 
@@ -1135,10 +1163,12 @@ def main(argv: list[str] | None = None) -> int:
     # moves -- a change to `case_study.py` or to this driver cannot invalidate a masking
     # curve, and re-running an hour of `mask` for it would defeat the flag.
     measurement = code_sha256(Path("retrieval_heads"))
+    registry = registry_fingerprint(args.models)
     run_inputs = run_inputs_fingerprint(
         profile=args.profile, models=args.models, dtype=args.dtype, seed=args.seed,
         lengths=args.lengths, limit=args.limit,
-        no_chat_template=args.no_chat_template, measurement_sha256=measurement)
+        no_chat_template=args.no_chat_template, measurement_sha256=measurement,
+        registry_sha256=registry)
     done = completed_stages(prefix) if args.resume else {}
     if args.resume:
         skipped = sorted((stage, model or "*") for stage, model in done)
