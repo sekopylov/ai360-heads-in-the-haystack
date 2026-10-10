@@ -24,21 +24,39 @@ import argparse
 import glob
 import json
 import os
+import re
 import time
+import unicodedata
 
 import numpy as np
 from rouge_score import rouge_scorer
 
 from . import spool
 
-scorer = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=True)
+scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rouge3', 'rougeL'], use_stemmer=True)
+
+
+def plain(text):
+    """Lower case, no punctuation, single spaces."""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", unicodedata.normalize("NFKC", text).lower())).strip()
+
+
+def exact_phrase(reference, response):
+    """The whole reference stands in the response word for word, in a row; case and punctuation do not count."""
+    return f" {plain(reference)} " in f" {plain(response)} "
 
 
 def answer_metrics(reference, response):
-    """Success is the authors' criterion: ROUGE-1 recall of the reference above 50."""
+    """
+    Success is the authors' criterion: ROUGE-1 recall of the reference above 50. It counts single words, so an answer
+    made of common words of the reference passes it. The stricter ones: ROUGE-2 and ROUGE-3 recall, the share of the
+    pairs and triples of neighbouring words of the reference that are in the answer, and exact: the reference phrase
+    itself is there.
+    """
     score = scorer.score(reference, response)
     recall = score['rouge1'].recall * 100
-    return {"rouge1_recall": recall, "rougeL_recall": score['rougeL'].recall * 100, "success": bool(recall > 50)}
+    return {"rouge1_recall": recall, "rouge2_recall": score['rouge2'].recall * 100, "rouge3_recall": score['rouge3'].recall * 100,
+            "rougeL_recall": score['rougeL'].recall * 100, "success": bool(recall > 50), "exact": exact_phrase(reference, response)}
 
 
 class HeadMetric:
@@ -214,7 +232,8 @@ def sample_result(record):
         for limit in record["limits"]:
             text = record["responses_at"].get(str(limit), record["response"])
             scores = answer_metrics(record["reference"], text)
-            result["by_limit"][str(limit)] = {"rouge1_recall": scores["rouge1_recall"], "success": scores["success"],
+            result["by_limit"][str(limit)] = {"rouge1_recall": scores["rouge1_recall"], "rouge2_recall": scores["rouge2_recall"],
+                                              "rouge3_recall": scores["rouge3_recall"], "success": scores["success"], "exact": scores["exact"],
                                               "truncated": not (record["stopped"] and record["n_tokens"] <= limit)}
     return result
 
@@ -340,8 +359,9 @@ def rescore(out):
     """
     Builds samples.jsonl again from the answers saved in out/outputs: for a changed or a new answer metric, without
     the model and the spool. Only the samples already in samples.jsonl are rewritten, in the same order: a sample
-    gets its line when its head metrics are done too. Lines of samples without a saved answer (runs made before the
-    answers were kept) stay as they are. Returns (rewritten, kept).
+    gets its line when its head metrics are done too. A sample without a saved answer (runs made before the answers
+    were kept) gets the metrics of its whole answer from the response in its line; its values at the token limits
+    stay as they are. Returns (rewritten from the saved answers, from the lines).
     """
     path = f"{out}/samples.jsonl"
     if not os.path.exists(path):
@@ -349,7 +369,7 @@ def rescore(out):
     with open(path, encoding="utf-8") as f:
         rows = [json.loads(l) for l in f if l.strip()]
     records = [spool.load_output(out, row["id"]) for row in rows]
-    rows = [sample_result(record) if record else row for row, record in zip(rows, records)]
+    rows = [sample_result(record) if record else {**row, **answer_metrics(row["reference"], row["response"])} for row, record in zip(rows, records)]
 
     def write(tmp):
         with open(tmp, "w", encoding="utf-8") as f:
@@ -377,6 +397,11 @@ def aggregate(spool_dir, out):
         samples = [json.loads(l) for l in f if l.strip()]
     summary = {"samples": len(samples), "successful": sum(s["success"] for s in samples),
                "mean_rouge1_recall": float(np.mean([s["rouge1_recall"] for s in samples]))}
+    if all("exact" in s for s in samples):
+        summary["exact"] = sum(s["exact"] for s in samples)
+    for key in ("rouge2_recall", "rouge3_recall"):
+        if all(key in s for s in samples):
+            summary[f"mean_{key}"] = float(np.mean([s[key] for s in samples]))
     if all("stopped" in s for s in samples):
         summary["truncated_at_cap"] = sum(not s["stopped"] for s in samples)
     for key in ("context_length", "depth_percent", "needle_idx"):
@@ -433,7 +458,7 @@ if __name__ == "__main__":
 
     if args.rescore:
         rewritten, kept = rescore(args.out)
-        print(f"answer metrics computed again for {rewritten} samples" + (f"; {kept} samples have no saved answer, their lines are kept" if kept else ""), flush=True)
+        print(f"answer metrics computed again for {rewritten} samples" + (f"; {kept} samples have no saved answer, the metrics of their whole answers are taken from samples.jsonl" if kept else ""), flush=True)
     else:
         consume(args.spool, args.out, args.follow, args.consume, args.idle_timeout)
     summary = aggregate(args.spool, args.out)

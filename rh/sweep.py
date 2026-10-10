@@ -11,6 +11,7 @@ import os
 import numpy as np
 
 from . import spool
+from .metrics import answer_metrics
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -27,7 +28,9 @@ if __name__ == "__main__":
         if args.limit is not None:
             at = [s["by_limit"][str(args.limit)] for s in samples]
         else:
-            at = [{"rouge1_recall": s["rouge1_recall"], "success": s["success"], "truncated": not s.get("stopped", True)} for s in samples]
+            # the stricter metrics (ROUGE-2, ROUGE-3, the exact phrase) are computed here for the runs made before they were stored
+            at = [{**(s if "rouge3_recall" in s and "exact" in s else answer_metrics(s["reference"], s["response"])),
+                   "rouge1_recall": s["rouge1_recall"], "success": s["success"], "truncated": not s.get("stopped", True)} for s in samples]
         run = spool.load_json(f"{out}/spool/run.json") if os.path.exists(f"{out}/spool/run.json") else {}
         block = run.get("block_list") or []
         size = run.get("group_size", 1)
@@ -35,12 +38,14 @@ if __name__ == "__main__":
         rows.append({"run": os.path.basename(os.path.normpath(out)), "mask": run.get("mask", "?"), "heads": len(block), "groups": whole,
                      "cap": (run.get("args") or {}).get("max_new_tokens"), "longest": max(s["n_tokens"] for s in samples),
                      "samples": len(at), "success": float(np.mean([a["success"] for a in at])),
-                     "rouge": float(np.mean([a["rouge1_recall"] for a in at])), "truncated": float(np.mean([a["truncated"] for a in at]))})
+                     "rouge": float(np.mean([a["rouge1_recall"] for a in at])), "truncated": float(np.mean([a["truncated"] for a in at])),
+                     **{key: float(np.mean([a[name] for a in at])) if all(name in a for a in at) else float("nan")
+                        for key, name in (("exact", "exact"), ("rouge2", "rouge2_recall"), ("rouge3", "rouge3_recall"))}})
 
     width = max([len(r["run"]) for r in rows] + [3])
-    print(f"{'run':<{width}} {'mask':>13} {'heads':>6} {'groups':>7} {'cap':>5} {'longest':>8} {'samples':>8} {'success':>8} {'rouge':>7} {'truncated':>10}")
+    print(f"{'run':<{width}} {'mask':>13} {'heads':>6} {'groups':>7} {'cap':>5} {'longest':>8} {'samples':>8} {'success':>8} {'exact':>7} {'rouge':>7} {'rouge2':>7} {'rouge3':>7} {'truncated':>10}")
     for r in sorted(rows, key=lambda r: (r["mask"], r["heads"])):
-        print(f"{r['run']:<{width}} {r['mask']:>13} {r['heads']:>6} {r['groups']:>7} {str(r['cap']):>5} {r['longest']:>8} {r['samples']:>8} {r['success']:>8.1%} {r['rouge']:>7.1f} {r['truncated']:>10.1%}")
+        print(f"{r['run']:<{width}} {r['mask']:>13} {r['heads']:>6} {r['groups']:>7} {str(r['cap']):>5} {r['longest']:>8} {r['samples']:>8} {r['success']:>8.1%} {r['exact']:>7.1%} {r['rouge']:>7.1f} {r['rouge2']:>7.1f} {r['rouge3']:>7.1f} {r['truncated']:>10.1%}")
     caps = {r["cap"] for r in rows}
     if len(caps) > 1:
         print(f"WARNING: the runs have different caps of the answer length ({sorted(caps, key=str)}), their results are not comparable")
