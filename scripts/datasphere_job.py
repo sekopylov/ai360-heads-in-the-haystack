@@ -28,6 +28,7 @@ import shlex
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -308,6 +309,79 @@ def producer_argvs(argvs_by_pair: dict[tuple[str, str | None], list[list[str]]]
             if not STAGE_IS_DERIVED[stage] for argv in argvs]
 
 
+def weights_url(repo: str, name: str) -> str:
+    """Where one pinned file of a checkpoint lives on the Hub."""
+    return f"https://huggingface.co/{repo}/resolve/main/{name}"
+
+
+def _download(url: str, target: Path) -> int:
+    """Stream ``url`` into ``target``; returns the number of bytes written."""
+    request = urllib.request.Request(url, headers={"User-Agent": "retrieval-heads-job"})
+    written = 0
+    with urllib.request.urlopen(request, timeout=600) as response, \
+            target.open("wb") as handle:  # noqa: S310 - the registry pins the digest
+        while block := response.read(1 << 22):
+            handle.write(block)
+            written += len(block)
+            if written % (1 << 30) < (1 << 22):  # a line per ~GiB, not per chunk
+                print(f"[entry]     ...{written / (1 << 30):.1f} GiB", flush=True)
+    return written
+
+
+def fetch_weights(target: Path, registry: Path, models: list[str]) -> int:
+    """Download the pinned files of ``models`` into ``target``, verifying each digest.
+
+    This is the delivery path that scales: the CLI caps a job's ``inputs`` (plus the
+    `local-paths` zips) at 10 GiB, so anything above ~4B cannot ride along with the
+    config and has to live somewhere the job can attach -- the project disk
+    (`--weights ${DS_PROJECT_HOME}/models`).  The disk is shared and is only ever added
+    to here: a file that is already present *with the pinned digest* is left alone, so a
+    re-run after an interruption resumes instead of re-downloading 200 GiB.
+
+    Every file is written to ``<name>.part`` and renamed only after its digest matches,
+    so an interrupted download can never be mistaken for a complete checkpoint by the
+    next ``--verify-hashes``.
+
+    The digests themselves come from the Hub when the file is absent locally
+    (`scripts/pin_registry.py`), which is what makes pinning a 60 GiB model cheap -- and
+    is exactly why this re-verifies instead of trusting the registry.
+    """
+    entries = json.loads(registry.read_text(encoding="utf-8"))["models"]
+    unknown = [key for key in models if key not in entries]
+    if unknown:
+        raise SystemExit(f"[entry] not in {registry}: {unknown}; known: {sorted(entries)}")
+    target.mkdir(parents=True, exist_ok=True)
+    fetched = skipped = 0
+    for key in models:
+        entry = entries[key]
+        directory = target / Path(entry["path"]).name
+        wanted = {**entry.get("files", {}), **entry.get("shards", {})}
+        total = sum(1 for _ in wanted)
+        print(f"[entry] {key}: {total} file(s) -> {directory}", flush=True)
+        for index, (name, digest) in enumerate(sorted(wanted.items()), 1):
+            path = directory / name
+            if path.exists() and _sha256(path) == digest:
+                skipped += 1
+                continue
+            part = path.with_name(path.name + ".part")
+            directory.mkdir(parents=True, exist_ok=True)
+            print(f"[entry]   [{index}/{total}] {name}", flush=True)
+            written = _download(weights_url(entry["repo"], name), part)
+            got = _sha256(part)
+            if got != digest:
+                part.unlink(missing_ok=True)
+                raise SystemExit(
+                    f"[entry] {key}/{name}: sha256 {got} != pinned {digest} "
+                    f"({written} bytes downloaded, partial file removed); the registry "
+                    f"pin is wrong or the download was corrupted -- re-pin with "
+                    f"scripts/pin_registry.py before trusting this tree")
+            part.replace(path)
+            fetched += 1
+    print(f"[entry] weights under {target.absolute()}: {fetched} fetched, "
+          f"{skipped} already complete", flush=True)
+    return fetched
+
+
 def _artifact_is_complete(stage: str, directory: Path) -> bool:
     """Presence of every glob in :data:`STAGE_ARTIFACTS`, plus no recorded partial set."""
     if not all(any(directory.glob(pattern)) for pattern in STAGE_ARTIFACTS[stage]):
@@ -438,6 +512,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--verify-hashes", action="store_true",
                         help="recompute the registry SHA-256 of every checkpoint file "
                              "(~3.3 GB, a few seconds) instead of only checking presence")
+    # A maintenance mode, like `--bootstrap-venv`: fill a weights cache (the project
+    # disk) and exit, running no stage and needing no GPU.  It exists because the
+    # `inputs` path a job uploads is capped at 10 GiB by the CLI, so every model above
+    # ~4B has to be fetched somewhere the job can attach instead.
+    parser.add_argument("--fetch-weights", metavar="DIR", default=None,
+                        help="download the pinned files of --models into DIR (a "
+                             "${DS_PROJECT_HOME} path), verifying every digest, and exit "
+                             "without running a stage; re-running resumes, because a file "
+                             "already present with the right digest is left alone")
     # Resume is opt-in, and the monolithic configs leave it off: a *fresh* full run must
     # never skip a stage because a stale artifact happens to sit in the prefix.  The
     # continuation configs (a100-detect, a100-mask, a100-resume) pass it, which is where
@@ -448,9 +531,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                              "re-launching the tail of a run whose earlier stages paid "
                              "for themselves)")
     args = parser.parse_args(argv)
-    if not args.bootstrap_venv and not args.inspect_dir and not (args.weights or args.download_weights):
+    if not args.bootstrap_venv and not args.inspect_dir and not args.fetch_weights \
+            and not (args.weights or args.download_weights):
         parser.error("one of --weights / --download-weights is required "
-                     "(unless --bootstrap-venv or --inspect-dir)")
+                     "(unless --bootstrap-venv, --inspect-dir or --fetch-weights)")
     return args
 
 
@@ -1179,8 +1263,18 @@ def main(argv: list[str] | None = None) -> int:
         report_environment()
         for path in args.inspect_dir:
             inspect_dir(Path(path).expanduser())
-        if not args.bootstrap_venv and not (args.weights or args.download_weights):
+        if not args.bootstrap_venv and not args.fetch_weights \
+                and not (args.weights or args.download_weights):
             return 0
+    if args.fetch_weights:
+        # Maintenance mode: no venv, no GPU, no stage.  It writes only into the target
+        # directory, so it is safe to point at the shared project disk.
+        report_environment()
+        fetch_weights(Path(args.fetch_weights).expanduser(),
+                      Path(os.environ.get("RETRIEVAL_HEADS_MODELS_JSON",
+                                          "configs/models.json")),
+                      args.models)
+        return 0
     if args.bootstrap_venv:
         report_environment()
         survey_project_disk(Path(args.project_home).expanduser() if args.project_home else None)

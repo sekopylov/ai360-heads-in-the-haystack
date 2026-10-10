@@ -101,54 +101,63 @@ Weights are `params x 2 bytes`; KV is computed from the configs above.
 | Qwen3-Next-80B-A3B | 192 (12 full) | 151.5 | 1.1 | 152.6 | **no** (needs >= 2 cards) |
 | Qwen3-122B/235B/397B, Coder-480B | — | 234-894 | — | — | **no** |
 
-## 5. Recommendation
+## 5. Recommendation — the chosen set
 
-**Tier 1 — the matched pair at ~8-9B (drop-in, no code change).**
-Add **Qwen3-8B** (dense, 1152 heads) and **Qwen3.5-9B** (hybrid, 128 scoreable heads of
-32 layers).  This is the highest-value addition per rouble: the project's central
-comparison (a dense model vs a linear hybrid of the same lab and vintage) currently rests
-on **0.6B vs 0.8B**, and both new ones fit with room to spare.  If the hybrid's
-non-sparsity is architectural, it must survive an 11x scale-up; if the dense model's
-sparsity is a template artefact, that must hold too.
+**Decided (2026-10-10):** the round adds **Qwen3-4B, Qwen3.5-4B, Qwen3-8B, Qwen3.5-9B,
+Qwen3-30B-A3B, Qwen3.5-35B-A3B**, with **Ministral-3-8B** (and 14B) researched and pinned
+as the third family.  All are in `configs/models.json` now, pinned with SHA-256 digests
+(`scripts/pin_registry.py`), and the project disk is the delivery path
+(`configs/datasphere/a100-weights.yaml` -> `${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models`).
 
-**Tier 2 — the scaling ladder and a new regime (drop-in).**
-**Qwen3-4B** and **Qwen3-14B** extend the dense ladder to four points in one family
-(0.6 -> 4 -> 8 -> 14B), which is the paper's "a few percent, and it grows with scale"
-question asked directly.  **Qwen3-30B-A3B** is a genuinely new axis — dense attention with
-a sparse FFN — and because only 3.3B parameters are active it is *cheaper in wall clock
-than the 14B* while having 1536 scoreable heads.  **Qwen3.5-27B** (384 heads, 55 GiB)
-extends the hybrid ladder if Tier 1 shows the effect is real.
+Why this set, in order of what it buys:
 
-**Tier 3 — needs code (defer until Tier 1/2 are reported).**
-**Gemma 4 12B** is the most interesting *architecture* on the list (open licence, a third
-attention class: 5 local : 1 global with different `head_dim` for the two kinds), but the
-global layers' unified K/V means `build_model_info` currently refuses the model.  The work
-is bounded: accept the K==V signature, exclude `sliding_attention` layers from the score
-(they cannot see a mid-context needle at 49K), and report them like the linear mixers.
-Gemma 3 is the same idea behind a gated licence — and `scripts/download_models.sh` has no
-`HF_TOKEN` support, so a gated repo is not currently fetchable at all.
+1. **A matched dense-vs-hybrid pair at ~4B and again at ~8-9B.**  The project's central
+   comparison currently rests on 0.6B vs 0.8B; if the hybrid's non-sparsity is
+   architectural it has to survive an 11x scale-up, and if the dense model's sparsity is a
+   template artefact that has to hold too.  Qwen3-4B (1152 heads) / Qwen3.5-4B (128 of
+   32 layers) and Qwen3-8B (1152) / Qwen3.5-9B (128) give two independent rungs.
+2. **A scaling ladder inside one family**: 0.6 -> 4 -> 8B dense, which is the paper's
+   "a few percent, and it grows with scale" question asked directly.
+3. **A different regime**: Qwen3-30B-A3B is dense *attention* with a sparse FFN, and only
+   3.3B parameters are active, so it is cheaper in wall clock than the 14B while having
+   1536 scoreable heads.  Qwen3.5-35B-A3B is the same idea on the hybrid side.
+4. **A third family**: Ministral-3-8B (Mistral, Apache-2.0, **no sliding window at all** —
+   `sliding_window: null` and no `layer_types` in any of the nine 2512 configs, confirmed
+   in `Ministral3Model.forward`, so 34 x 32 = 1088 heads are all scoreable).  A result
+   that only holds inside one lab's recipe is weak; this is the cheapest way to test that.
+   *Caveat*: its Instruct variants ship **FP8** on disk, so the `-BF16` re-releases
+   (`mistralai/Ministral-3-{8B,14B}-Instruct-2512-BF16`, same architecture, bf16) are the
+   ones pinned; and its native window is 16K stretched by YaRN x16, so 49K is
+   extrapolation for it even though the config says 262144.
+5. **Deliberately not taken**: Qwen3-32B (73 GiB, no margin), Gemma 3/4 (needs the
+   unified-K/V and sliding-window work in §2; Gemma 3 is gated), the Gemma E-variants and
+   Gemma 3n (KV-shared heads are not their own), Qwen3-Next-80B and everything at 122B+
+   (multi-card), and Ministral 3 3B (redundant with Qwen3-4B for 7 GiB).
+   The old **Ministral-8B-Instruct-2410** is worth noting as a *wide-window* hybrid
+   (9 global : 27 local, window 32768): unlike Gemma's 1024-token window it can still see
+   a mid-context needle at our grid lengths, so it is a scoreable sliding-window model
+   rather than a structurally blinded one.
 
-**Skip.**  Qwen3-32B (73 GiB leaves no margin; the fp32 SDPA fallback would OOM),
-Qwen3.5-35B-A3B (68 GiB, and its 3B-active MoE makes it the least informative per GiB),
-Gemma 4 31B / Gemma 3 27B (over budget), the E-variants and Gemma 3n (KV-shared heads are
-not their own — a confound, not a measurement), and everything at 122B+ (multi-card).
-
-## 6. Cost, from the measured 0.6B baseline
-
-Measured on the A100: `detect` 25 min (210 dense instances, 1K-49K, 96-token budget) and
-`mask` 61 min (45 samples/point, 6 K points, 5 random trials).  `detect` is dominated by
+**Cost, from the measured 0.6B baseline** (A100, 542.88 RUB/h).  `detect` is dominated by
 the capture (`layers x heads` per decode step), `mask` by prefill+decode work
 (parameters).  Rough extrapolations, to be checked against the first hour of a real run:
 
 | model | detect | mask | total | ~RUB |
 |---|---|---|---|---|
+| Qwen3-4B | ~40 min | ~1.5-2 h | ~2.5 h | 1.4k |
+| Qwen3.5-4B | ~40 min | ~1.5-2 h | ~2.5 h | 1.4k |
 | Qwen3-8B | ~1 h | ~2-3 h | ~3-4 h | 1.6-2.2k |
 | Qwen3.5-9B | ~1 h | ~2-3 h | ~3-4 h | 1.6-2.2k |
-| Qwen3-14B | ~1.5 h | ~3-4 h | ~4.5-5.5 h | 2.4-3.0k |
+| Ministral-3-8B | ~1 h | ~2-3 h | ~3-4 h | 1.6-2.2k |
 | Qwen3-30B-A3B | ~1.5 h | ~1.5-2 h | ~3-3.5 h | 1.6-1.9k |
+| Qwen3.5-35B-A3B | ~1.5 h | ~2 h | ~3.5 h | 1.9k |
+| _all seven_ | | | **~20-24 h** | **~11-13k** |
 
-The knobs that move this: `--random-trials 5 -> 3` cuts ~40% of the `mask` arms, and
-`--lengths` trims the grid (the t4 scale's 2 lengths are ~1/3 of the A100's 3).
+The knobs that move this: `--random-trials 5 -> 3` cuts ~40% of the `mask` arms,
+`--lengths` trims the grid (the t4 scale's 2 lengths are ~1/3 of the A100's 3), and the
+stages can be split (`describe,detect` first for every model, then `mask` only for the
+ones that earn it -- the detect half is ~30% of the total and answers the sparsity-vs-scale
+question on its own).
 
 ## 7. What adding one model involves — and the 10 GiB ceiling
 
@@ -180,11 +189,11 @@ The knobs that move this: `--random-trials 5 -> 3` cuts ~40% of the `mask` arms,
    checkpoint.
 
 **Consequence for the plan.**  The recommendation in §5 is about *science per rouble*; the
-logistics reorder it slightly.  If the next launch must use the already-proven delivery
-path, the pair to add is **Qwen3-4B + Qwen3.5-4B** (7.5 and 8.7 GiB — both fit, both
-drop-in, and 1152 vs 128 scoreable heads at 4B already dwarfs the 0.6B/0.8B pair).  If the
-project disk (or `--download-weights`) is sorted out first, go straight to the 8-9B pair,
-which is the better experiment for the same number of GPU hours.
+logistics reorder it slightly.  With the project-disk cache in place (the job in
+`configs/datasphere/a100-weights.yaml`) the ceiling disappears and the set in §5 is
+reachable; before that, the largest drop-in pair the *proven* path carries is
+**Qwen3-4B + Qwen3.5-4B** (7.5 and 8.7 GiB), which already takes the dense-vs-hybrid
+comparison from 0.6B/0.8B to 4B.
 
 ## 8. Not verified here
 

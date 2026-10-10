@@ -134,15 +134,24 @@ def test_cached_and_bootstrap_agree_on_the_venv_path(configs):
     assert cached == bootstrap, "the cached run would not find the bootstrapped venv"
 
 
+def _is_maintenance(config: dict) -> bool:
+    """A job that runs no stage, so the run-config invariants do not apply to it.
+
+    Three kinds so far: the read-only disk audit (`--inspect-dir`), the project-disk venv
+    builder (`--bootstrap-venv` without `--use-venv`), and the project-disk weights cache
+    (`--fetch-weights`).  None of them produces a results tree, needs a GPU, or has to
+    re-verify hashes before a grid -- the weights job *is* the verification.
+    """
+    cmd = config["cmd"]
+    return ("--inspect-dir" in cmd or "--fetch-weights" in cmd
+            or ("--bootstrap-venv" in cmd and "--use-venv" not in cmd))
+
+
 def test_outputs_are_declared_where_results_are_written(configs):
     """A stage writing outside the declared outputs silently loses its artifacts."""
     for name, config in configs.items():
-        if "--inspect-dir" in config["cmd"]:
-            continue  # read-only audit job: it produces no artifacts by design
-        if "--bootstrap-venv" in config["cmd"] and "--use-venv" not in config["cmd"]:
-            # Environment-maintenance job: it installs into the project-disk venv and
-            # returns, so there is nothing to collect.
-            continue
+        if _is_maintenance(config):
+            continue  # runs no stage, so it has nothing to collect
         outputs = config.get("outputs") or []
         assert outputs, f"{name}: no outputs declared"
         cmd = config["cmd"]
@@ -233,10 +242,16 @@ def test_weight_verification_can_recompute_the_registry_hashes(tmp_path):
 
 
 def test_a100_configs_recheck_the_checkpoint_hashes(configs):
-    """The flag is wired where it pays for itself, and nowhere else by accident."""
+    """The flag is wired where it pays for itself, and nowhere else by accident.
+
+    The weights-cache job is exempt and is the reason it can be: it downloads and
+    verifies every pinned digest itself, so `--verify-hashes` (which belongs to
+    `prepare_models`, a path it never takes) would be dead weight.
+    """
     driver = load_job_driver()
-    a100 = {name: config for name, config in configs.items() if name.startswith("a100")}
-    assert a100, "no A100 configs found"
+    a100 = {name: config for name, config in configs.items()
+            if name.startswith("a100") and not _is_maintenance(config)}
+    assert a100, "no A100 run configs found"
     for name, config in a100.items():
         tokens = [token.replace("${WEIGHTS}", "/w").replace("${DS_PROJECT_HOME}", "/disk")
                   for token in config["cmd"].split()]
@@ -452,3 +467,38 @@ def test_driver_can_override_the_grid_for_a_preflight():
                               seed=0)[0]
     assert plain == ["detect", "--model", "m", "--out", "ds/m", "--seed", "0",
                      *driver.SCALES["a100"]["detect"]], plain
+
+
+def test_every_registry_entry_is_pinned_and_shaped():
+    """A registry entry is what `--verify-hashes` and the resume fingerprint trust.
+
+    The pins for models that are not on this laptop come from the Hub's own LFS metadata
+    (`scripts/pin_registry.py`) rather than from downloaded bytes, so the shape checks
+    here are what keeps a typo out of a job that would otherwise download 60 GiB before
+    noticing.  When a model *is* on disk, its `model.safetensors.index.json` has to name
+    exactly the shards the registry pins -- a wrong list is a wrong verification.
+    """
+    import re
+
+    registry = json.loads(
+        (REPO_ROOT / "configs" / "models.json").read_text(encoding="utf-8"))["models"]
+    assert registry, "the registry is empty"
+    hex64 = re.compile(r"^[0-9a-f]{64}$")
+    for key, entry in registry.items():
+        assert entry["path"].startswith("models/"), key
+        assert entry["repo"].count("/") == 1, (key, entry["repo"])
+        assert entry["source"] == f"https://huggingface.co/{entry['repo']}", key
+        assert entry["dtype"] in ("float32", "bfloat16"), key
+        assert entry["files"], f"{key}: no files pinned"
+        assert entry["shards"], f"{key}: no shards pinned"
+        for name, digest in {**entry["files"], **entry["shards"]}.items():
+            assert hex64.match(str(digest)), (key, name, digest)
+        assert all(name.endswith(".safetensors") for name in entry["shards"]), key
+
+        index = REPO_ROOT / entry["path"] / "model.safetensors.index.json"
+        if index.exists():
+            weight_map = json.loads(index.read_text(encoding="utf-8"))["weight_map"]
+            assert set(weight_map.values()) == set(entry["shards"]), (
+                f"{key}: the registry pins {sorted(entry['shards'])} but the index names "
+                f"{sorted(set(weight_map.values()))}"
+            )

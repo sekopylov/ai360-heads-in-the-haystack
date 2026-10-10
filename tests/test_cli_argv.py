@@ -945,6 +945,8 @@ NOT_IN_FINGERPRINT: dict[str, str] = {
     "use_venv": "environment setup",
     "inspect_dir": "read-only audit job: it runs no stage",
     "project_home": "read-only survey path",
+    "fetch_weights": "maintenance mode: it fills a weights cache and runs no stage, and "
+                     "the tree it writes is not a result",
     "verify_hashes": "hardening: it makes a bad checkpoint fail loudly, it moves no number",
 }
 
@@ -978,6 +980,56 @@ def test_every_driver_input_is_classified_for_the_resume_fingerprint():
         f"{sorted(dests - classified - set(NOT_IN_FINGERPRINT))}; "
         f"stale entries: {sorted((classified | set(NOT_IN_FINGERPRINT)) - dests)}"
     )
+
+
+def test_fetch_weights_verifies_every_digest_and_resumes(driver, tmp_path, monkeypatch):
+    """The project-disk cache is only written after a file matches its pin.
+
+    This is the delivery path for everything above ~4B (the CLI caps a job's `inputs`
+    at 10 GiB), and it fills a *shared* disk from pins that were taken from the Hub's
+    metadata without downloading the model -- so the verification here is the first time
+    those pins meet real bytes, and an interrupted download must never look complete.
+    """
+    import hashlib
+    import json
+
+    src = tmp_path / "hub"
+    (src / "m").mkdir(parents=True)
+    payload = b"weights" * 1000
+    (src / "m" / "model.safetensors").write_bytes(payload)
+    (src / "m" / "config.json").write_text("{}", encoding="utf-8")
+    registry = tmp_path / "models.json"
+
+    def write_registry(shard_digest: str) -> None:
+        entry = {"path": "models/Toy", "repo": "org/Toy",
+                 "files": {"config.json": hashlib.sha256(b"{}").hexdigest()},
+                 "shards": {"model.safetensors": shard_digest}}
+        registry.write_text(json.dumps({"models": {"toy": entry}}), encoding="utf-8")
+
+    write_registry(hashlib.sha256(payload).hexdigest())
+    monkeypatch.setattr(driver, "weights_url",
+                        lambda repo, name: (src / "m" / name).as_uri())
+
+    target = tmp_path / "cache"
+    assert driver.fetch_weights(target, registry, ["toy"]) == 2
+    assert (target / "Toy" / "model.safetensors").read_bytes() == payload
+    assert not list(target.rglob("*.part")), "a .part file was left behind"
+
+    # Re-running resumes: a file that already matches its pin is not fetched again.
+    assert driver.fetch_weights(target, registry, ["toy"]) == 0
+
+    # A wrong pin fails loudly, removes the partial file and leaves nothing that a later
+    # `--verify-hashes` could mistake for a complete checkpoint.
+    write_registry("0" * 64)
+    (target / "Toy" / "model.safetensors").unlink()
+    with pytest.raises(SystemExit, match="sha256"):
+        driver.fetch_weights(target, registry, ["toy"])
+    assert not (target / "Toy" / "model.safetensors").exists()
+    assert not list(target.rglob("*.part"))
+
+    # An unknown key is refused before anything is written.
+    with pytest.raises(SystemExit, match="not in"):
+        driver.fetch_weights(target, registry, ["nope"])
 
 
 def test_main_resume_actually_skips_the_stage(driver, tmp_path, monkeypatch, capsys):

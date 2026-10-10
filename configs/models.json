@@ -5,7 +5,9 @@
       "dtype": "float32",
       "repo": "Qwen/Qwen3.5-0.8B",
       "source": "https://huggingface.co/Qwen/Qwen3.5-0.8B",
-      "architectures": ["Qwen3_5ForConditionalGeneration"],
+      "architectures": [
+        "Qwen3_5ForConditionalGeneration"
+      ],
       "chat_template": true,
       "notes": "Hybrid: 24 layers = 18x Gated DeltaNet (linear attention, no attention map) + 6x Gated Attention (8 Q-heads, 2 KV-heads, head_dim 256). Only the 6 full-attention layers are scoreable: 6 x 8 = 48 heads. 262144-token native context.",
       "files": {
@@ -28,7 +30,9 @@
       "dtype": "float32",
       "repo": "Qwen/Qwen3-0.6B",
       "source": "https://huggingface.co/Qwen/Qwen3-0.6B",
-      "architectures": ["Qwen3ForCausalLM"],
+      "architectures": [
+        "Qwen3ForCausalLM"
+      ],
       "chat_template": true,
       "notes": "Dense control from the same lab: 28 layers x 16 heads = 448 scoreable heads. Lets the hybrid result be read against a normal transformer.",
       "files": {
@@ -41,6 +45,251 @@
       },
       "shards": {
         "model.safetensors": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b"
+      }
+    },
+    "qwen3-4b": {
+      "path": "models/Qwen3-4B",
+      "dtype": "float32",
+      "repo": "Qwen/Qwen3-4B",
+      "source": "https://huggingface.co/Qwen/Qwen3-4B",
+      "architectures": [
+        "Qwen3ForCausalLM"
+      ],
+      "chat_template": true,
+      "notes": "added for the scale-up round (see docs/model-shortlist.md)",
+      "files": {
+        "config.json": "8ba006f74fecfaaeb392872a60f4a480e7ec9860153d2e1b769ec81f9a147f8a",
+        "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+        "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+        "model.safetensors.index.json": "6dc0981b8829fead746441f68f38f24c5ca4a3a66351f652c26c6df0efc43ab2",
+        "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+        "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+        "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+      },
+      "shards": {
+        "model-00001-of-00003.safetensors": "328a91d3122359d5547f9d79521205bc0a46e1f79a792dfe650e99fc2d651223",
+        "model-00002-of-00003.safetensors": "6cd087b316306a68c562436b5492edbcf6e16c6dba3a1308279caa5a58e21ca5",
+        "model-00003-of-00003.safetensors": "e4bf436957184f4eeb86a80e9db394503f1f56446b2e6b7edeac5b81470f4ca1"
+      }
+    },
+    "qwen3-8b": {
+      "path": "models/Qwen3-8B",
+      "dtype": "float32",
+      "repo": "Qwen/Qwen3-8B",
+      "source": "https://huggingface.co/Qwen/Qwen3-8B",
+      "architectures": [
+        "Qwen3ForCausalLM"
+      ],
+      "chat_template": true,
+      "notes": "added for the scale-up round (see docs/model-shortlist.md)",
+      "files": {
+        "config.json": "f7c4eadfbbf522470667b797a3c89be2524832d2d599797248dc304fff447c30",
+        "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+        "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+        "model.safetensors.index.json": "f9fdbcb91c23971c13ec5d5f2573d2349e8f61f2f049371ec699281748fdb1bc",
+        "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+        "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+        "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+      },
+      "shards": {
+        "model-00001-of-00005.safetensors": "31d6a825ae35f11fb85b195b4c42c146c051e446433125a215336abdf95cbf5f",
+        "model-00002-of-00005.safetensors": "5991236cea6fe21f3d43cab0f0e84448734fbbe0789816202989f2ddc9d18282",
+        "model-00003-of-00005.safetensors": "c5185c4794be2d8a9784d5753c9922db38df478ce11f9ed0b415b7304d896836",
+        "model-00004-of-00005.safetensors": "b5ee7de71fbf17db3d5704e0c8f2bc7d005ca9e1d7ca2aeb19827b0cfcaa917a",
+        "model-00005-of-00005.safetensors": "20c2d6366ab85c90786ccdd829cd2b9e7d30ef3b2ebbb998280e7e4014b542ff"
+      }
+    },
+    "qwen3-30b-a3b": {
+      "path": "models/Qwen3-30B-A3B",
+      "dtype": "float32",
+      "repo": "Qwen/Qwen3-30B-A3B",
+      "source": "https://huggingface.co/Qwen/Qwen3-30B-A3B",
+      "architectures": [
+        "Qwen3MoeForCausalLM"
+      ],
+      "chat_template": true,
+      "notes": "added for the scale-up round (see docs/model-shortlist.md)",
+      "files": {
+        "config.json": "2850ddb3bf7aecad20b611e2d44f3077fc8193f4827c93beddd4c02ad63c2297",
+        "generation_config.json": "2325da0f15bb848e018c5ae071b7943332e9f871d6b60e2ed22ca97d4cb993d2",
+        "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+        "model.safetensors.index.json": "df0d481ec595c55a0ba58426d517390c6214a566ec4ff1c8fc4bbce9f57b3c24",
+        "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+        "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+        "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+      },
+      "shards": {
+        "model-00001-of-00016.safetensors": "454e77b346a61bfb201d54df60e15158838cf930617ee135113556204f2802b5",
+        "model-00002-of-00016.safetensors": "47f015d6e5bb1782a834d75c06113c5e8c77ddca1cb7daf89686a4ec0deda19e",
+        "model-00003-of-00016.safetensors": "ac0bf5990f2da995c1e8b77a3149dee71900b4fe1b8a614231dea9647193d96b",
+        "model-00004-of-00016.safetensors": "89b01fd34a683c70fdb7f22c2e7090538d65063335ba0db46f3654642b17d1e5",
+        "model-00005-of-00016.safetensors": "9849eb3584d928e35bf5956ccfd91b64207467e1fad8304aae68dc4d92d6d6d9",
+        "model-00006-of-00016.safetensors": "f7a0f1525557d740158fb692986ad43506e1b5901e7406ae65808c6457bc53ad",
+        "model-00007-of-00016.safetensors": "920702a50f27a009e5f676da3b02978dbd794f6ad7854f301d709136154c1a84",
+        "model-00008-of-00016.safetensors": "a85bf0cc8a8047c116172d4c08cf4792eb59d4375032708ba3e1a7ffca0f708a",
+        "model-00009-of-00016.safetensors": "25cd8aaed86b8e17685efb152912f92448ea3fffb1bdc247f257f04d05907604",
+        "model-00010-of-00016.safetensors": "7c3307ee214797c4bc61c0994f81d690e768150df5f14d18edf84e53ba4810dc",
+        "model-00011-of-00016.safetensors": "c658cad2842d36fa4c7c7f726f8515dc5670a3d80c94e13257d4e322ffe61988",
+        "model-00012-of-00016.safetensors": "8cb898bc5e78492600053d1105c9ff61d7a719f5cc2802df63e41535a652cc26",
+        "model-00013-of-00016.safetensors": "599594421f314cb8e8ab4474db0eb490cc6310585067e82d73821254b93319ce",
+        "model-00014-of-00016.safetensors": "66d3294e9976b5f01d117a0a0bed768f128a8898eb6937e224d051de2961d363",
+        "model-00015-of-00016.safetensors": "2fe000da4fc7399ff6303bb0daec8c415a5d850f5ea53863392758c77fc37664",
+        "model-00016-of-00016.safetensors": "0c979e314faf06e94a5e1841abd285d4e26e763c79c1abe7710d543192d9da48"
+      }
+    },
+    "qwen3.5-4b": {
+      "path": "models/Qwen3.5-4B",
+      "dtype": "float32",
+      "repo": "Qwen/Qwen3.5-4B",
+      "source": "https://huggingface.co/Qwen/Qwen3.5-4B",
+      "architectures": [
+        "Qwen3_5ForConditionalGeneration"
+      ],
+      "chat_template": true,
+      "notes": "added for the scale-up round (see docs/model-shortlist.md)",
+      "files": {
+        "chat_template.jinja": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+        "config.json": "ddc63e1c717afa86c865bb5e01313d89d72bb53b97ad4a8a03ba8510c0621670",
+        "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+        "model.safetensors.index.json": "cf3f798ee02ba45f9622aa8892a47369ab667d0afbf154ee7c2212de42e6302d",
+        "preprocessor_config.json": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+        "tokenizer.json": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+        "tokenizer_config.json": "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8",
+        "video_preprocessor_config.json": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+        "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+      },
+      "shards": {
+        "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+        "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+      }
+    },
+    "qwen3.5-9b": {
+      "path": "models/Qwen3.5-9B",
+      "dtype": "float32",
+      "repo": "Qwen/Qwen3.5-9B",
+      "source": "https://huggingface.co/Qwen/Qwen3.5-9B",
+      "architectures": [
+        "Qwen3_5ForConditionalGeneration"
+      ],
+      "chat_template": true,
+      "notes": "added for the scale-up round (see docs/model-shortlist.md)",
+      "files": {
+        "chat_template.jinja": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+        "config.json": "d0883072e01861ed0b2d47be3c16c36a8e81c224c7ffaa310c6558fb3f932b05",
+        "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+        "model.safetensors.index.json": "26d3539b516be613f39563617cb9d33b3f83d401298125be392c80cefb8f7fe5",
+        "preprocessor_config.json": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+        "tokenizer.json": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+        "tokenizer_config.json": "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8",
+        "video_preprocessor_config.json": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+        "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+      },
+      "shards": {
+        "model.safetensors-00001-of-00004.safetensors": "db6f444b43d318c92f360a13a25561a6a65b10c0631b8ed305a426dbaa6c380e",
+        "model.safetensors-00002-of-00004.safetensors": "31c7d7e2dd5d207840b31cc59083c8f4c4718959149e0358c0364052bb9a0330",
+        "model.safetensors-00003-of-00004.safetensors": "7ec36ba3a4176a44c3c0876ad80c56a2f70c84bf008d82e9501df642f17dadec",
+        "model.safetensors-00004-of-00004.safetensors": "b62b0c4cd7e44edee103ee8f4fe225f246d5e768e07bfd5f25b63a8aa1fdd0c6"
+      }
+    },
+    "qwen3.5-35b-a3b": {
+      "path": "models/Qwen3.5-35B-A3B",
+      "dtype": "float32",
+      "repo": "Qwen/Qwen3.5-35B-A3B",
+      "source": "https://huggingface.co/Qwen/Qwen3.5-35B-A3B",
+      "architectures": [
+        "Qwen3_5MoeForConditionalGeneration"
+      ],
+      "chat_template": true,
+      "notes": "added for the scale-up round (see docs/model-shortlist.md)",
+      "files": {
+        "chat_template.jinja": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+        "config.json": "5e4d7f74fec2f360eb9cfbfcd6ec0c4c76e684d3a11caaed259d9fd9bfbc7944",
+        "generation_config.json": "4f25002776b741773666203dcea8f54619f177ace3ae483d311102092a4658e0",
+        "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+        "model.safetensors.index.json": "d8d0b7ca4e61ae107e3e87a3ff21136b3ac7c789e64bb24267227ca804e04205",
+        "preprocessor_config.json": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+        "tokenizer.json": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+        "tokenizer_config.json": "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8",
+        "video_preprocessor_config.json": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+        "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+      },
+      "shards": {
+        "model.safetensors-00001-of-00014.safetensors": "1b9f16fdae2411c0c50dbc7a5dacaebd033b28f3fd083e708f53cda3420e7247",
+        "model.safetensors-00002-of-00014.safetensors": "79f06bc069d273b37ae7e1ef21eb24d8641ac74227b6139b00af55addf27e9ee",
+        "model.safetensors-00003-of-00014.safetensors": "2cb56343806fd845eb2ca3ff5c46b1de409e05dc09d03edb86f7fb2d752b4f3d",
+        "model.safetensors-00004-of-00014.safetensors": "39a39c799e52db2ca3d6123dad077b7dbfff3dbad4bcc9cbf66502db7be650a3",
+        "model.safetensors-00005-of-00014.safetensors": "1a3b31ebb04bffa60d0ad5d9f2973d476d88959bb842ce003f068a6a9c5d4776",
+        "model.safetensors-00006-of-00014.safetensors": "af5f17d292df6b200ee928d7dac30a66eab3e8f6d5d88a84fe1d27859d4a64fe",
+        "model.safetensors-00007-of-00014.safetensors": "52885dbecd4e8e2e52e6cd50a1693a640ce622f219c35bf317aad89f72d956fc",
+        "model.safetensors-00008-of-00014.safetensors": "43f232ba029dc4ca5ad994e38913c6ff74f110198e005ee2f35e42f9ce438cb3",
+        "model.safetensors-00009-of-00014.safetensors": "8fa6a375dd539822b19ad18ad002f8acedd4920ff770bc284cfb428a213c9f17",
+        "model.safetensors-00010-of-00014.safetensors": "d89e80aaf84c0b8a442162fc97c38fe7ce85d11ae728f67aa449350da86f8212",
+        "model.safetensors-00011-of-00014.safetensors": "5b774025e5ed974256ce40498bfe4e1ad9ae8a4f13f9e9145666d24ea7404cae",
+        "model.safetensors-00012-of-00014.safetensors": "d0f0bd7a5f09e6e05aee9a6ef5ba97fe678b0e19b891a81969682b0bdc9bb5c7",
+        "model.safetensors-00013-of-00014.safetensors": "da8cc27a2a99eeba5674bfef03c80b3c4f08edfd839ad319a7702fcaedfd874f",
+        "model.safetensors-00014-of-00014.safetensors": "d5e08a7dd670d7ef8da38e7af29cb8cdf42ecded5dfb2d9fcaf06cae79dfaa41"
+      }
+    },
+    "ministral-3-8b": {
+      "path": "models/Ministral-3-8B-Instruct-2512-BF16",
+      "dtype": "float32",
+      "repo": "mistralai/Ministral-3-8B-Instruct-2512-BF16",
+      "source": "https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512-BF16",
+      "architectures": [
+        "Mistral3ForConditionalGeneration"
+      ],
+      "chat_template": true,
+      "notes": "third family (Mistral); all layers global, see docs/model-shortlist.md",
+      "files": {
+        "SYSTEM_PROMPT.txt": "66e0fda8c8ab269ccd010dca6196931d475a22c3f2eebe5b6b3a2ec33a354d0e",
+        "chat_template.jinja": "74eeb55fd3341286ec3fd44e902b7120721acc81cd394e96b431f85e93a1ea56",
+        "config.json": "3953b565385881fe1e80980fa8f797ffef5dbcc170851b5f90d60ddcb1905f58",
+        "generation_config.json": "e0923390059f84a9180b00e5501778acc45ea9856cd7f2fd68208b360927c677",
+        "model.safetensors.index.json": "639a9c27a864b0be21e9e0fd1313f120d24c45563723797ebf611c6fce75b822",
+        "params.json": "81b8377f36c5b3d60900b333214d85160a0500b84576e969092c6fd214f69538",
+        "processor_config.json": "ece2373c2ae391bce18785a1810543bc6173a1f28b6767cffab2c35dbea5f002",
+        "special_tokens_map.json": "0a5c981e8c5c6f8886ee007a6d4543a0be6b221cb9ca32a8709384a4c6fc8cbb",
+        "tekken.json": "600bb27946565481ecf51ba8aee252e49b9a68507866080ac9c30185bb312843",
+        "tokenizer.json": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
+        "tokenizer_config.json": "f59f7294e4f26383d0ea93840fe21cf197784be0842a8301a0343e8c34ed0d6d"
+      },
+      "shards": {
+        "model-00001-of-00004.safetensors": "95f4da19c81e6a06d4f0c61cac3dfdd85ef463a7955473dc4c07e570fd2342f9",
+        "model-00002-of-00004.safetensors": "18275e4c8413d0ed4b0cb8380fe1fd4faeee34189960fdd92ef5b0d3f4ed1b98",
+        "model-00003-of-00004.safetensors": "980d1d3635ae29a6e629e2f7ad589c882eba270c3f66da74da4f8ccb11845687",
+        "model-00004-of-00004.safetensors": "fa80e52af465c5644b18b623eeeebb1d50e47dafbee73816bf26f2473f88d369"
+      }
+    },
+    "ministral-3-14b": {
+      "path": "models/Ministral-3-14B-Instruct-2512-BF16",
+      "dtype": "float32",
+      "repo": "mistralai/Ministral-3-14B-Instruct-2512-BF16",
+      "source": "https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512-BF16",
+      "architectures": [
+        "Mistral3ForConditionalGeneration"
+      ],
+      "chat_template": true,
+      "notes": "third family (Mistral); all layers global, see docs/model-shortlist.md",
+      "files": {
+        "SYSTEM_PROMPT.txt": "df30b6d8d0124f1f905c030be0c820a4720d7361d7c3b18d6542e58a5c0c0446",
+        "chat_template.jinja": "2f545122222db8bb43ca0ea0c49e9185320a8670f7d35575b0da0eb48b1e8970",
+        "config.json": "b1897778395bb1795489a048ebde2e6d216eee21014ce9c18193d15f097454a6",
+        "generation_config.json": "e0923390059f84a9180b00e5501778acc45ea9856cd7f2fd68208b360927c677",
+        "model.safetensors.index.json": "50d07948f11d89b5eddc5fb21485484555376c0627a9537b37f3f17cc9f5a103",
+        "params.json": "b2fc120fee26653d0aa07052122793f86750db9c12b6e11bcf7dfb36440da077",
+        "processor_config.json": "ece2373c2ae391bce18785a1810543bc6173a1f28b6767cffab2c35dbea5f002",
+        "special_tokens_map.json": "0a5c981e8c5c6f8886ee007a6d4543a0be6b221cb9ca32a8709384a4c6fc8cbb",
+        "tekken.json": "600bb27946565481ecf51ba8aee252e49b9a68507866080ac9c30185bb312843",
+        "tokenizer.json": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135",
+        "tokenizer_config.json": "f59f7294e4f26383d0ea93840fe21cf197784be0842a8301a0343e8c34ed0d6d"
+      },
+      "shards": {
+        "model-00001-of-00006.safetensors": "a381935aa826a6960e752ab889f51b26870fa4ae34580dc5d33bba3b616a1e3b",
+        "model-00002-of-00006.safetensors": "f71f44e7d6408e2933ecf1fe007be40993c1ce2f5a6dec4a73ac85d8d6d4de0b",
+        "model-00003-of-00006.safetensors": "4d680c111fee9689b2c170ef058ead26887b88816f05b7701363754e23caa771",
+        "model-00004-of-00006.safetensors": "e7d394bc2e748439194f5ccbea3900e31987f5e740cfdef24c94a3ada1097290",
+        "model-00005-of-00006.safetensors": "727054c31319d016cce95822b67d0dfee7b67793f59c9d1fd171931692bee12c",
+        "model-00006-of-00006.safetensors": "56eb280079466b136fd33638f1b3095cfa9fdb84006a23b36c8944dc7156fdb7"
       }
     }
   }
