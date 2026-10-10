@@ -912,6 +912,17 @@ Ordered by how expensive they were to rediscover.
 9. **`gt4i.1` hands out an L4** (sm_89, 22 GiB), not a T4 — bf16 is native there.
 10. **`/tmp` is wiped between tool calls in this harness**, and long `sleep`
     polling blocks the conversation. Use `.tmp/` and background jobs.
+11. **Run a reviewer subagent *blocking*, and freeze the tree while it reads.**
+    Two rounds were damaged by the opposite: the ninth reviewer watched the repo
+    move under it (`5caa54f` -> `34646cd` plus an uncommitted test file) because I
+    kept editing, and an `interrupt_agent` on the tenth reviewer discarded its
+    report (it only re-reported after a `send_message`, from context).  The fix is
+    mechanical: call the reviewer with `run_in_background=False` so the call returns
+    its verdict instead of an id, and do not touch the working tree until it does.
+    A background reviewer plus independent edits is exactly the combination that
+    loses a report and invalidates the read.  (The user's own instruction: "надо
+    вызывать сабагента блокирующе".)  Round eleven was therefore processed from the
+    report by hand, with no second reviewer launched.
 
 ---
 
