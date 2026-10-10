@@ -1,0 +1,62 @@
+name: rh-a100-scale-detect
+desc: scale-up round, first half -- describe,detect for all ten checkpoints off the project-disk weights cache
+
+# What this is
+# ------------
+# The sparsity-vs-scale question on the full grid, for every model in the round, with the
+# same `a100` scale (9 lengths 1K-49K, 96-token budget, `haystack` domain, 8192-token
+# prefill chunks) as `a100.yaml` -- so the numbers are comparable with the committed
+# `ds-results-a100/` tree rather than a new measurement regime.
+#
+# It is the *cheap* half: `detect` is dominated by the capture (`layers x heads` per decode
+# step), while `mask` is dominated by prefill+decode work (parameters) and carries the
+# 1620-pass ablation.  Roughly a third of the total, and it answers "does the >0.1 share
+# grow or shrink with scale, and is the hybrid's non-sparsity architectural" on its own.
+# `mask` for the models that earn it is a second job (the same split as
+# `a100-detect.yaml` / `a100-mask.yaml`).
+#
+# Weights: `${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models`, filled once by
+# `a100-weights.yaml`.  The `inputs` path cannot carry these (the CLI caps a job's inputs
+# plus local-paths at 10 GiB; Qwen3-8B alone is 16 GB), and `--verify-hashes` matters more
+# here than usual: the digests of the models that are not on the laptop came from the Hub's
+# LFS metadata, so this is the first time they meet the real bytes.
+#
+# `--resume` and the staged `ds-results-scale/` tree: the tree is empty on the first run
+# (so there is nothing to skip), and after a crash the launcher drops the downloaded
+# outputs into `ds-results-scale/` and re-runs -- the models that already finished are then
+# skipped instead of re-paying for an hour of capture each.  This is the same pairing the
+# config test enforces for `a100-mask.yaml`: a config may only pass `--resume` if it stages
+# the tree it reads.
+#
+# Grid note, unchanged from `a100.yaml`: the dense models lose the two lengths above their
+# 40960-token window (210 instances instead of 270), and every artifact records
+# `dropped_lengths`.  Qwen3-30B-A3B and Qwen3.5-35B-A3B are MoE -- dense *attention* with a
+# sparse FFN, so all their layers are scoreable; the Qwen3.5 pair is a Gated DeltaNet
+# hybrid, where only the `full_attention` layers are.
+
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models --models qwen3-0.6b qwen3.5-0.8b qwen3-4b qwen3.5-4b qwen3-8b qwen3.5-9b qwen3-30b-a3b qwen3.5-35b-a3b --profile a100 --dtype bfloat16 --verify-hashes --resume --stages describe,detect --out-prefix ds-results-scale
+
+flags:
+  - attach-project-disk
+
+outputs:
+  - ds-results-scale
+
+env:
+  vars:
+    PYTORCH_ALLOC_CONF: expandable_segments:True
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+      - ds-results-scale
+
+cloud-instance-types:
+  - g2.1               # 28 vCPU, 1x A100 80 GB
+  # No V100 fallback: the chunks are sized for 80 GB and bf16 needs sm_80+.

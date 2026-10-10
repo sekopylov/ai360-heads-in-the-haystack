@@ -1,0 +1,2 @@
+# Staging tree for the scale-up round: empty on the first run (nothing to resume),
+# filled by the downloaded job outputs so a re-run can skip the models that finished.
