@@ -366,6 +366,50 @@ def test_ablation_reuses_every_condition_detect_recorded(caplog):
     assert "differs from the value detect recorded" in caplog.text
 
 
+def test_ablation_labels_the_pairing_of_the_matrix_it_loaded(caplog):
+    """`scores_same_step` records `meta.config.pairing == "next_step"`.
+
+    The config block is the *detect run's* conditions, and a detect run is configured
+    with one primary pairing -- so reading it for the ablation's label wrote
+    `detection_pairing: next_step` into an artifact whose heads came from the
+    `same_step` ranking.  The two rankings share 0 of 10 heads on both shipped models,
+    so the label said the opposite of what ran.
+    """
+    import logging
+    from types import SimpleNamespace
+
+    from retrieval_heads.cli import resolve_detection_settings
+
+    same_step = SimpleNamespace(pairing="same_step",
+                                meta={"config": {"pairing": "next_step"}})
+    args = SimpleNamespace(system_prompt=None, no_chat_template=False, thinking=False,
+                           argmax_domain="haystack", threshold=0.1, corpus=None,
+                           pairing="same_step")
+    with caplog.at_level(logging.INFO):
+        settings = resolve_detection_settings(args, same_step)
+    assert settings.pairing == "same_step", "the label followed the config, not the matrix"
+    assert "primary pairing was 'next_step'" in caplog.text
+
+    # The historical tree: the matrix is the primary one, so nothing is logged.
+    caplog.clear()
+    primary = SimpleNamespace(pairing="next_step",
+                              meta={"config": {"pairing": "next_step"}})
+    args.pairing = "next_step"
+    with caplog.at_level(logging.INFO):
+        settings = resolve_detection_settings(args, primary)
+    assert settings.pairing == "next_step"
+    assert "primary pairing was" not in caplog.text
+
+    # A file that does not hold the pairing the flag asked for is a warning, not a
+    # silent relabel: the ranking that ran is the one in the file.
+    caplog.clear()
+    args.pairing = "next_step"
+    with caplog.at_level(logging.WARNING):
+        settings = resolve_detection_settings(args, same_step)
+    assert settings.pairing == "same_step"
+    assert "the loaded scores are the 'same_step' matrix" in caplog.text
+
+
 def test_resolve_k_rejects_a_mixed_negative_list():
     from retrieval_heads.cli import resolve_k
 

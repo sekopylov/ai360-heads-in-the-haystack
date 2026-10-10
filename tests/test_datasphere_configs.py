@@ -190,6 +190,69 @@ def test_the_disk_audit_job_is_strictly_read_only(configs):
         assert "--bootstrap-venv" not in cmd, f"{name} could create a venv"
 
 
+def test_weight_verification_can_recompute_the_registry_hashes(tmp_path):
+    """`--verify-hashes` is the A100's cheap insurance against a corrupt shard.
+
+    Presence-only checking is deliberate for the cheap scales -- `download_models.sh`
+    hash-checks the tree before it is ever uploaded -- but a job that costs 542.88
+    RUB/h should not discover a truncated shard when the model fails to load an hour
+    in.  The digests are in `configs/models.json`; recomputing them is a few seconds.
+    """
+    import hashlib
+
+    driver = load_job_driver()
+    leaf = tmp_path / "Qwen3-Toy"
+    leaf.mkdir()
+    payload = b"weights" * 1000
+    shard = leaf / "model.safetensors"
+    shard.write_bytes(payload)
+    registry = tmp_path / "models.json"
+    registry.write_text(json.dumps({"models": {"toy": {
+        "path": "models/Qwen3-Toy",
+        "shards": {"model.safetensors": hashlib.sha256(payload).hexdigest()},
+    }}}), encoding="utf-8")
+
+    # The honest tree passes both modes.
+    driver.verify_weights(tmp_path, registry, ["toy"])
+    driver.verify_weights(tmp_path, registry, ["toy"], hashes=True)
+
+    # One flipped byte keeps the size and the presence check happy; only the digest
+    # notices.  A checkpoint this far gone loads as garbage or not at all.
+    shard.write_bytes(payload[:-1] + b"z")
+    driver.verify_weights(tmp_path, registry, ["toy"])
+    with pytest.raises(SystemExit, match="SHA-256"):
+        driver.verify_weights(tmp_path, registry, ["toy"], hashes=True)
+
+    # A missing file is still an error in both modes.
+    shard.unlink()
+    for hashes in (False, True):
+        with pytest.raises(SystemExit, match="incomplete"):
+            driver.verify_weights(tmp_path, registry, ["toy"], hashes=hashes)
+
+
+def test_a100_configs_recheck_the_checkpoint_hashes(configs):
+    """The flag is wired where it pays for itself, and nowhere else by accident."""
+    driver = load_job_driver()
+    a100 = {name: config for name, config in configs.items() if name.startswith("a100")}
+    assert a100, "no A100 configs found"
+    for name, config in a100.items():
+        tokens = [token.replace("${WEIGHTS}", "/w").replace("${DS_PROJECT_HOME}", "/disk")
+                  for token in config["cmd"].split()]
+        args = driver.parse_args(tokens[2:])
+        assert args.verify_hashes, (
+            f"{name}: an A100 job must recompute the registry SHA-256 before the grid"
+        )
+
+    for name in ("t4-cached.yaml", "paper.yaml"):
+        if name not in configs:
+            continue
+        tokens = [token.replace("${WEIGHTS}", "/w").replace("${DS_PROJECT_HOME}", "/disk")
+                  for token in configs[name]["cmd"].split()]
+        assert not driver.parse_args(tokens[2:]).verify_hashes, (
+            f"{name}: the cheap scales keep the presence-only check"
+        )
+
+
 def test_a100_profile_keeps_a_memory_bound_and_the_paper_grid():
     """The A100 profile trades chunk *count* for safety, not safety for speed.
 

@@ -32,9 +32,11 @@ desc: short A100 preflight without the chat template -- the paper's sink geometr
 #     left 15; the `haystack` share can only shrink it further.
 #
 # Grid and cost are the same as the template-on preflight: 3 needles x 2 lengths x 10
-# depths = 60 instances per model, capped by `--limit 60`.
+# depths = 60 instances per model, capped by `--limit 60`.  `--verify-hashes` is on
+# here too (see the template-on config): a corrupt shard is a minutes-long failure in
+# a preflight and an hour-long one in the full grid.
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages describe,detect --lengths 1024 4096 --limit 60 --no-chat-template --out-prefix ds-preflight-notemplate
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --stages describe,detect --lengths 1024 4096 --limit 60 --no-chat-template --out-prefix ds-preflight-notemplate
 
 flags:
   - attach-project-disk

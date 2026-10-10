@@ -318,3 +318,42 @@ def test_token_mixer_masker_rejects_a_foreign_model():
     with pytest.raises(KeyError, match="does not belong"):
         TokenMixerMasker(other, info, [0])
 
+
+
+def test_the_readme_masking_table_matches_the_committed_artifacts():
+    """Pin the README's masking table to the tree it claims to describe.
+
+    It is one of the two headline results, and it was never checked against
+    `ds-results/` -- so a stale table would have shipped.  (A reviewer read the
+    top-level `random_trials` field, which is per-trial *f1*, as the table's per-trial
+    *recall* column and reported every random cell as wrong; the table was right and
+    the field name is the trap, which `MaskingCurve.random_trials` now says in prose.)
+    The random cells are checked against `per_sample[k]["random"]`, the only place the
+    per-trial recall and exact-match series exist.
+    """
+    import json
+    from pathlib import Path
+
+    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(
+        encoding="utf-8").replace("**", "")
+    cases = [("qwen3-0.6b", 9), ("qwen3-0.6b", 18), ("qwen3-0.6b", 36),
+             ("qwen3.5-0.8b", 1), ("qwen3.5-0.8b", 8), ("qwen3.5-0.8b", 16)]
+    for model, k in cases:
+        path = (Path(__file__).resolve().parent.parent / "ds-results" / model
+                / "masking_curve.json")
+        curve = json.loads(path.read_text(encoding="utf-8"))
+        i = curve["k_values"].index(k)
+        trials = curve["per_sample"][str(k)]["random"]
+        recall = ", ".join(f"{t['recall']:.1f}" for t in trials)
+        assert recall in readme, (
+            f"README has no per-trial recall {recall!r} for {model} K={k}; the table "
+            f"and the artifact have drifted apart"
+        )
+        assert f"{curve['retrieval'][i]:.1f} / " in readme, (model, k)
+        if k == 9:
+            exact = ", ".join(f"{t['exact_match'] / 10:.0f}/10" for t in trials)
+            assert exact in readme, f"README has no per-trial exact {exact!r}"
+    for model in ("qwen3-0.6b", "qwen3.5-0.8b"):
+        curve = json.loads((Path(__file__).resolve().parent.parent / "ds-results"
+                            / model / "masking_curve.json").read_text(encoding="utf-8"))
+        assert f"{curve['baseline']:.1f} f1" in readme, model

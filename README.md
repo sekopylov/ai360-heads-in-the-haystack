@@ -475,6 +475,19 @@ held-out needles, so `--needles 3` is a real request rather than a clamp.
 | | | 8 (17%) | 35.0 / 0% / 27.8 | 48.3, 68.3, 71.7 recall |
 | | | 15 (31%) | 23.0 / 0% / **21.7** | **0.0, 0.0, 0.0** recall (degenerate text) |
 
+*Where each column comes from, because two of them are traps.*  The retrieval and
+baseline cells are the artifact's top-level fields (`retrieval`, `retrieval_recall`,
+`retrieval_exact_match`, `baseline*`), and the random **per-trial** cells are
+`per_sample[k]["random"][trial]["recall"]` / `["exact_match"]`.  They are **not** the
+top-level `random_trials` field: that one is the per-trial **f1** series (the primary
+`metric`; its mean is `random_mean`), so on the dense K=9 point it reads `98.0, 95.3,
+92.6` -- the same three trials, a different metric.  Per-trial recall and exact are
+stored per sample and their means are `random_recall_mean` /
+`random_exact_match_mean`, which is why the generated
+[`docs/results-gpu.md`](docs/results-gpu.md) shows f1 there and the README shows
+recall.  The hybrid's last row is labelled by its *effective* K (15): the artifact's
+`k_values` says 16, capped to the 15-head pool.
+
 **On the dense model the honest statement is "the effect is clear from ~8% of heads;
 at 2-4% this measurement does not separate the arms".**  At K=9 (2%) the retrieval arm
 is *not* worse than the control — one random trial scores **10/10 exact, above the

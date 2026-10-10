@@ -41,7 +41,7 @@ desc: paper-scale grid on one A100 without the chat template -- the paper's geom
 # and the preflight's `retrieval_pool_by_domain` before deciding whether to keep
 # `--k-frac 0.33` for a model whose control pool is 11-12 heads.
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --no-chat-template --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100-notemplate
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --no-chat-template --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100-notemplate
 
 flags:
   - attach-project-disk

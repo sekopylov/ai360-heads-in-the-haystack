@@ -32,10 +32,19 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 #     keeps narrating, which is where the extra needle-token copies would come from.
 #     `mask` runs at the CLI's 32-token default otherwise, i.e. *tighter* than the
 #     48 the committed t4 tree used on the stage that carries the causal claim.
-#   * `--preflight` for detect: all 270 prompts are built and validated (CPU only)
+#   * `--preflight` for detect: every planned prompt is built and validated (CPU only)
 #     before the first forward pass, because one prompt whose haystack cannot be
 #     located verbatim would otherwise abort the stage hours into the run.  The L4
-#     scales leave it off.
+#     scales leave it off.  (The count is per model -- 270 for the hybrid, 210 for the
+#     dense model, which loses the two longest lengths to its 40960 window -- which is
+#     why the budget line below adds both.)
+#   * `--verify-hashes`: the driver recomputes the SHA-256 that `configs/models.json`
+#     pins for every checkpoint file (~3.3 GB, a few seconds) instead of only checking
+#     that the files are present and non-empty.  The cheap scales keep the presence
+#     check -- `download_models.sh` verified the tree before it was uploaded -- but a
+#     job at 542.88 RUB/h should not spend an hour discovering a truncated shard when
+#     the model fails to load.  The preflight configs pass it too, so a corrupt
+#     checkpoint is caught in the *cheap* run rather than the full one.
 #
 # Budget, in passes rather than adjectives (the arithmetic is checkable; the wall clock
 # is an estimate to refine from the preflight log).  Every generation is preceded by its
@@ -115,7 +124,7 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 # a finished tree, because `mask` is the stage that costs real money (45 samples per
 # point, ~3.9k prefill+decode passes in the ablations).
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100
 
 flags:
   - attach-project-disk

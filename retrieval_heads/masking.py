@@ -254,6 +254,12 @@ class MaskingCurve:
     retrieval: list[float]
     random_mean: list[float]
     random_std: list[float]
+    #: Per-trial **f1** of the random arm -- the same metric as `random_mean`, which is
+    #: its mean.  The per-trial *recall* and *exact-match* series are not stored as
+    #: lists; they live per sample in `per_sample[k]["random"][trial]` (and their means
+    #: in `random_recall_mean` / `random_exact_match_mean`).  Reading this field as
+    #: "the per-trial recall" is an easy mistake: it is the primary series, and
+    #: `metric` names it.
     random_trials: list[list[float]] = field(default_factory=list)
     #: Names the metric the *primary* series (`retrieval`/`random_mean`) is computed
     #: with -- always f1, and the artifact carries `retrieval_recall`/`random_recall`

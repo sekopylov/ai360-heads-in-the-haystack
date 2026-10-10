@@ -156,6 +156,13 @@ class DetectionSettings:
     #: reading it from the command line would label every artifact "patch" even
     #: after a `detect --capture-method output_attentions` run.
     capture_method: str = "patch"
+    #: The pairing whose matrix the ablation ranked the heads by.  That is the
+    #: artifact's own ``scores.pairing``, *not* ``config['pairing']``: the latter
+    #: records the pairing the `detect` *run* was configured with, so
+    #: ``mask --pairing same_step`` loads ``scores_same_step`` (heads ranked by
+    #: `same_step`) while its ``meta.config.pairing`` still says `next_step`.  The two
+    #: rankings overlap 0/10 on the shipped models, so the label is not cosmetic.
+    pairing: str = "next_step"
 
 
 def resolve_detection_settings(args: argparse.Namespace, scores: Any) -> DetectionSettings:
@@ -213,6 +220,26 @@ def resolve_detection_settings(args: argparse.Namespace, scores: Any) -> Detecti
                               requested_threshold == DEFAULT_THRESHOLD)
     # Not a flag on the ablations: the only truthful source is what detect recorded.
     settings.capture_method = config.get("capture_method") or settings.capture_method
+
+    # The pairing comes from the *matrix that was loaded*, not from the run's config:
+    # `scores_same_step` carries `meta.config.pairing == "next_step"` because that is
+    # what detect was configured with, so reading the config here wrote
+    # `detection_pairing: next_step` into an artifact whose heads were ranked by
+    # `same_step` (the two top-10 sets share 0 of 10 heads on both shipped models).
+    recorded_run_pairing = config.get("pairing", _MISSING)
+    settings.pairing = getattr(scores, "pairing", None) or (
+        recorded_run_pairing if recorded_run_pairing is not _MISSING else None
+    ) or "next_step"
+    requested_pairing = getattr(args, "pairing", None)
+    if requested_pairing is not None and requested_pairing != settings.pairing:
+        # The file `scores_<args.pairing>` holding another pairing means the tree was
+        # renamed or hand-assembled; the ranking, not the flag, is what ran.
+        log.warning("--pairing %r but the loaded scores are the %r matrix; the ablation "
+                    "ranks heads by %r", requested_pairing, settings.pairing,
+                    settings.pairing)
+    elif recorded_run_pairing not in (_MISSING, None) and settings.pairing != recorded_run_pairing:
+        log.info("ranking heads by the %r matrix; the detect run's primary pairing was %r",
+                 settings.pairing, recorded_run_pairing)
 
     recorded_corpus = meta.get("corpus_path")
     # `qa`/`cot` have no --corpus flag at all, so this must not assume one.
@@ -636,7 +663,11 @@ def cmd_mask(args: argparse.Namespace) -> int:
     curve.meta["system_prompt"] = settings.system_prompt
     curve.meta["enable_thinking"] = settings.enable_thinking
     curve.meta["threshold"] = settings.threshold
-    curve.meta["detection_pairing"] = (scores.meta or {}).get("config", {}).get("pairing")
+    # The pairing the heads were *ranked* under is the matrix this ablation loaded
+    # (`settings.pairing`), not `scores.meta['config']['pairing']` -- that records the
+    # detect run's primary pairing, so `mask --pairing same_step` used to write
+    # `detection_pairing: next_step` beside heads ranked by `same_step`.
+    curve.meta["detection_pairing"] = settings.pairing
     curve.meta["capture_method"] = settings.capture_method
     save_json(add_provenance(curve.as_dict(), dtype=info.dtype),
               out_dir / "masking_curve.json")

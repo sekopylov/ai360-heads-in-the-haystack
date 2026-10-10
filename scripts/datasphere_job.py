@@ -85,10 +85,12 @@ SCALES: dict[str, dict[str, list[str]]] = {
     "a100": {
         "detect": ["--profile", "paper", "--argmax-domain", "haystack",
                    "--prefill-chunk", "8192", "--max-new-tokens", "96",
-                   # Build all 270 prompts (CPU only) before the first forward pass:
-                   # one prompt whose haystack cannot be located verbatim would
-                   # otherwise abort the stage hours into the run.  The `paper`/`t4`
-                   # scales leave it off -- there a mid-grid failure costs minutes.
+                   # Build every planned prompt (CPU only) before the first forward
+                   # pass: one prompt whose haystack cannot be located verbatim would
+                   # otherwise abort the stage hours into the run.  Per model: 270 for
+                   # the hybrid, 210 for the dense model, whose 40960 window drops the
+                   # two longest lengths.  The `paper`/`t4` scales leave it off -- there
+                   # a mid-grid failure costs minutes.
                    "--preflight",
                    "--lengths", "1024", "2048", "4096", "8192", "16384",
                    "24576", "32768", "40960", "49152"],
@@ -186,6 +188,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--no-chat-template", action="store_true",
                         help="render prompts without the chat template (the paper's "
                              "geometry); appended to detect/mask/qa/cot/case-study")
+    # Presence is the cheap check `download_models.sh` already did before uploading;
+    # recomputing the digests is a few seconds and catches a truncated shard at job
+    # start instead of when the model fails to load.  The A100 configs pass it.
+    parser.add_argument("--verify-hashes", action="store_true",
+                        help="recompute the registry SHA-256 of every checkpoint file "
+                             "(~3.3 GB, a few seconds) instead of only checking presence")
     args = parser.parse_args(argv)
     if not args.bootstrap_venv and not args.inspect_dir and not (args.weights or args.download_weights):
         parser.error("one of --weights / --download-weights is required "
@@ -511,13 +519,19 @@ def report_environment() -> None:
         print("[entry] GPU: none -- stages will run on CPU")
 
 
-def verify_weights(root: Path, registry: Path, keys: list[str] | None = None) -> None:
+def verify_weights(root: Path, registry: Path, keys: list[str] | None = None, *,
+                   hashes: bool = False) -> None:
     """Every file the registry pins must exist under ``root``.
 
-    Cheap on purpose -- it checks presence, not sha256 (hashing 3.2 GB on every job
-    start would cost GPU time).  A half-downloaded tree must not be mistaken for a
-    ready one: the previous code printed "already present, leaving it alone" and
-    carried on.
+    Presence only by default -- it is cheap, and the weights were hash-checked by
+    ``download_models.sh`` before they were ever uploaded.  ``hashes=True`` also
+    recomputes the SHA-256 the registry pins (``--verify-hashes``): that is a few
+    seconds for ~3.3 GB, against an hour of GPU time if a truncated shard is only
+    discovered when the model fails to load.  The A100 configs pass the flag; the
+    cheap scales keep the presence check.
+
+    A half-downloaded tree must not be mistaken for a ready one: the previous code
+    printed "already present, leaving it alone" and carried on.
     """
     data = json.loads(registry.read_text(encoding="utf-8"))["models"]
     if keys is not None:
@@ -526,20 +540,41 @@ def verify_weights(root: Path, registry: Path, keys: list[str] | None = None) ->
             raise SystemExit(f"[entry] --models {unknown} are not in {registry}")
         data = {k: data[k] for k in keys}
     missing: list[str] = []
+    mismatched: list[str] = []
+    hashed = 0
     for key, entry in data.items():
         leaf = root / Path(entry["path"]).name
         pinned = {**(entry.get("files") or {}), **(entry.get("shards") or {})}
-        for name in pinned:
+        for name, digest in pinned.items():
             target = leaf / name
             if not target.exists() or target.stat().st_size == 0:
                 missing.append(f"{key}/{name}")
+                continue
+            if not hashes:
+                continue
+            actual = _sha256(target)
+            hashed += target.stat().st_size
+            if digest and actual != digest:
+                mismatched.append(f"{key}/{name} (registry {digest[:12]}..., file "
+                                  f"{actual[:12]}...)")
     if missing:
         raise SystemExit(
             f"[entry] the checkpoint tree under {root} is incomplete: {len(missing)} "
             f"pinned file(s) missing or empty, e.g. {missing[:3]}. Refusing to start a "
             f"job on a partial download -- run scripts/download_models.sh, or fix --weights."
         )
-    print(f"[entry] checkpoints verified: every pinned file is present under {root}")
+    if mismatched:
+        raise SystemExit(
+            f"[entry] {len(mismatched)} pinned file(s) do not match their registry "
+            f"SHA-256, e.g. {mismatched[:3]}. A corrupted checkpoint loads as garbage "
+            f"weights (or not at all) hours into the job -- re-download it."
+        )
+    if hashes:
+        print(f"[entry] checkpoints verified: every pinned file is present under {root} "
+              f"and matches its SHA-256 ({hashed / 1e9:.2f} GB hashed)")
+    else:
+        print(f"[entry] checkpoints verified: every pinned file is present under {root} "
+              f"(sizes only; pass --verify-hashes to recompute the registry digests)")
 
 
 def prepare_models(args: argparse.Namespace) -> None:
@@ -553,20 +588,20 @@ def prepare_models(args: argparse.Namespace) -> None:
         root.unlink()
     if root.is_symlink() or root.exists():
         print(f"[entry] {root} already present, leaving it alone")
-        verify_weights(root, registry, args.models)
+        verify_weights(root, registry, args.models, hashes=args.verify_hashes)
         return
     if args.download_weights:
         print("[entry] downloading checkpoints into ./models (this takes a few minutes)")
         env = {**os.environ, "MODELS_DIR": "models"}
         subprocess.run(["bash", "scripts/download_models.sh"], check=True, env=env)
-        verify_weights(root, registry, args.models)
+        verify_weights(root, registry, args.models, hashes=args.verify_hashes)
         return
     source = Path(args.weights).absolute()
     if not source.is_dir():
         raise SystemExit(f"[entry] --weights {source} is not a directory")
     os.symlink(source, root, target_is_directory=True)
     print(f"[entry] linked {root} -> {source}: {sorted(p.name for p in source.iterdir())}")
-    verify_weights(root, registry, args.models)
+    verify_weights(root, registry, args.models, hashes=args.verify_hashes)
 
 
 def override_dtype(models: list[str], dtype: str) -> None:
@@ -654,6 +689,15 @@ def run_cli(stage: str, argv: list[str]) -> None:
         raise SystemExit(code) from exc
     if rc:
         raise SystemExit(f"[entry] stage {stage} returned {rc}")
+
+
+def _sha256(path: Path, chunk: int = 1 << 22) -> str:
+    """Streaming SHA-256 of one file (the shards are >1 GB, so never read it whole)."""
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for block in iter(lambda: fh.read(chunk), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def code_sha256(*roots: Path) -> str:

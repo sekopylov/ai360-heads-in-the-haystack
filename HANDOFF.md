@@ -16,7 +16,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 277 tests: 259 fast (`pytest -m "not integration"`, ~10 s), 18 integration against
+* 281 tests: 263 fast (`pytest -m "not integration"`, ~20 s), 18 integration against
   the real checkpoints. All green.
 * **The committed artifacts now match the code.** The GPU run was refreshed in two
   jobs on an NVIDIA L4, 75 instances per model:
@@ -119,6 +119,81 @@ tied to a job id) → this file (where things stand and what is left).
     domains as a reporting decision, the held-out eval needles, matched arms, the
     bias-free-`o_proj` caveat, the grid arithmetic (270/210, 45/point, 1665/1395/810),
     the driver's override wiring, dtype isolation, and artifact atomicity.
+* **Review round (the eleventh report, pre-A100): one finding survived checking, four did
+  not -- including its headline blocker.**  Recorded in this order because the refutations
+  are the part that is easy to lose.
+  * **The claimed `TypeError` in `case_study.py` does not exist.**  The report's blocker
+    was `add_provenance(dtype=args.dtype, payload={...})` against
+    `def add_provenance(payload, *, dtype=None, extra=None)`, on the theory that
+    `payload` is positional-only.  It is positional-**or**-keyword: the `*` marks only
+    `dtype`/`extra` as keyword-only, and a positional-only parameter would need a `/`.
+    Verified by calling the real function with exactly that shape (returns the payload
+    with `schema_version`/`provenance`) and by re-reading the AST (`args=['payload']`,
+    `posonlyargs=[]`).  The test stub (`lambda payload, **k: payload`) is
+    signature-compatible with the real call for the same reason, so the report's
+    "the test accepts the wrong call" inference also fails.  No stage was ever dead.
+  * **The README's masking table is right, and the report read the wrong field.**  It
+    compared the table's per-trial **recall** cells against the top-level
+    `random_trials`, which is the per-trial **f1** series by construction
+    (`trials.append(m.f1)`; `metric: "f1"` is the primary series and `random_mean` is
+    its mean).  Checked every cell against `per_sample[k]["random"][trial]`: dense K=9
+    recall `95.7, 90.9, 100.0` and exact `6/10, 3/10, 10/10`, K=18 `93.9, 87.0, 0.0`,
+    K=36 `85.7, 100.0, 98.7`, hybrid K=1 `39.1, 39.1, 49.6`, K=8 `48.3, 68.3, 71.7`,
+    K=16 `0.0, 0.0, 0.0` -- all exact.  Its claim that `48.7` matches nothing also
+    failed: `baseline_recall` is 48.695; 46.4 is the *f1*, and the report swapped them.
+    The finding is real as a *trap*, though, so it is now closed twice: the
+    `random_trials` field carries a comment saying what it is and where per-trial
+    recall lives, the README table says which field each column comes from, and
+    `test_the_readme_masking_table_matches_the_committed_artifacts` re-derives every
+    cell from `ds-results/` so a stale table fails in CI.
+  * **The A100 grid arithmetic is right (210 + 270 = 480); the report's 240 was off by
+    one length.**  `--lengths` has nine values, `within_context_limit` drops those
+    above `40960 - 64 = 40896`, and *both* 40960 and 49152 go -- leaving seven, not
+    eight: `7 x 10 x 3 = 210` for the dense model and `9 x 10 x 3 = 270` for the hybrid.
+    The one real inaccuracy in the region was wording: "all 270 prompts are built" in
+    the preflight bullet is the *hybrid's* count, so `a100.yaml` and the `SCALES`
+    comment now say 270/210 per model.
+  * **`prefill_impl`/`capture_impl` are recorded -- in `meta.config`, not in
+    `provenance()`.**  `provenance()` describes the *environment* (versions,
+    `deterministic`, `optional_kernels`, `dtype`, `code_sha256`); the run's conditions
+    live in `scores.meta["config"]`, and the committed schema-5 tree already carries
+    `prefill_impl: sdpa`, `capture_impl: eager`, `capture_method: patch` there.  So
+    `sdpa`-prefill is distinguishable from `eager`-prefill from the artifact, and the
+    asymmetry the report saw is the intended split.
+  * **The one finding that survived: `mask --pairing same_step` mislabelled its own
+    provenance.**  `masking_curve.json` carried `pairing: scores.pairing` (correct,
+    from `masking.py`) *next to* `detection_pairing: scores.meta.config.pairing`, and
+    the config block records the detect *run*'s primary pairing -- so a `same_step`
+    ablation wrote `detection_pairing: next_step` while the heads came from the
+    `same_step` matrix (the two top-10 sets share 0/10 heads on both models).  Fixed:
+    `DetectionSettings.pairing` is now the loaded matrix's own pairing,
+    `resolve_detection_settings` logs when it differs from the run's primary and warns
+    if the file does not hold the pairing `--pairing` asked for, and `cmd_mask` writes
+    `settings.pairing`.  `test_ablation_labels_the_pairing_of_the_matrix_it_loaded`
+    pins all three behaviours.
+  * **`--verify-hashes`: the one hardening the report asked for that is worth its
+    cost.**  `verify_weights` checked presence and non-zero size only, while
+    `configs/models.json` pins a SHA-256 for every file.  Hashing ~3.3 GB is a few
+    seconds against 542.88 RUB/h (measured: 4.0 s for both checkpoints on this machine,
+    and the real tree passes), so the driver gained the flag, `verify_weights(...,
+    hashes=True)` streams each digest and refuses a mismatch (with the missing-file
+    path unchanged), and all five A100 configs -- the two preflights included, so a
+    corrupt shard fails in the *cheap* run -- pass it.  The L4 scales keep the
+    presence-only check, which is what `download_models.sh` already verified before
+    upload.  Two tests: the driver's behaviour on a tampered shard, and the flag's
+    presence on every `a100*` config.
+  * **Declined, with the reason: `inspect.signature` on the patched
+    `eager_attention_forward`.**  The pin is `transformers>=5.18,<5.19` and the wrapper
+    calls the original positionally with the six documented arguments, so a renamed
+    parameter cannot break it and a reordered one would not be caught by a name check
+    either.  The failure modes that matter are already loud (head-count mismatch is
+    refused at both capture paths; "captured nothing" names the kernel).  Also refuted
+    while checking: `_patch_targets` caches by `id(namespace)` but the dict *values*
+    hold the namespace objects, so the ids cannot be recycled while the cache lives.
+  * Process note: this round was run with the reviewer's report already in hand rather
+    than by a subagent, per the instruction to wind the subagents down; no second
+    reviewer was launched, so this is a confirmation pass on one report, not a new
+    adversarial read.
 * **Review round (the ninth report, pre-A100), verified against the code:**
   * **The launch geometry was the real finding, and it is now a controlled pair.**
     `a100.yaml` pinned `--argmax-domain haystack` *with* the chat template, i.e. the
@@ -846,7 +921,9 @@ Ordered by how expensive they were to rediscover.
 
 1. **Preflight, both geometries** (minutes each, `describe,detect` at 1024/4096 with
    `--limit 60`): `configs/datasphere/a100-preflight.yaml` (chat template) and
-   `a100-preflight-notemplate.yaml` (paper geometry).  Launch them as two jobs.
+   `a100-preflight-notemplate.yaml` (paper geometry).  Launch them as two jobs.  Both
+   pass `--verify-hashes`, so a corrupt checkpoint on the project disk fails here in
+   minutes instead of in the full grid.
 2. **Read four numbers per model** from each `summary_next_step.json`:
    `sparsity_by_domain`, `retrieval_pool_by_domain`, `sink_in_haystack`,
    `n_instances_recited`/`mean_needle_recall`.  The CPU probe already predicts them
@@ -862,7 +939,7 @@ Ordered by how expensive they were to rediscover.
 4. **Launch the full grid**: `a100.yaml` (chat template, comparable with the committed
    `ds-results/` tree) or `a100-notemplate.yaml` (the paper's geometry) -- identical
    grids, so they are a controlled pair.  Both pin `--argmax-domain haystack`,
-   `--max-new-tokens 96` for detect *and* mask, `--preflight`, and run
+   `--max-new-tokens 96` for detect *and* mask, `--preflight`, `--verify-hashes`, and run
    `describe,detect,mask,compare,figures,case-study`; `qa`/`cot` are deliberately
    *not* in the A100 list (8+8 hand-written items are a pipeline check, not A100
    time -- a real measurement needs `--data file.jsonl`, and the cheap grid already
@@ -885,8 +962,11 @@ artifacts, the driver's `--lengths`/`--limit` preflight overrides plus the
 generation budget, `logits_to_keep`, the `--no-chat-template` driver flag and the
 template-free preflight, the recomputed truncation numbers, the subset-domain
 aggregation, the K-collapse warning, `prompt_tokens`, the pie threshold label, and
-the domain-ordering theorem with its property test).  What is left needs a
-GPU run, external data, or a judgement call.
+the domain-ordering theorem with its property test).  Rounds nine through eleven are
+summarised as their own entries above: the controlled geometry pair and the flash
+probe, the A100 budget arithmetic and the degenerate-pool rule, the
+`detection_pairing` provenance fix, `--verify-hashes`, and the README/artifact
+tripwire.  What is left needs a GPU run, external data, or a judgement call.
 
 Known measurement limits, in the artifacts themselves rather than hidden:
 `mask` now keeps per-sample F1 and reports the retrieval arm's spread, and its
@@ -1039,7 +1119,7 @@ matrix.
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 277 passed (259 fast + 18 integration)
+.venv/bin/python -m pytest -q                     # 281 passed (263 fast + 18 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b
