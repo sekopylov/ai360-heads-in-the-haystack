@@ -15,7 +15,7 @@ desc: populate the project-disk weights cache for the scale-up round (no stages,
 # that is already there *with its pinned digest* is left alone -- re-running resumes.
 # Every file is verified against `configs/models.json` after download, written as
 # `<name>.part` until the digest matches, so an interrupted run cannot leave something
-# that a later `--verify-hashes` would accept.
+# that a later load would accept as complete.
 #
 # Run it once (a few hours for ~220 GiB at job bandwidth), then every A100 config can use
 # `--weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models` instead of `${WEIGHTS}`.

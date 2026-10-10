@@ -40,7 +40,7 @@ desc: one cheap mask grid at three lengths, to replace the mask cost table's ext
 # The preflight does not run `compare`/`figures`/`case-study`, so those stay unbuilt and
 # the real run builds them from the real curve.
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models --models qwen3-0.6b qwen3-8b qwen3.5-9b ministral-3-14b --profile a100-preflight-mask --dtype bfloat16 --verify-hashes --resume --stages mask --out-prefix ds-results-scale
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models --models qwen3-0.6b qwen3-8b qwen3.5-9b ministral-3-14b --profile a100-preflight-mask --dtype bfloat16 --resume --stages mask --out-prefix ds-results-scale
 
 flags:
   - attach-project-disk

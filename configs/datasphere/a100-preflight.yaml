@@ -31,16 +31,17 @@ desc: short A100 preflight -- two lengths, both argmax domains, no mask stage
 #     the number here is an indicator, not the one that decides K.  For the real one,
 #     run the split launch (`a100-detect.yaml`, then `a100-mask.yaml`); the difference is
 #     why the split configs exist;
-#   * is the checkpoint tree on the project disk intact?  The command passes
-#     `--verify-hashes`, so the driver recomputes the registry SHA-256 of every pinned
-#     file (~3.3 GB, a few seconds) instead of only checking presence.  A truncated
-#     shard caught here costs minutes; caught in the full run it costs an hour at
-#     542.88 RUB/h.  The cheap L4 scales keep the presence-only check.
+#   * is the checkpoint tree on the project disk intact?  The driver checks that every
+#     pinned file is present and non-empty.  It no longer passes `--verify-hashes`: the
+#     uploaded tree was hash-checked by `download_models.sh` before upload, so
+#     recomputing 3.3 GB of digests on the VM bought nothing (and on the 233 GiB
+#     project-disk cache it cost 10-20 minutes of GPU-idle time -- HANDOFF's pitfalls).
+#     A truncated shard still fails loudly, at load.
 #
 # Grid: 3 needles x 2 lengths x 10 depths = 60 instances per model, capped by
 # `--limit 60` so the count is explicit.  The full run is `a100.yaml`.
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --stages describe,detect --lengths 1024 4096 --limit 60 --out-prefix ds-preflight
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages describe,detect --lengths 1024 4096 --limit 60 --out-prefix ds-preflight
 
 flags:
   - attach-project-disk

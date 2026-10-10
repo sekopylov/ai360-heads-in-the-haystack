@@ -244,12 +244,29 @@ def test_weight_verification_can_recompute_the_registry_hashes(tmp_path):
             driver.verify_weights(tmp_path, registry, ["toy"], hashes=hashes)
 
 
-def test_a100_configs_recheck_the_checkpoint_hashes(configs):
-    """The flag is wired where it pays for itself, and nowhere else by accident.
+def test_a100_configs_do_not_rehash_the_weights_cache(configs):
+    """`--verify-hashes` is off everywhere, and this is the test that keeps it off.
 
-    The weights-cache job is exempt and is the reason it can be: it downloads and
-    verifies every pinned digest itself, so `--verify-hashes` (which belongs to
-    `prepare_models`, a path it never takes) would be dead weight.
+    It was on every A100 config for a real reason: the flag catches a truncated shard
+    in minutes instead of when the model fails to load, and the L4 bootstrap was an
+    actual OOM.  But the cost was described as "~3.3 GB, a few seconds", written while
+    the weights rode along in `inputs`; the scale-up round reads a **233 GiB**
+    project-disk cache instead, and re-hashing all of it on every job start is ~10-20
+    minutes of paid GPU time at 0% utilisation.  The first `rh-a100-scale-detect` job
+    made that visible on a resource dashboard before the grid had started.
+
+    Nothing is lost by turning it off:
+
+    * the cache is filled by `--fetch-weights`, which writes `<name>.part` and renames
+      only after the digest matches, so a file in that tree has *already* been verified
+      against the registry pin -- re-reading it proves nothing new;
+    * the `inputs` path is hash-checked by `download_models.sh` before upload;
+    * and a corrupt shard still fails loudly, just later: `from_pretrained` refuses it.
+
+    So the flag stays in the driver (it is the right tool for a fresh upload) and out
+    of the configs.  The weights-cache job is still exempt for its own reason: it
+    downloads and verifies every pinned digest itself, and never takes the
+    `prepare_models` path the flag belongs to.
     """
     driver = load_job_driver()
     a100 = {name: config for name, config in configs.items()
@@ -259,8 +276,9 @@ def test_a100_configs_recheck_the_checkpoint_hashes(configs):
         tokens = [token.replace("${WEIGHTS}", "/w").replace("${DS_PROJECT_HOME}", "/disk")
                   for token in config["cmd"].split()]
         args = driver.parse_args(tokens[2:])
-        assert args.verify_hashes, (
-            f"{name}: an A100 job must recompute the registry SHA-256 before the grid"
+        assert not args.verify_hashes, (
+            f"{name}: re-hashing the weights on the VM is minutes of GPU-idle time for "
+            f"a check `--fetch-weights` already made (see HANDOFF's pitfalls)"
         )
         # `--use-venv` alone hops into whatever is on the project disk; the bootstrap
         # path is what checks the lock's stamp and re-installs only if it moved, so

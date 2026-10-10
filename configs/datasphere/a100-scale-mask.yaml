@@ -55,7 +55,7 @@ desc: scale-up round, second half -- mask,compare,figures,case-study on the dete
 # on the eighth model does not re-pay for the first seven.  A config may only pass
 # `--resume` when it stages the tree it reads -- a test enforces that pairing.
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models --models qwen3-0.6b qwen3.5-0.8b qwen3-4b qwen3.5-4b qwen3-8b qwen3.5-9b qwen3-30b-a3b qwen3.5-35b-a3b ministral-3-8b ministral-3-14b --profile a100 --dtype bfloat16 --verify-hashes --resume --stages mask,compare,figures,case-study --out-prefix ds-results-scale
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models --models qwen3-0.6b qwen3.5-0.8b qwen3-4b qwen3.5-4b qwen3-8b qwen3.5-9b qwen3-30b-a3b qwen3.5-35b-a3b ministral-3-8b ministral-3-14b --profile a100 --dtype bfloat16 --resume --stages mask,compare,figures,case-study --out-prefix ds-results-scale
 
 flags:
   - attach-project-disk

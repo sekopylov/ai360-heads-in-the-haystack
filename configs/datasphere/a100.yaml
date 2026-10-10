@@ -38,13 +38,13 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 #     scales leave it off.  (The count is per model -- 270 for the hybrid, 210 for the
 #     dense model, which loses the two longest lengths to its 40960 window -- which is
 #     why the budget line below adds both.)
-#   * `--verify-hashes`: the driver recomputes the SHA-256 that `configs/models.json`
-#     pins for every checkpoint file (~3.3 GB, a few seconds) instead of only checking
-#     that the files are present and non-empty.  The cheap scales keep the presence
-#     check -- `download_models.sh` verified the tree before it was uploaded -- but a
-#     job at 542.88 RUB/h should not spend an hour discovering a truncated shard when
-#     the model fails to load.  The preflight configs pass it too, so a corrupt
-#     checkpoint is caught in the *cheap* run rather than the full one.
+#   * `--verify-hashes`: **off in every config now**, and the flag is kept in the
+#     driver for a fresh upload.  It recomputes the SHA-256 that `configs/models.json`
+#     pins for every checkpoint file instead of only checking presence -- but the tree
+#     it was protecting is already verified: `download_models.sh` hashes it before
+#     upload, and the project-disk cache is filled by `--fetch-weights`, which renames
+#     a file only after its digest matches.  Re-reading 233 GiB on the VM cost 10-20
+#     minutes of paid GPU time at 0% utilisation.  See HANDOFF's pitfalls.
 #
 # Budget, in passes rather than adjectives (the arithmetic is checkable; the wall clock
 # is an estimate to refine from the preflight log).  Every generation is preceded by its
@@ -192,7 +192,7 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 # a finished tree, because `mask` is the stage that costs real money (45 samples per
 # point, ~3.9k prefill+decode passes in the ablations).
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100
 
 flags:
   - attach-project-disk

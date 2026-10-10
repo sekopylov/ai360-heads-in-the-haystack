@@ -40,7 +40,7 @@ desc: remaining stages (compare,figures,case-study) on the A100, reusing a finis
 # leave it off so a fresh full run can never skip a stage on the strength of a stale
 # artifact.
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --resume --stages compare,figures,case-study --out-prefix ds-a100-resume
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --resume --stages compare,figures,case-study --out-prefix ds-a100-resume
 
 flags:
   - attach-project-disk

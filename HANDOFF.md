@@ -1243,6 +1243,25 @@ Ordered by how expensive they were to rediscover.
     loses a report and invalidates the read.  (The user's own instruction: "надо
     вызывать сабагента блокирующе".)  Round eleven was therefore processed from the
     report by hand, with no second reviewer launched.
+12. **`--verify-hashes` is not needed on a job that reads the project-disk cache.**
+    The user caught this from a resource dashboard: the first
+    `rh-a100-scale-detect` job (`bt1tbi9eke1f3vmqpvi8`, 2026-10-10 21:57 UTC) sat at
+    **0% GPU for the first ten-plus minutes**, and the cause was this flag, not a
+    stalled stage.  It re-reads every pinned file to recompute the registry SHA-256,
+    and the flag was introduced when that meant "~3.3 GB, a few seconds"; the scale-up
+    round reads a **233 GiB** project-disk cache, so it is 10-20 minutes of paid GPU
+    time at zero utilisation, on every job, including the preflights.
+    Nothing is lost by dropping it:
+    * the cache is filled by `--fetch-weights`, which writes `<name>.part` and renames
+      only after the digest matches, so a file in that tree has *already* met the
+      registry pin -- re-reading it proves nothing new;
+    * the `inputs` path is hash-checked by `download_models.sh` before upload;
+    * and a corrupt shard still fails loudly, just later: `from_pretrained` refuses it.
+    So the flag stays in the driver (it is the right tool for a fresh upload) and is
+    **off in every config**; `test_a100_configs_do_not_rehash_the_weights_cache` is
+    what keeps it off.  The general lesson is the one that keeps recurring here: a
+    cost written down while the weights were small became a lie when they grew, and
+    the artifact that carried the lie was a comment.
 
 ---
 
@@ -1253,10 +1272,10 @@ Ordered by how expensive they were to rediscover.
 1. **Preflight, both geometries** (minutes each, `describe,detect` at 1024/4096 with
    `--limit 60`): `configs/datasphere/a100-preflight.yaml` (chat template) and
    `a100-preflight-notemplate.yaml` (paper geometry).  Launch them as two jobs.  Both
-   pass `--verify-hashes` (a corrupt checkpoint fails here in minutes, not in the full
-   grid) and `--bootstrap-venv` (the cached venv's stamp is checked before it is used,
-   so a lock change cannot leave the run on an older environment -- `fla` is a
-   *numerical* difference, and the job log now states whether it is importable).
+   pass `--bootstrap-venv` (the cached venv's stamp is checked before it is used, so a
+   lock change cannot leave the run on an older environment -- `fla` is a *numerical*
+   difference, and the job log states whether it is importable) and neither passes
+   `--verify-hashes` any more (see pitfall 12).
 2. **Read four numbers per model** from each `summary_next_step.json`:
    `sparsity_by_domain`, `retrieval_pool_by_domain`, `sink_in_haystack`,
    `n_instances_recited`/`mean_needle_recall`.  The CPU probe already predicts them

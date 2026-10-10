@@ -73,7 +73,7 @@ desc: paper-scale grid on one A100 without the chat template -- the paper's geom
 # which `DETECTION_NEEDLES`/`EVAL_NEEDLES` do not carry: a data change, not a metric
 # tweak, so it is recorded here rather than done.
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --no-chat-template --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100-notemplate
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --no-chat-template --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100-notemplate
 
 flags:
   - attach-project-disk

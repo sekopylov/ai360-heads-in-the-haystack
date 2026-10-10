@@ -24,9 +24,13 @@ desc: scale-up round, first half -- describe,detect for all ten checkpoints off 
 #
 # Weights: `${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models`, filled once by
 # `a100-weights.yaml`.  The `inputs` path cannot carry these (the CLI caps a job's inputs
-# plus local-paths at 10 GiB; Qwen3-8B alone is 16 GB), and `--verify-hashes` matters more
-# here than usual: the digests of the models that are not on the laptop came from the Hub's
-# LFS metadata, so this is the first time they meet the real bytes.
+# plus local-paths at 10 GiB; Qwen3-8B alone is 16 GB).  The digests of the models that
+# are not on the laptop came from the Hub's LFS metadata, so they had to meet the real
+# bytes once -- and they did, in `a100-weights.yaml`: `--fetch-weights` writes
+# `<name>.part` and renames only after the sha256 matches.  That is why this config no
+# longer passes `--verify-hashes`: re-hashing 233 GiB on every job start cost 10-20
+# minutes of paid GPU time at 0% utilisation to re-prove what the fetch already proved.
+# See HANDOFF's pitfalls; the flag is still in the driver for a fresh upload.
 #
 # `--resume` and the staged `ds-results-scale/` tree: the tree is empty on the first run
 # (so there is nothing to skip), and after a crash the launcher drops the downloaded
@@ -41,7 +45,7 @@ desc: scale-up round, first half -- describe,detect for all ten checkpoints off 
 # sparse FFN, so all their layers are scoreable; the Qwen3.5 pair is a Gated DeltaNet
 # hybrid, where only the `full_attention` layers are.
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models --models qwen3-0.6b qwen3.5-0.8b qwen3-4b qwen3.5-4b qwen3-8b qwen3.5-9b qwen3-30b-a3b qwen3.5-35b-a3b ministral-3-8b ministral-3-14b --profile a100 --dtype bfloat16 --verify-hashes --resume --stages describe,detect --out-prefix ds-results-scale
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models --models qwen3-0.6b qwen3.5-0.8b qwen3-4b qwen3.5-4b qwen3-8b qwen3.5-9b qwen3-30b-a3b qwen3.5-35b-a3b ministral-3-8b ministral-3-14b --profile a100 --dtype bfloat16 --resume --stages describe,detect --out-prefix ds-results-scale
 
 flags:
   - attach-project-disk
