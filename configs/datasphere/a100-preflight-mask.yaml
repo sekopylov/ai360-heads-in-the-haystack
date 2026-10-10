@@ -1,0 +1,68 @@
+name: rh-a100-preflight-mask
+desc: one cheap mask grid at three lengths, to replace the mask cost table's extrapolation with a measurement
+
+# Why this config exists
+# ----------------------
+# The mask half of the scale-up round is ~18 of the ~23 hours, and its cost table rests
+# on a model with **no degrees of freedom left**: `scripts/estimate_stages.py` fits four
+# constants to four measured numbers (two models x detect/mask), so `--check-anchors`
+# printing "-0%/-1%/-7%/+4%" shows the fit is consistent, not that the model is right.
+# Its docstring lists the gaps; the one that matters here is that the model has **no
+# attention term** -- the prefill's attention is quadratic in the length and the capture's
+# row-argmax is linear in the KV, and both are missing.  That is the most likely reason
+# the two mask anchors invert (the dense 0.6B's pass costs *more* than the hybrid's), and
+# it means the table is optimistic, most on the rows with the most scoreable head-layers.
+#
+# This job measures the missing term instead of guessing it.  It keeps the K points, the
+# 96-token budget and the prefill chunk of the real grid, and spends its samples on
+# **lengths** -- 4096 -> 32768 is a 64x span in attention work against a 4x span in the
+# linear term, which is what separates overhead from compute.  Depths and needles drop to
+# one each and the trials to one, so a model costs minutes instead of hours:
+#
+#   .venv/bin/python scripts/estimate_stages.py --scale a100-preflight-mask --only mask \
+#       --models qwen3-0.6b qwen3-8b qwen3.5-9b ministral-3-14b
+#   -> 0.3 h / ~143 RUB for the four
+#
+# The four models are chosen to span both axes of the fit, not to be a sample of the
+# round: `qwen3-0.6b` is one of the two anchor models, so it re-measures a known point on
+# a *new* grid (the only genuinely independent check available); `qwen3-8b` and
+# `qwen3.5-9b` have almost the same active parameters (8.2 vs 9.7B) but 1152 vs 128
+# scoreable head-layers, which is the contrast that separates the two terms; and
+# `ministral-3-14b` is the largest dense model and the third family.
+#
+# Launch order: **after** `a100-scale-detect.yaml`, and against the same `--out-prefix`.
+# `cmd_mask` loads `<out>/<model>/scores_next_step.npz` to rank the heads it ablates, so
+# a model with no detect run dies with a FileNotFoundError before it loads the checkpoint.
+#
+# Leaving a `masking_curve.json` in the shared tree is deliberate and safe: the real
+# `a100-scale-mask.yaml` runs under a different `--profile`, `run_inputs_fingerprint`
+# carries the profile, so its `mask` is re-run rather than skipped over this one's output.
+# The preflight does not run `compare`/`figures`/`case-study`, so those stay unbuilt and
+# the real run builds them from the real curve.
+
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models --models qwen3-0.6b qwen3-8b qwen3.5-9b ministral-3-14b --profile a100-preflight-mask --dtype bfloat16 --verify-hashes --resume --stages mask --out-prefix ds-results-scale
+
+flags:
+  - attach-project-disk
+
+outputs:
+  - ds-results-scale
+
+env:
+  vars:
+    PYTORCH_ALLOC_CONF: expandable_segments:True
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+      - ds-results-scale
+
+cloud-instance-types:
+  - g2.1               # 28 vCPU, 1x A100 80 GB
+  # No V100 fallback: the chunks are sized for 80 GB and bf16 needs sm_80+.

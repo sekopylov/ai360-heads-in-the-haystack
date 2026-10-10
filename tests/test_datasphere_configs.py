@@ -168,7 +168,8 @@ GPU_CONFIGS = {"t4.yaml", "t4-smoke.yaml", "t4-cached.yaml", "t4-bootstrap.yaml"
                "a100-preflight.yaml", "a100-preflight-notemplate.yaml",
                "a100-resume.yaml", "a100-detect.yaml", "a100-mask.yaml",
                "a100-scale-detect.yaml",
-               "a100-scale-mask.yaml"}
+               "a100-scale-mask.yaml",
+               "a100-preflight-mask.yaml"}
 
 
 def test_gpu_configs_request_a_gpu_shape(configs):
@@ -370,6 +371,67 @@ def test_the_scale_detect_half_covers_every_model_the_mask_half_ablates(configs)
     assert mask.models, "the mask half must name at least one model"
 
 
+def test_the_mask_preflight_is_cheap_and_runs_only_mask(configs):
+    """The preflight exists to be minutes, so its grid has to stay small.
+
+    `a100-scale-mask.yaml` used to advertise a preflight command that could not run at
+    all: the driver has no `--depths`/`--needles`/`--random-trials` passthrough (only
+    `--lengths`/`--limit`), and `--random-trials 0` is refused by the CLI
+    (`random_trials < 1` raises).  It is a scale now, which is what makes it runnable --
+    and this test is what keeps it cheap: a grid edit that quietly restored the real
+    sample count would turn a ~143 RUB measurement into an 18-hour job.
+    """
+    driver = load_job_driver()
+    if "a100-preflight-mask" not in driver.SCALES:
+        pytest.skip("no mask preflight scale")
+
+    scale = driver.SCALES["a100-preflight-mask"]
+    # `estimate_stages.grid` reads both keys, and `stage_argv` indexes by stage.
+    assert "detect" in scale and "mask" in scale, sorted(scale)
+    mask = scale["mask"]
+
+    def flag_list(argv: list[str], flag: str) -> list[str]:
+        out: list[str] = []
+        for token in argv[argv.index(flag) + 1:]:
+            if token.startswith("--"):
+                break
+            out.append(token)
+        return out
+
+    lengths = flag_list(mask, "--lengths")
+    assert lengths == ["4096", "16384", "32768"], lengths
+    # The span is the whole point: the term the cost model is missing grows with length,
+    # so a grid that stays at one length cannot measure it.
+    assert int(lengths[-1]) // int(lengths[0]) >= 8, lengths
+    for flag, want in (("--depths", "1"), ("--needles", "1"),
+                       ("--random-trials", "1"), ("--mixer-trials", "1")):
+        assert flag_list(mask, flag) == [want], (flag, mask)
+    # The K points and the token budget are the real ones, or the per-pass price would
+    # not be comparable with the run it is meant to price.
+    assert flag_list(mask, "--k-frac") == ["0.01", "0.02", "0.04", "0.08", "0.17", "0.33"]
+    assert flag_list(mask, "--max-new-tokens") == ["96"]
+    samples = len(lengths) * 1 * 1
+    assert samples == 3, samples
+
+    # The config must run `mask` only, against the tree `a100-scale-detect.yaml` fills:
+    # `cmd_mask` loads `<out>/<model>/scores_next_step.npz` to rank the heads it ablates.
+    name = "a100-preflight-mask.yaml"
+    if name not in configs:
+        pytest.skip("no mask preflight config")
+    tokens = [token.replace("${DS_PROJECT_HOME}", "/disk")
+              for token in configs[name]["cmd"].split()]
+    args = driver.parse_args(tokens[2:])
+    assert args.stages == "mask", args.stages
+    assert args.profile == "a100-preflight-mask", args.profile
+    detect = driver.parse_args([token.replace("${DS_PROJECT_HOME}", "/disk")
+                                for token in configs["a100-scale-detect.yaml"]["cmd"].split()][2:])
+    assert args.out_prefix == detect.out_prefix, (args.out_prefix, detect.out_prefix)
+    # ... and every model it prices must have a detect run, or the stage dies before it
+    # loads the checkpoint.
+    missing = sorted(set(args.models) - set(detect.models))
+    assert not missing, f"no detect run for {missing}"
+
+
 def test_only_the_configs_that_stage_their_tree_ask_to_resume(configs):
     """`--resume` is opt-in, and only where it can actually fire.
 
@@ -391,7 +453,7 @@ def test_only_the_configs_that_stage_their_tree_ask_to_resume(configs):
     """
     driver = load_job_driver()
     continuation = {"a100-mask.yaml", "a100-resume.yaml", "a100-scale-detect.yaml",
-               "a100-scale-mask.yaml"}
+               "a100-scale-mask.yaml", "a100-preflight-mask.yaml"}
     for name, config in configs.items():
         tokens = [token.replace("${WEIGHTS}", "/w").replace("${DS_PROJECT_HOME}", "/disk")
                   for token in config["cmd"].split()]

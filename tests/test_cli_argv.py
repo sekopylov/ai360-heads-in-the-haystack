@@ -835,7 +835,8 @@ def test_the_fingerprint_covers_what_a_stage_argv_cannot_see(monkeypatch):
     def inputs(**over):
         base = dict(profile="a100", models=["m", "n"], dtype="bfloat16", seed=0,
                     lengths=[4096, 8192, 16384], limit=None, no_chat_template=False,
-                    measurement_sha256="cafe", registry_sha256="f00d")
+                    measurement_sha256="cafe", registry_sha256="f00d",
+                    scales_sha256=driver.scale_fingerprint("a100"))
         base.update(over)
         return driver.run_inputs_fingerprint(**base)
 
@@ -931,6 +932,66 @@ def test_a_scales_edit_invalidates_the_stages_that_read_its_artifacts(monkeypatc
     assert before[("case-study", "qwen3-0.6b")] != after[("case-study", "qwen3-0.6b")]
 
 
+def test_a_detect_grid_edit_is_caught_when_detect_ran_in_another_job(monkeypatch):
+    """The producer-in-another-job case, which the producer-argv rule cannot see.
+
+    `STAGE_IS_DERIVED` carries the commands of the producers **in the same plan**, and
+    the scale-up round deliberately splits the two halves: `a100-scale-mask.yaml` runs
+    `mask,compare,figures,case-study` and reads the `detect` tree that the *earlier*
+    `a100-scale-detect.yaml` job produced.  So a relaunch of the mask half after an edit
+    to `SCALES['a100']['detect']` had nothing to compare against -- `run_inputs` was
+    unchanged, `mask`'s own argv is built from `SCALES['a100']['mask']` and is unchanged
+    too, and `mask` is not a derived stage so it carries no producer commands at all.
+    Every stage would be skipped over scores from the old grid.
+
+    `scale_fingerprint` hashes the grid itself, which is the only thing that notices when
+    the producer is not in the plan.  The test asserts that the argv really does not move,
+    so it fails if the fix is removed rather than passing for an unrelated reason.
+    """
+    from pathlib import Path
+
+    driver = load_job_driver()
+    models = ["qwen3.5-0.8b", "qwen3-0.6b"]
+    stages = ["mask", "compare", "figures", "case-study"]
+
+    def fingerprints():
+        plan = driver.stage_plan(stages, models)
+        argvs = driver.plan_argv(plan, profile="a100", models=models, prefix=Path("ds"),
+                                 seed=0)
+        producers = driver.producer_argvs(argvs)
+        run_inputs = driver.run_inputs_fingerprint(
+            profile="a100", models=models, dtype="bfloat16", seed=0, lengths=None,
+            limit=None, no_chat_template=False, measurement_sha256="cafe",
+            registry_sha256="f00d",
+            scales_sha256=driver.scale_fingerprint("a100"))
+        return argvs, {
+            pair: [driver.stage_fingerprint(
+                       argv, run_inputs,
+                       producers if driver.STAGE_IS_DERIVED[pair[0]] else ())
+                   for argv in argvs[pair]]
+            for pair in argvs
+        }
+
+    argvs_before, before = fingerprints()
+    # `mask` is a producer, not a derived stage, so its own fingerprint carries no other
+    # stage's command -- that is the hole.
+    assert not driver.STAGE_IS_DERIVED["mask"]
+
+    monkeypatch.setattr(driver, "SCALES",
+                        {**driver.SCALES,
+                         "a100": {**driver.SCALES["a100"],
+                                  "detect": [*driver.SCALES["a100"]["detect"], "--extra"]}})
+    argvs_after, after = fingerprints()
+
+    # The argv is provably unchanged, so nothing except the scale hash can move the
+    # fingerprint -- which is what makes this a regression test for the fix.
+    assert argvs_before[("mask", "qwen3-0.6b")] == argvs_after[("mask", "qwen3-0.6b")]
+    for pair in before:
+        assert before[pair] != after[pair], (
+            f"{pair[0]} was skipped over a tree whose scores came from another grid"
+        )
+
+
 #: Driver inputs that are deliberately outside the resume fingerprint, with the reason.
 #: The list is not documentation-only: the test below fails when `parse_args` grows a
 #: dest, so every new flag has to be classified rather than forgotten.
@@ -971,10 +1032,11 @@ def test_every_driver_input_is_classified_for_the_resume_fingerprint():
         profile=args.profile, models=args.models, dtype=args.dtype, seed=args.seed,
         lengths=args.lengths, limit=args.limit,
         no_chat_template=args.no_chat_template, measurement_sha256="x",
-        registry_sha256="y")))
+        registry_sha256="y", scales_sha256="z")))
 
-    assert fields - dests == {"measurement_sha256", "registry_sha256"}
-    classified = (fields - {"measurement_sha256", "registry_sha256"})
+    derived = {"measurement_sha256", "registry_sha256", "scales_sha256"}
+    assert fields - dests == derived, (fields - dests, derived)
+    classified = (fields - derived)
     assert dests == classified | set(NOT_IN_FINGERPRINT), (
         "unclassified driver inputs: "
         f"{sorted(dests - classified - set(NOT_IN_FINGERPRINT))}; "
@@ -1032,6 +1094,65 @@ def test_fetch_weights_verifies_every_digest_and_resumes(driver, tmp_path, monke
         driver.fetch_weights(target, registry, ["nope"])
 
 
+def test_fetch_weights_refuses_a_bad_name_or_digest_before_downloading(driver, tmp_path,
+                                                                      monkeypatch):
+    """A malformed registry entry must fail before the first byte, not after it.
+
+    `directory / name` is what decides where the download is written and what the rename
+    overwrites, and the cache lives on a **shared** project disk where nothing may be
+    deleted.  A name carrying `..` or a separator would escape the model directory.  The
+    registry is ours, so this is not an attack in flight -- but the check is cheaper than
+    the trust, and it has a second job: validating every digest up front means a typo in a
+    60 GiB pin no longer costs the whole download before it surfaces.
+    """
+    import hashlib
+    import json
+
+    src = tmp_path / "hub"
+    src.mkdir(parents=True)
+    (src / "model.safetensors").write_bytes(b"weights")
+    registry = tmp_path / "models.json"
+    target = tmp_path / "cache"
+    downloads: list[str] = []
+    monkeypatch.setattr(driver, "_download",
+                        lambda url, part: downloads.append(url) or 7)
+
+    def write_entry(entry: dict) -> None:
+        registry.write_text(json.dumps({"models": {"toy": entry}}), encoding="utf-8")
+
+    base = {"path": "models/Toy", "repo": "org/Toy"}
+
+    # A name that would land outside the model directory.
+    for bad in ("../escape.safetensors", "sub/dir.safetensors", "/abs.safetensors",
+                "..", ".", ""):
+        write_entry({**base, "shards": {bad: "0" * 64}})
+        with pytest.raises(SystemExit, match="bare file name"):
+            driver.fetch_weights(target, registry, ["toy"])
+    assert downloads == [], "nothing may be downloaded before the names are checked"
+
+    # A digest that is not a sha256 at all.
+    write_entry({**base, "shards": {"model.safetensors": "not-a-digest"}})
+    with pytest.raises(SystemExit, match="sha256 hex digest"):
+        driver.fetch_weights(target, registry, ["toy"])
+    assert downloads == []
+
+    # An entry that names no files: the loop would otherwise fall through and print a
+    # success line for a checkpoint whose bytes were never fetched.
+    write_entry({**base, "files": {}, "shards": {}})
+    with pytest.raises(SystemExit, match="nothing to fetch"):
+        driver.fetch_weights(target, registry, ["toy"])
+    assert downloads == []
+
+    # ... and a well-formed entry still downloads, so the guards are not refusing work.
+    payload = b"weights"
+    write_entry({**base, "shards": {"model.safetensors":
+                                    hashlib.sha256(payload).hexdigest()}})
+    monkeypatch.setattr(driver, "_download",
+                        lambda url, part: part.write_bytes(payload) or len(payload))
+    assert driver.fetch_weights(target, registry, ["toy"]) == 1
+    assert (target / "Toy" / "model.safetensors").read_bytes() == payload
+
+
 def test_main_resume_actually_skips_the_stage(driver, tmp_path, monkeypatch, capsys):
     """The skip must reach `main`, and only when the flag is passed."""
     import json
@@ -1069,7 +1190,8 @@ def test_main_resume_actually_skips_the_stage(driver, tmp_path, monkeypatch, cap
     run_inputs = driver.run_inputs_fingerprint(
         profile="laptop", models=["qwen3-0.6b"], dtype=None, seed=0, lengths=None,
         limit=None, no_chat_template=False, measurement_sha256="deadbeef",
-        registry_sha256=driver.registry_fingerprint(["qwen3-0.6b"]))
+        registry_sha256=driver.registry_fingerprint(["qwen3-0.6b"]),
+        scales_sha256=driver.scale_fingerprint("laptop"))
     fingerprint = driver.stage_fingerprint(
         driver.stage_argv("mask", profile="laptop", models=["qwen3-0.6b"],
                           prefix=prefix, seed=0)[0], run_inputs)

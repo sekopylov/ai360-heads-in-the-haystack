@@ -25,11 +25,32 @@ Both stages are counted in **passes** (one prompt, one generation), not tokens:
   the token-mixer ablation for a hybrid (3 K x 2 kinds x 3 subsets).
 
 Two anchors (below) fix the constants, and that is also the model's weakness: with two
-small models, the split between per-pass *overhead* and per-pass *compute* is
-**underdetermined** -- the hybrid's mask pass is cheaper than the dense model's despite
-1.4x the parameters, so the two anchors bracket the overhead rather than pinning it.
-`MASK_OVERHEAD_S` is therefore the midpoint of that bracket, and the table is a plan:
-the first hour of a real run is what confirms it.  `--check-anchors` prints the fit.
+models and four measured numbers it has **no degrees of freedom left**, so it is a fit,
+not a validated model.  `--check-anchors` prints the fit and says which rows are
+independent (the dense `detect` row is the one `CAPTURE_S_PER_HEADLAYER` was solved from,
+so its `-0%` is an identity, not evidence).
+
+Known gaps, stated rather than hidden
+-------------------------------------
+1. **No attention term.**  `compute_seconds` is the linear (weight) part only.  The
+   prefill's attention is quadratic in the length and the capture's row-`argmax` is
+   linear in the KV, so both are missing.  This is the most likely reason the two mask
+   anchors invert (the dense 0.6B's mask pass costs *more* than the hybrid's despite 0.7x
+   the active parameters and 0.69x the length-dependent work): the anchors bracket the
+   overhead instead of pinning it, and the residual is the missing term.  Direction of
+   the error: the table is **optimistic**, most on the rows with the most scoreable
+   head-layers and the longest contexts.  `a100-preflight-mask` exists to measure it.
+2. **One price per mask pass, although there are two kinds.**  The mixer ablation's passes
+   are ~2x a curve pass: with the token mixers zeroed the model stops emitting EOS and
+   spends the whole 96-token budget, while curve passes usually stop early.  On the
+   anchored hybrid the curve blocks cost 1.37-1.53 s/pass (measured, 270 passes each) and
+   the ablation's ~3 s, so the single fitted `MASK_OVERHEAD_S` is an average that happens
+   to land the total.  Changing the curve:ablation ratio (e.g. `--random-trials 3`) breaks
+   that compensation.
+3. **The capture is priced per instance, not per token.**  Real cost grows with the
+   context the `argmax` scans; the grid holds the lengths fixed, so the fit absorbs it.
+4. `MASK_OVERHEAD_S` is the midpoint of the bracket the two anchors leave, so the mask
+   column is a plan, and the first hour of a real run is what confirms it.
 
 Anchors (A100 80 GB, bf16, 45 samples/point, 96-token budget):
     qwen3-0.6b    detect 563 s / 210 instances    mask 3660 s = 1665 passes
@@ -40,6 +61,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import logging
 import sys
 from pathlib import Path
 
@@ -104,25 +126,40 @@ def flag_values(argv: list[str], name: str) -> list[str]:
 
 
 def grid(scale: str) -> dict:
-    """The detection and masking grids a job on `scale` actually runs."""
+    """The detection and masking grids a job on `scale` actually runs.
+
+    `mask_flags` is kept raw because the K points have to come from the CLI's own
+    `resolve_k` (see :func:`resolved_k_values`), and that needs the `--k-frac` list as
+    it will be passed, not as floats re-derived here.
+    """
     driver = load_driver()
     from retrieval_heads.cli import PROFILES
 
+    if scale not in driver.SCALES:
+        raise SystemExit(f"unknown scale {scale!r}; known: {sorted(driver.SCALES)}")
     detect = driver.SCALES[scale]["detect"]
     mask = driver.SCALES[scale]["mask"]
-    profile = PROFILES[flag_values(detect, "--profile")[0] or "laptop"]
+    # A `--profile` as the last token would otherwise raise IndexError, and `mask`
+    # legitimately sets neither `--depths` nor `--needles` on the t4 scale (the CLI
+    # defaults apply there).
+    profiles = flag_values(detect, "--profile")
+    profile = PROFILES[profiles[0]] if profiles else PROFILES["laptop"]
+
+    def flag_int(argv: list[str], name: str, fallback: int) -> int:
+        values = flag_values(argv, name)
+        return int(values[0]) if values else fallback
+
     return {
         "detect_lengths": [int(v) for v in flag_values(detect, "--lengths")]
                           or profile["lengths"],
-        "detect_depths": int(flag_values(detect, "--depths")[0]) if flag_values(
-            detect, "--depths") else profile["depths"],
-        "detect_needles": int(flag_values(detect, "--needles")[0]) if flag_values(
-            detect, "--needles") else profile["needles"],
+        "detect_depths": flag_int(detect, "--depths", profile["depths"]),
+        "detect_needles": flag_int(detect, "--needles", profile["needles"]),
         "mask_lengths": [int(v) for v in flag_values(mask, "--lengths")],
-        "mask_depths": int(flag_values(mask, "--depths")[0]),
-        "mask_needles": int(flag_values(mask, "--needles")[0]),
+        "mask_depths": flag_int(mask, "--depths", 5),
+        "mask_needles": flag_int(mask, "--needles", 1),
         "k_frac": [float(v) for v in flag_values(mask, "--k-frac")],
-        "trials": int(flag_values(mask, "--random-trials")[0]),
+        "trials": flag_int(mask, "--random-trials", 3),
+        "mask_flags": mask,
     }
 
 
@@ -148,14 +185,38 @@ def detect_seconds(key: str, g: dict) -> tuple[float, int]:
     return instances * per_instance, instances
 
 
+def resolved_k_values(g: dict, n_heads: int) -> list[int]:
+    """The K points `mask` will really run, from the CLI's own resolver.
+
+    Re-deriving them here is how an earlier version of this script priced three mixer
+    K values on models that run two: the ablation is capped at ``K <= 4`` and the
+    Qwen3.5-4B/9B (128 heads) and 35B-A3B (160 heads) grids resolve to `[1, 3]` and
+    `[2, 3]`.  Calling `resolve_k` removes the whole class of drift, including the
+    ``int(x + 0.5)`` rounding that `round()` gets wrong.
+    """
+    from types import SimpleNamespace
+
+    from retrieval_heads.cli import resolve_k
+
+    args = SimpleNamespace(k=None, k_frac=flag_values(g["mask_flags"], "--k-frac"))
+    info = SimpleNamespace(n_scoreable_heads=n_heads, name="estimate")
+    return resolve_k(args, info)
+
+
+def mixer_k_values(k_values: list[int]) -> list[int]:
+    """The subset the token-mixer ablation uses -- `cli.cmd_mask`'s own rule."""
+    return [k for k in k_values if k <= 4] or [1, 2]
+
+
 def mask_seconds(key: str, g: dict, *, random_trials: int | None = None) -> tuple[float, int]:
     _total, active, _layers, heads, score_layers, _window, hybrid = MODELS[key]
     trials = g["trials"] if random_trials is None else random_trials
     samples = len(g["mask_lengths"]) * g["mask_depths"] * g["mask_needles"]
-    k_points = len({max(1, round(frac * score_layers * heads)) for frac in g["k_frac"]})
+    k_values = resolved_k_values(g, score_layers * heads)
+    k_points = len(k_values)
     passes = samples * (1 + k_points * (1 + trials))
     if hybrid:
-        passes += 3 * 2 * 3 * samples          # the K<=4 token-mixer ablation
+        passes += len(mixer_k_values(k_values)) * 2 * 3 * samples
     mean_tokens = sum(g["mask_lengths"]) / len(g["mask_lengths"])
     per_pass = MASK_OVERHEAD_S + compute_seconds(active, mean_tokens)
     return passes * per_pass, passes
@@ -171,7 +232,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--models", nargs="*", default=None)
     parser.add_argument("--check-anchors", action="store_true",
                         help="print the measured runs against the model")
+    parser.add_argument("--only", choices=["both", "detect", "mask"], default="both",
+                        help="price one stage (a preflight scale runs only one)")
     args = parser.parse_args(argv)
+    # `resolve_k` logs a K-collapse warning per call, and this script calls it once per
+    # model: the collapse is already visible in the `passes` column, and "on estimate"
+    # in a log line is noise.
+    logging.getLogger("retrieval_heads").setLevel(logging.ERROR)
     g = grid(args.scale)
 
     if args.check_anchors:
@@ -182,26 +249,50 @@ def main(argv: list[str] | None = None) -> int:
         for key, (measured_detect, measured_mask) in ANCHORS.items():
             detect, _ = detect_seconds(key, g)
             mask, _ = mask_seconds(key, g)
+            # Which rows are evidence and which are arithmetic.  `CAPTURE_S_PER_HEADLAYER`
+            # is solved from the dense detect row and `HYBRID_PREFILL_SLOWDOWN` from the
+            # hybrid's, so those two print `-0%` by construction; `MASK_OVERHEAD_S` is the
+            # midpoint of the two mask rows' implied overheads, so neither mask row is
+            # independent either.  Printing four percentages as if they validated the
+            # model was the misleading part.
+            tags = "  (detect = fit, mask = half of the overhead bracket)"
             print(f"  {key:14s} detect {measured_detect:>5.0f}s vs {detect:>5.0f}s "
                   f"({detect / measured_detect - 1:+.0%})   "
                   f"mask {measured_mask:>5.0f}s vs {mask:>5.0f}s "
-                  f"({mask / measured_mask - 1:+.0%})")
+                  f"({mask / measured_mask - 1:+.0%}){tags}")
+        print("  -> all four rows are fitted, so none of them is an independent check;")
+        print("     they show the fit is consistent, not that the model is right.")
         return 0
 
     models = args.models or list(MODELS)
-    print(f"{'model':17s} {'inst':>4s} {'score':>5s} {'passes':>7s} {'detect':>8s} "
-          f"{'mask':>8s} {'total':>7s} {'RUB':>6s}")
+    want_detect = args.only in ("both", "detect")
+    want_mask = args.only in ("both", "mask")
+    head = f"{'model':17s} {'inst':>4s} {'score':>5s} {'passes':>7s}"
+    if want_detect:
+        head += f" {'detect':>8s}"
+    if want_mask:
+        head += f" {'mask':>8s}"
+    head += f" {'total':>7s} {'RUB':>6s}"
+    print(head)
     total = 0.0
     for key in models:
         detect, instances = detect_seconds(key, g)
         mask, passes = mask_seconds(key, g, random_trials=args.random_trials)
-        total += detect + mask
+        # A preflight scale runs one stage, so pricing the other would put a number in
+        # the table that no job will ever spend.
+        cost = (detect if want_detect else 0.0) + (mask if want_mask else 0.0)
+        total += cost
         scoreable = MODELS[key][4] * MODELS[key][3]
-        print(f"{key:17s} {instances:>4d} {scoreable:>5d} {passes:>7d} "
-              f"{detect / 3600:>7.1f}h {mask / 3600:>7.1f}h {(detect + mask) / 3600:>6.1f}h "
-              f"{(detect + mask) / 3600 * args.price:>6.0f}")
-    print(f"\n{'all':17s} {'':>4s} {'':>5s} {'':>7s} {'':>8s} {'':>8s} {total / 3600:>6.1f}h "
-          f"{total / 3600 * args.price:>6.0f}  (at {args.price} RUB/h)")
+        row = f"{key:17s} {instances:>4d} {scoreable:>5d} {passes:>7d}"
+        if want_detect:
+            row += f" {detect / 3600:>7.1f}h"
+        if want_mask:
+            row += f" {mask / 3600:>7.1f}h"
+        row += f" {cost / 3600:>6.1f}h {cost / 3600 * args.price:>6.0f}"
+        print(row)
+    print(f"\n{'all':17s} {total / 3600:>6.1f}h {total / 3600 * args.price:>6.0f}"
+          f"  (at {args.price} RUB/h)"
+          + (f"  [{args.only} only]" if args.only != "both" else ""))
     trials = g["trials"] if args.random_trials is None else args.random_trials
     print(f"grid: detect {len(g['detect_lengths'])} lengths 1K-49K x "
           f"{g['detect_depths']} depths x {g['detect_needles']} needles; mask "

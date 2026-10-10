@@ -612,8 +612,14 @@ def cmd_mask(args: argparse.Namespace) -> int:
         log.warning("--needles %d exceeds the %d held-out eval needle(s); using all of "
                     "them (add more to EVAL_NEEDLES to widen the ablation set)",
                     args.needles, len(EVAL_NEEDLES))
-    log.info("masking on %d held-out needle(s) x %d depth(s) = %d samples per point",
-             len(eval_needles), args.depths, len(eval_needles) * args.depths)
+    # The sample count is lengths x depths x needles.  This line used to print only the
+    # last two, so the a100 run logged "15 samples per point" while the artifact it wrote
+    # recorded 45 -- and the comment in `SCALES['a100']['mask']` repeated the wrong
+    # number, which is how "the same 15-sample budget as the t4 run" survived a review.
+    # The artifact is the one that is right; the log has to agree with it.
+    log.info("masking on %d held-out needle(s) x %d depth(s) x %d length(s) = %d samples "
+             "per point", len(eval_needles), args.depths, len(lengths),
+             len(eval_needles) * args.depths * len(lengths))
     samples = []
     for extra_index, (extra_needle, extra_question) in enumerate(eval_needles):
         samples.extend(make_eval_samples(

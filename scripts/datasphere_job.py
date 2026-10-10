@@ -138,6 +138,39 @@ SCALES: dict[str, dict[str, list[str]]] = {
         "cot": ["--k-frac", "0.08", "--random-trials", "3", "--max-new-tokens", "256",
                 "--prefill-chunk", "8192"],
     },
+    # A mask-only preflight, and the reason it exists is the cost table's own stated
+    # weakness: two small anchors cannot separate per-pass *overhead* from per-pass
+    # *compute*, so the mask column is an extrapolation (`estimate_stages.py` says so in
+    # its docstring).  The term the model is missing is the one that grows with length --
+    # attention is quadratic in the prefill and the capture's row-argmax is linear in the
+    # KV -- so this grid keeps the K points, the depths/needles ratio and the 96-token
+    # budget, and spends its samples on **lengths** instead: 4096 -> 32768 is a 64x span
+    # in attention work against a 4x span in the linear term, which is what separates the
+    # two.  Per point that is 3 lengths x 1 depth x 1 needle = 3 samples, 1 random trial,
+    # 1 mixer trial: minutes per model rather than hours.
+    #
+    # It is a *mask* grid, so it reads the `a100` detect tree -- `cmd_mask` loads
+    # `scores_next_step.npz` to rank the heads it ablates.  Run it after
+    # `a100-scale-detect.yaml`, against the same `--out-prefix`, and on the models whose
+    # per-pass cost the table is least sure about.  The `detect` entry is present so the
+    # scale is well formed (`stage_argv` and `estimate_stages.grid` both read it) and is
+    # the `a100` grid, not a smaller one: this scale never runs detect.
+    "a100-preflight-mask": {
+        "detect": ["--profile", "paper", "--argmax-domain", "haystack",
+                   "--prefill-chunk", "8192", "--max-new-tokens", "96",
+                   "--preflight",
+                   "--lengths", "1024", "2048", "4096", "8192", "16384",
+                   "24576", "32768", "40960", "49152"],
+        "mask": ["--k-frac", "0.01", "0.02", "0.04", "0.08", "0.17", "0.33",
+                 "--lengths", "4096", "16384", "32768",
+                 "--random-trials", "1", "--max-new-tokens", "96",
+                 "--depths", "1", "--needles", "1", "--mixer-trials", "1",
+                 "--prefill-chunk", "8192"],
+        "qa": ["--k-frac", "0.04", "0.08", "0.17", "--random-trials", "1",
+               "--prefill-chunk", "8192"],
+        "cot": ["--k-frac", "0.08", "--random-trials", "1", "--max-new-tokens", "256",
+                "--prefill-chunk", "8192"],
+    },
 }
 
 STAGES = ("describe", "detect", "mask", "qa", "cot", "compare", "figures",
@@ -229,10 +262,33 @@ def registry_fingerprint(models: list[str]) -> str:
     return hashlib.sha256(blob).hexdigest()[:16]
 
 
+def scale_fingerprint(profile: str) -> str:
+    """Hash the selected scale's grids.
+
+    :data:`STAGE_IS_DERIVED` makes a derived stage carry the commands of the producers
+    **in the same plan**, and that is not enough when the producer ran in another job.
+    The scale-up round splits ``detect`` and ``mask`` into two launches, so a relaunch of
+    the mask half after an edit to ``SCALES['a100']['detect']`` has no producer argv to
+    notice the change: ``run_inputs`` is unchanged, ``mask``'s argv is unchanged, and
+    ``mask``/``compare``/``figures``/``case-study`` are all skipped over a tree built from
+    two different grids.
+
+    Hashing the grid itself closes that.  ``SCALES`` is where the numbers come from,
+    ``scripts/`` is deliberately outside ``measurement_sha256`` (a comment edit must not
+    re-run an hour of ``mask``), and a scale's flags are exactly the inputs that decide
+    what its stages measure -- so an edit to any flag of the *selected* scale now
+    invalidates every stage of that scale, in any job.
+    """
+    if profile not in SCALES:
+        raise SystemExit(f"[entry] unknown scale {profile!r}; known: {sorted(SCALES)}")
+    blob = json.dumps(SCALES[profile], sort_keys=True).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()[:16]
+
+
 def run_inputs_fingerprint(*, profile: str, models: list[str], dtype: str | None,
                            seed: int, lengths: list[int] | None, limit: int | None,
                            no_chat_template: bool, measurement_sha256: str,
-                           registry_sha256: str) -> str:
+                           registry_sha256: str, scales_sha256: str) -> str:
     """The run-level conditions a stage's own argv does not carry.
 
     Fingerprinting the stage argv alone is not enough, and the gap is not hypothetical:
@@ -240,10 +296,11 @@ def run_inputs_fingerprint(*, profile: str, models: list[str], dtype: str | None
     different ``--lengths`` re-runs ``mask`` (its argv changed) and then *skips* the
     derived stages -- a tree half from each grid, reported as a success.  ``dtype``
     changes the arithmetic without appearing in any stage's argv,
-    ``measurement_sha256`` is the hash of the package that computes the numbers, and
+    ``measurement_sha256`` is the hash of the package that computes the numbers,
     ``registry_sha256`` covers the effective checkpoint/dtype settings (see
-    :func:`registry_fingerprint`), so an ``ok`` recorded under any of those being
-    different is not trusted.
+    :func:`registry_fingerprint`), and ``scales_sha256`` covers the grid itself, which is
+    what the producer-in-another-job case needs (see :func:`scale_fingerprint`).  An ``ok``
+    recorded under any of those being different is not trusted.
 
     Deliberately absent: ``--weights`` (a job's input directory is named per job, so
     including it would disable resume entirely; the checkpoints' identity is what
@@ -259,6 +316,7 @@ def run_inputs_fingerprint(*, profile: str, models: list[str], dtype: str | None
         "profile": profile, "models": models, "dtype": dtype, "seed": seed,
         "lengths": lengths, "limit": limit, "no_chat_template": no_chat_template,
         "measurement_sha256": measurement_sha256, "registry_sha256": registry_sha256,
+        "scales_sha256": scales_sha256,
     }, sort_keys=True)
 
 
@@ -328,6 +386,30 @@ def _download(url: str, target: Path) -> int:
     return written
 
 
+def _is_sha256(value: Any) -> bool:
+    """Whether `value` can be compared against a computed digest at all."""
+    return (isinstance(value, str) and len(value) == 64
+            and all(c in "0123456789abcdef" for c in value.lower()))
+
+
+def _check_cache_name(key: str, name: str) -> None:
+    """A registry file name must be a bare file name.
+
+    ``directory / name`` decides where the download is written and what
+    ``part.replace(path)`` overwrites, and the cache lives on a **shared** project disk
+    where nothing may be deleted.  A name carrying ``..``, a path separator or a leading
+    ``/`` would escape ``directory``; the registry is ours, but the rule is cheaper than
+    the trust, and the venv cache next door already keeps an ownership marker for the
+    same reason.
+    """
+    if (not name or name in (".", "..") or "/" in name or "\\" in name
+            or Path(name).is_absolute() or Path(name).name != name):
+        raise SystemExit(
+            f"[entry] {key}: {name!r} is not a bare file name; the weights cache is "
+            f"written by joining it onto the model directory, so a name like this would "
+            f"write outside it")
+
+
 def fetch_weights(target: Path, registry: Path, models: list[str]) -> int:
     """Download the pinned files of ``models`` into ``target``, verifying each digest.
 
@@ -356,7 +438,24 @@ def fetch_weights(target: Path, registry: Path, models: list[str]) -> int:
         entry = entries[key]
         directory = target / Path(entry["path"]).name
         wanted = {**entry.get("files", {}), **entry.get("shards", {})}
-        total = sum(1 for _ in wanted)
+        total = len(wanted)
+        if not total:
+            # The loop below would fall straight through and print a success line for a
+            # checkpoint whose bytes were never fetched.
+            raise SystemExit(
+                f"[entry] {key}: the registry entry names neither `files` nor `shards`, "
+                f"so there is nothing to fetch; a silent success here would leave the "
+                f"cache without the checkpoint")
+        # Validate every name and digest *before* the first byte: a typo used to cost the
+        # whole download (tens of GiB) before it surfaced, and a name decides where the
+        # write and the rename land.
+        for name, digest in sorted(wanted.items()):
+            _check_cache_name(key, name)
+            if not _is_sha256(digest):
+                raise SystemExit(
+                    f"[entry] {key}/{name}: {digest!r} is not a sha256 hex digest, so "
+                    f"the download could not be verified; re-pin with "
+                    f"scripts/pin_registry.py")
         print(f"[entry] {key}: {total} file(s) -> {directory}", flush=True)
         for index, (name, digest) in enumerate(sorted(wanted.items()), 1):
             path = directory / name
@@ -507,11 +606,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="render prompts without the chat template (the paper's "
                              "geometry); appended to detect/mask/qa/cot/case-study")
     # Presence is the cheap check `download_models.sh` already did before uploading;
-    # recomputing the digests is a few seconds and catches a truncated shard at job
-    # start instead of when the model fails to load.  The A100 configs pass it.
+    # recomputing the digests catches a truncated shard at job start instead of when the
+    # model fails to load.  The A100 configs pass it.
+    #
+    # The cost used to be described as "~3.3 GB, a few seconds", which was true while the
+    # weights rode along in `inputs`.  The scale-up round reads a ~233 GiB project-disk
+    # cache instead, and every config that passes this flag re-reads all of it: minutes
+    # per job, not seconds.  Still the right trade (a truncated 60 GiB shard otherwise
+    # surfaces hours in), but it is a line in the budget rather than free.
     parser.add_argument("--verify-hashes", action="store_true",
                         help="recompute the registry SHA-256 of every checkpoint file "
-                             "(~3.3 GB, a few seconds) instead of only checking presence")
+                             "(minutes for the ~233 GiB scale-up cache) instead of only "
+                             "checking presence")
     # A maintenance mode, like `--bootstrap-venv`: fill a weights cache (the project
     # disk) and exit, running no stage and needing no GPU.  It exists because the
     # `inputs` path a job uploads is capped at 10 GiB by the CLI, so every model above
@@ -879,10 +985,11 @@ def verify_weights(root: Path, registry: Path, keys: list[str] | None = None, *,
 
     Presence only by default -- it is cheap, and the weights were hash-checked by
     ``download_models.sh`` before they were ever uploaded.  ``hashes=True`` also
-    recomputes the SHA-256 the registry pins (``--verify-hashes``): that is a few
-    seconds for ~3.3 GB, against an hour of GPU time if a truncated shard is only
-    discovered when the model fails to load.  The A100 configs pass the flag; the
-    cheap scales keep the presence check.
+    recomputes the SHA-256 the registry pins (``--verify-hashes``): minutes for the
+    ~233 GiB scale-up cache (it used to be "a few seconds for ~3.3 GB", when the weights
+    rode along in ``inputs``), against an hour of GPU time if a truncated shard is only
+    discovered when the model fails to load.  The A100 configs pass the flag; the cheap
+    scales keep the presence check.
 
     A half-downloaded tree must not be mistaken for a ready one: the previous code
     printed "already present, leaving it alone" and carried on.
@@ -1313,11 +1420,12 @@ def main(argv: list[str] | None = None) -> int:
     # curve, and re-running an hour of `mask` for it would defeat the flag.
     measurement = code_sha256(Path("retrieval_heads"))
     registry = registry_fingerprint(args.models)
+    scales = scale_fingerprint(args.profile)
     run_inputs = run_inputs_fingerprint(
         profile=args.profile, models=args.models, dtype=args.dtype, seed=args.seed,
         lengths=args.lengths, limit=args.limit,
         no_chat_template=args.no_chat_template, measurement_sha256=measurement,
-        registry_sha256=registry)
+        registry_sha256=registry, scales_sha256=scales)
     done = completed_stages(prefix) if args.resume else {}
     if args.resume:
         skipped = sorted((stage, model or "*") for stage, model in done)

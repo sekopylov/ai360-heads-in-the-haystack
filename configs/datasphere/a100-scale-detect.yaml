@@ -10,7 +10,7 @@ desc: scale-up round, first half -- describe,detect for all ten checkpoints off 
 #
 # It is the *cheap* half: `detect` is dominated by the capture (`layers x heads` per decode
 # step), while `mask` is dominated by prefill+decode work (parameters) and carries the
-# 1620-pass ablation.  About a quarter of the total (5.9 h of the 23.8 h the mask config's
+# 1620-pass ablation.  About a quarter of the total (5.9 h of the 23.0 h the mask config's
 # table prices), and it answers "does the >0.1 share grow or shrink with scale, and is the
 # hybrid's non-sparsity architectural" on its own.  `mask` for the models that earn it is a
 # second job (the same split as `a100-detect.yaml` / `a100-mask.yaml`).

@@ -15,10 +15,12 @@ desc: scale-up round, second half -- mask,compare,figures,case-study on the dete
 # pool is ~40 and `--k-frac 0.33` (K=42) lands on the whole pool: expected, flagged in
 # the artifact, and worth saying in the report rather than discovering in the figures.
 #
-# Time, from `scripts/estimate_stages.py` (which fits two measured anchors and prints
-# its own error against them: detect -0%/-1%, mask -7%/+4%).  Mask hours are for the
-# 45-sample grid with 5 random trials; `--random-trials 3` removes ~40% of the random
-# arms:
+# Time, from `scripts/estimate_stages.py`.  Mask hours are for the 45-sample grid with 5
+# random trials.  The earlier version of this table said 23.8 h / 12894 RUB and "removes
+# ~40% of the random arms" for `--random-trials 3`; both were wrong.  The hours moved
+# because the script was pricing three token-mixer K values on the three hybrids that
+# actually run two (`mixer_k = k for k in k_values if k <= 4`), and the flag removes
+# (1 + 6x4)/(1 + 6x6) = 25/37 = 32% of the passes, not 40%:
 #
 #   model             detect   mask   total   RUB
 #   qwen3-0.6b          0.2h   0.9h    1.1h    600
@@ -26,21 +28,28 @@ desc: scale-up round, second half -- mask,compare,figures,case-study on the dete
 #   qwen3-4b            0.4h   1.3h    1.7h    947
 #   qwen3-8b            0.5h   1.8h    2.3h   1249
 #   qwen3-30b-a3b       0.5h   1.3h    1.7h    949
-#   qwen3.5-4b          0.7h   2.1h    2.8h   1522
-#   qwen3.5-9b          1.3h   3.0h    4.3h   2346
-#   qwen3.5-35b-a3b     0.5h   1.8h    2.3h   1254
+#   qwen3.5-4b          0.7h   1.9h    2.6h   1397
+#   qwen3.5-9b          1.3h   2.6h    4.0h   2170
+#   qwen3.5-35b-a3b     0.5h   1.6h    2.1h   1146
 #   ministral-3-8b      0.7h   1.9h    2.6h   1400
 #   ministral-3-14b     0.9h   2.5h    3.4h   1832
-#   all                                      23.8h  12894
+#   all                                      23.0h  12485
 #
-# The honest caveat is in that script: with two small anchors the split between the
-# per-pass overhead and the per-pass compute is underdetermined (the hybrid's mask pass
-# is *cheaper* than the dense model's despite 1.4x the parameters), so the model is
-# flat in model size and the mask column is really "1.9 s + a little" per pass.  If the
-# big models are compute-bound after all, the mask stage is longer than this table.  The
-# first hour of the real run is what settles it -- and if the per-model cost is wanted
-# before committing 20+ hours, a one-hour preflight (`--stages mask --models qwen3-8b
-# qwen3.5-9b --lengths 4096 --depths 1 --needles 1 --random-trials 0`) measures it.
+# The table is a *fit*, not a validated model, and the script says so itself: four
+# constants to four measured numbers leaves no degrees of freedom, so `--check-anchors`
+# printing "-0%/-1%/-7%/+4%" is consistency, not evidence.  Two known gaps push the same
+# way -- the model has no attention term (the prefill's attention is quadratic in the
+# length, the capture's row-argmax is linear in the KV) and it prices the mixer ablation's
+# passes like curve passes although they are ~2x (with the mixers zeroed the model stops
+# emitting EOS and spends the whole 96-token budget).  Both mean this table is
+# **optimistic**; the first hour of the real run settles it.
+#
+# To settle it before committing 18 hours rather than after, run
+# `configs/datasphere/a100-preflight-mask.yaml`: the same K points and token budget on
+# 4096/16384/32768 tokens (a 64x span in attention work, which is what separates the two
+# terms) at 1 depth x 1 needle x 1 trial.  It costs ~0.3 h / ~143 RUB for four models and
+# must run after `a100-scale-detect.yaml`, because `mask` ranks heads from the detect
+# scores.
 #
 # `--resume` + the staged tree: the models that already finished are skipped, so a crash
 # on the eighth model does not re-pay for the first seven.  A config may only pass
