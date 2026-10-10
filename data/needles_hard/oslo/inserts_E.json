@@ -1,0 +1,12 @@
+{
+  "_roles": "distractor: a competing record, its facts in the answer mean confusion; lure: text on the topic or with the words of the question but without an answer; noise: a striking fact unrelated to the question; value: a part of the right answer, its facts are in answer_key; evidence: a second step the answer needs, it holds the answer",
+  "inserts": {
+    "ingrid_dahl": {"role": "evidence", "text": "On her farm Ingrid Dahl keeps a white reindeer.", "facts": [["reindeer"]]}
+  },
+  "levels": {
+    "E1": {"use": []},
+    "E2": {"use": [], "real_needle_is": "evidence"},
+    "E3": {"placement": "random", "use": ["ingrid_dahl"], "real_needle_in": "ingrid_dahl"},
+    "E4": {"use": [], "facts_in_needle": [["plain straw", "straw"]]}
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "_roles": "distractor: a competing record, its facts in the answer mean confusion; lure: text on the topic or with the words of the question but without an answer; noise: a striking fact unrelated to the question; value: a part of the right answer, its facts are in answer_key; evidence: a second step the answer needs, it holds the answer",
+  "inserts": {
+    "bergen": {"role": "distractor", "text": "The oldest house in Bergen has a roof of grey turf and a door painted with a black raven.", "facts": [["grey turf"], ["black raven", "raven"]]},
+    "stockholm": {"role": "distractor", "text": "The oldest house in Stockholm has a wall of yellow brick and a gate carved with a blue anchor.", "facts": [["yellow brick"], ["blue anchor", "anchor"]]},
+    "helsinki": {"role": "distractor", "text": "The oldest house in Helsinki has a tower of pale granite and a window framed with a golden fish.", "facts": [["pale granite"], ["golden fish"]]},
+    "oslo_newest": {"role": "distractor", "text": "The newest house in Oslo has a roof of clear glass and a door painted with a purple comet.", "facts": [["clear glass"], ["purple comet", "comet"]]}
+  },
+  "levels": {
+    "B1": {"placement": "far", "use": ["bergen"]},
+    "B2": {"placement": "random", "use": ["bergen", "stockholm", "helsinki"]},
+    "B3": {"placement": "near", "use": ["bergen", "stockholm", "helsinki"]},
+    "B4": {"placement": "near", "use": ["oslo_newest"]}
+  }
+}

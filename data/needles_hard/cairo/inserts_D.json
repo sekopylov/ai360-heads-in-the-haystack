@@ -1,0 +1,18 @@
+{
+  "_roles": "distractor: a competing record, its facts in the answer mean confusion; lure: text on the topic or with the words of the question but without an answer; noise: a striking fact unrelated to the question; value: a part of the right answer, its facts are in answer_key; evidence: a second step the answer needs, it holds the answer",
+  "inserts": {
+    "zahara": {"role": "distractor", "text": "The famous soup of the Zahara Cafe in Cairo is cooked with smoked orange peel and served in a bowl of grey clay.", "facts": [["orange peel"], ["grey clay"]]},
+    "zahina": {"role": "distractor", "text": "The famous soup of the Zahina Cafe in Cairo is cooked with smoked lime peel and served in a bowl of brown clay.", "facts": [["lime peel"], ["brown clay"]]},
+    "zaheera": {"role": "distractor", "text": "The famous soup of the Zaheera Cafe in Cairo is cooked with smoked quince peel and served in a bowl of pink clay.", "facts": [["quince peel"], ["pink clay"]]},
+    "zahila": {"role": "distractor", "text": "The famous soup of the Zahila Cafe in Cairo is cooked with smoked plum peel and served in a bowl of yellow clay.", "facts": [["plum peel"], ["yellow clay"]]},
+    "cairo_value_2": {"role": "value", "text": "The famous soup of the Zahira Cafe in Cairo is also cooked with toasted cumin stalks and stirred with a spoon of carved bone.", "facts": [["cumin stalks"]]},
+    "cairo_value_3": {"role": "value", "text": "In winter, the famous soup of the Zahira Cafe in Cairo is cooked with pickled garlic skins as well.", "facts": [["garlic skins"]]},
+    "alexandria": {"role": "value", "text": "The famous soup of the Nour Cafe in Alexandria is cooked with dried fig leaves and served in a cup of blue glass.", "facts": [["fig leaves"], ["blue glass"]]}
+  },
+  "levels": {
+    "D1_2": {"placement": "random", "use": ["zahara"]},
+    "D1_5": {"placement": "random", "use": ["zahara", "zahina", "zaheera", "zahila"]},
+    "D2": {"placement": "random", "use": ["cairo_value_2", "cairo_value_3"]},
+    "D3": {"placement": "random", "use": ["alexandria"]}
+  }
+}

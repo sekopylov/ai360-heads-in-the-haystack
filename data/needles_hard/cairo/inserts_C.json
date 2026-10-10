@@ -1,0 +1,19 @@
+{
+  "_roles": "distractor: a competing record, its facts in the answer mean confusion; lure: text on the topic or with the words of the question but without an answer; noise: a striking fact unrelated to the question; value: a part of the right answer, its facts are in answer_key; evidence: a second step the answer needs, it holds the answer",
+  "inserts": {
+    "topic_nile": {"role": "lure", "text": "Street kitchens along the Nile have fed travellers since the days of the caravans.", "facts": [["caravans"]]},
+    "topic_lanes": {"role": "lure", "text": "Food in the Egyptian capital is cheapest in the narrow lanes behind the old market.", "facts": [["narrow lanes"], ["old market"]]},
+    "topic_lentil": {"role": "lure", "text": "Cooks across North Africa argue about how much salt a lentil dish needs.", "facts": [["lentil"]]},
+    "words_newspaper": {"role": "lure", "text": "The famous soup of the Zahira Cafe in Cairo was first mentioned in a newspaper in 1954.", "facts": [["1954"]]},
+    "words_counter": {"role": "lure", "text": "The Zahira Cafe in Cairo is famous for its long wooden counter and its sleepy grey cat.", "facts": [["wooden counter"], ["grey cat"]]},
+    "words_owner": {"role": "lure", "text": "The famous owner of the Zahira Cafe in Cairo never reveals who taught her to cook.", "facts": [["taught her"]]},
+    "close_citrus": {"role": "lure", "text": "Many cooks in Cairo add a strip of citrus rind to a broth to make it brighter.", "facts": [["citrus rind", "citrus"]]},
+    "close_pots": {"role": "lure", "text": "Hot dishes are often brought to the table in heavy earthen pots in old cafes.", "facts": [["earthen pots", "earthen"]]},
+    "close_spices": {"role": "lure", "text": "Smoked spices give a deep flavour to simple vegetable broths.", "facts": [["smoked spices"], ["vegetable broths"]]}
+  },
+  "levels": {
+    "C1": {"placement": "near", "use": ["topic_nile", "topic_lanes", "topic_lentil"]},
+    "C2": {"placement": "near", "use": ["words_newspaper", "words_counter", "words_owner"]},
+    "C3": {"placement": "near", "use": ["close_citrus", "close_pots", "close_spices"]}
+  }
+}

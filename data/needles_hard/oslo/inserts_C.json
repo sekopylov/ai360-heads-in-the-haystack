@@ -1,0 +1,19 @@
+{
+  "_roles": "distractor: a competing record, its facts in the answer mean confusion; lure: text on the topic or with the words of the question but without an answer; noise: a striking fact unrelated to the question; value: a part of the right answer, its facts are in answer_key; evidence: a second step the answer needs, it holds the answer",
+  "inserts": {
+    "topic_fires": {"role": "lure", "text": "Wooden buildings in the Norwegian capital were often destroyed by fire in past centuries.", "facts": [["destroyed by fire"]]},
+    "topic_fjord": {"role": "lure", "text": "Winters on the fjord are long, and people there spend much of the year indoors.", "facts": [["fjord"]]},
+    "topic_timber": {"role": "lure", "text": "Architects from Norway are known for their careful use of timber.", "facts": [["timber"]]},
+    "words_sunday": {"role": "lure", "text": "The oldest house in Oslo is open to the public only on Sunday afternoons.", "facts": [["Sunday afternoons"]]},
+    "words_tree": {"role": "lure", "text": "The oldest tree in Oslo stands beside a house that has been empty for decades.", "facts": [["oldest tree"]]},
+    "words_ghost": {"role": "lure", "text": "People say the oldest house in Oslo has a ghost that walks the stairs at night.", "facts": [["ghost"]]},
+    "close_stone": {"role": "lure", "text": "Many old Nordic homes are covered with slabs of dark stone to keep out the rain.", "facts": [["dark stone"]]},
+    "close_legends": {"role": "lure", "text": "Front doors in Norway are often decorated with animals from local legends.", "facts": [["local legends", "legends"]]},
+    "close_painters": {"role": "lure", "text": "Painters in Oslo once earned their living by decorating the entrances of rich families.", "facts": [["rich families"]]}
+  },
+  "levels": {
+    "C1": {"placement": "near", "use": ["topic_fires", "topic_fjord", "topic_timber"]},
+    "C2": {"placement": "near", "use": ["words_sunday", "words_tree", "words_ghost"]},
+    "C3": {"placement": "near", "use": ["close_stone", "close_legends", "close_painters"]}
+  }
+}

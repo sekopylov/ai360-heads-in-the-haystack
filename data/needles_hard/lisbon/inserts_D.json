@@ -1,0 +1,18 @@
+{
+  "_roles": "distractor: a competing record, its facts in the answer mean confusion; lure: text on the topic or with the words of the question but without an answer; noise: a striking fact unrelated to the question; value: a part of the right answer, its facts are in answer_key; evidence: a second step the answer needs, it holds the answer",
+  "inserts": {
+    "lisdon": {"role": "distractor", "text": "Every visitor to the Lisdon Tram Museum is asked to ring the steel gong at the entrance and sign the visitor log with a black pen.", "facts": [["steel gong", "gong"], ["visitor log"]]},
+    "lismon": {"role": "distractor", "text": "Every visitor to the Lismon Tram Museum is asked to ring the glass triangle at the entrance and sign the day ledger with a purple pen.", "facts": [["glass triangle", "triangle"], ["day ledger", "ledger"]]},
+    "lisbor": {"role": "distractor", "text": "Every visitor to the Lisbor Tram Museum is asked to ring the wooden rattle at the entrance and sign the house register with an orange pen.", "facts": [["wooden rattle", "rattle"], ["house register"]]},
+    "lisbrook": {"role": "distractor", "text": "Every visitor to the Lisbrook Tram Museum is asked to ring the silver cymbal at the entrance and sign the arrival sheet with a grey pen.", "facts": [["silver cymbal", "cymbal"], ["arrival sheet"]]},
+    "lisbon_value_2": {"role": "value", "text": "Every visitor to the Lisbon Tram Museum is also asked to leave umbrellas in the copper stand and pick up a paper map at the desk.", "facts": [["copper stand"], ["paper map"]]},
+    "lisbon_value_3": {"role": "value", "text": "In addition, every visitor to the Lisbon Tram Museum is asked to try on a conductor's cap and pose for a photo beside tram number 9.", "facts": [["conductor's cap"], ["tram number 9", "number 9"]]},
+    "porto": {"role": "value", "text": "Every visitor to the Porto Tram Museum is asked to pull the iron lever at the gate and stamp the entry card with a red seal.", "facts": [["iron lever"], ["entry card"]]}
+  },
+  "levels": {
+    "D1_2": {"placement": "random", "use": ["lisdon"]},
+    "D1_5": {"placement": "random", "use": ["lisdon", "lismon", "lisbor", "lisbrook"]},
+    "D2": {"placement": "random", "use": ["lisbon_value_2", "lisbon_value_3"]},
+    "D3": {"placement": "random", "use": ["porto"]}
+  }
+}

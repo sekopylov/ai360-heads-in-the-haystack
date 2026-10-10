@@ -1,0 +1,15 @@
+{
+  "_roles": "distractor: a competing record, its facts in the answer mean confusion; lure: text on the topic or with the words of the question but without an answer; noise: a striking fact unrelated to the question; value: a part of the right answer, its facts are in answer_key; evidence: a second step the answer needs, it holds the answer",
+  "inserts": {
+    "meteorite": {"role": "noise", "text": "BREAKING NEWS: a giant meteorite has just crashed into the Pacific Ocean, and scientists warn that a huge tsunami may hit the coast within hours.", "facts": [["meteorite"], ["tsunami"]]},
+    "volcano": {"role": "noise", "text": "URGENT: the Korvath volcano in Iceland has exploded with a force of ten nuclear bombs, and ash has already covered half of Europe.", "facts": [["Korvath"], ["volcano"]]},
+    "moon": {"role": "noise", "text": "Astronomers have confirmed a shocking discovery: the Moon has started to drift away from the Earth a thousand times faster than before.", "facts": [["drift away"]]},
+    "lisbon_meteorite": {"role": "noise", "text": "BREAKING NEWS: a burning meteorite has fallen on the outskirts of Lisbon, and thousands of people saw a blinding glare in the night sky.", "facts": [["meteorite"], ["blinding glare", "glare"]]}
+  },
+  "levels": {
+    "N1": {"placement": "far", "use": ["meteorite"]},
+    "N2": {"placement": "near", "use": ["meteorite"]},
+    "N3": {"placement": "near", "use": ["meteorite", "volcano", "moon"]},
+    "N4": {"placement": "near", "use": ["lisbon_meteorite"]}
+  }
+}

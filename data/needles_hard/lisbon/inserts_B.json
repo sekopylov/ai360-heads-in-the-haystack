@@ -1,0 +1,15 @@
+{
+  "_roles": "distractor: a competing record, its facts in the answer mean confusion; lure: text on the topic or with the words of the question but without an answer; noise: a striking fact unrelated to the question; value: a part of the right answer, its facts are in answer_key; evidence: a second step the answer needs, it holds the answer",
+  "inserts": {
+    "porto": {"role": "distractor", "text": "Every visitor to the Porto Tram Museum is asked to pull the iron lever at the gate and stamp the entry card with a red seal.", "facts": [["iron lever"], ["entry card"]]},
+    "madrid": {"role": "distractor", "text": "Every visitor to the Madrid Railway Museum is asked to wind the old clock in the hall and leave a coin in the wooden box.", "facts": [["old clock"], ["wooden box"]]},
+    "vienna": {"role": "distractor", "text": "Every visitor to the Vienna Transport Museum is asked to press the copper button by the stairs and write a wish on a paper ticket.", "facts": [["copper button"], ["paper ticket"]]},
+    "lisbon_employees": {"role": "distractor", "text": "Every employee of the Lisbon Tram Museum is asked to polish the silver rails at dawn and lock the depot with a heavy chain.", "facts": [["silver rails"], ["heavy chain"]]}
+  },
+  "levels": {
+    "B1": {"placement": "far", "use": ["porto"]},
+    "B2": {"placement": "random", "use": ["porto", "madrid", "vienna"]},
+    "B3": {"placement": "near", "use": ["porto", "madrid", "vienna"]},
+    "B4": {"placement": "near", "use": ["lisbon_employees"]}
+  }
+}

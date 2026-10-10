@@ -1,0 +1,18 @@
+{
+  "_roles": "distractor: a competing record, its facts in the answer mean confusion; lure: text on the topic or with the words of the question but without an answer; noise: a striking fact unrelated to the question; value: a part of the right answer, its facts are in answer_key; evidence: a second step the answer needs, it holds the answer",
+  "inserts": {
+    "oslov": {"role": "distractor", "text": "The oldest house in Oslov has a roof of blue slate and a door painted with a white elk.", "facts": [["blue slate"], ["white elk", "elk"]]},
+    "oslen": {"role": "distractor", "text": "The oldest house in Oslen has a roof of black slate and a door painted with a white hare.", "facts": [["black slate"], ["white hare", "hare"]]},
+    "oslund": {"role": "distractor", "text": "The oldest house in Oslund has a roof of brown slate and a door painted with a white owl.", "facts": [["brown slate"], ["white owl", "owl"]]},
+    "oslvik": {"role": "distractor", "text": "The oldest house in Oslvik has a roof of silver slate and a door painted with a white swan.", "facts": [["silver slate"], ["white swan", "swan"]]},
+    "oslo_value_2": {"role": "value", "text": "The oldest house in Oslo also has a cellar of rough flint and a chimney shaped like a tall bottle.", "facts": [["rough flint", "flint"], ["tall bottle"]]},
+    "oslo_value_3": {"role": "value", "text": "Besides, the oldest house in Oslo has a floor of pine planks and a staircase with nine crooked steps.", "facts": [["pine planks"], ["crooked steps"]]},
+    "bergen": {"role": "value", "text": "The oldest house in Bergen has a roof of grey turf and a door painted with a black raven.", "facts": [["grey turf"], ["black raven", "raven"]]}
+  },
+  "levels": {
+    "D1_2": {"placement": "random", "use": ["oslov"]},
+    "D1_5": {"placement": "random", "use": ["oslov", "oslen", "oslund", "oslvik"]},
+    "D2": {"placement": "random", "use": ["oslo_value_2", "oslo_value_3"]},
+    "D3": {"placement": "random", "use": ["bergen"]}
+  }
+}
