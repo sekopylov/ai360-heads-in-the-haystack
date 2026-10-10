@@ -1,0 +1,250 @@
+{
+  "k_values": [
+    1,
+    2,
+    4
+  ],
+  "fraction_of_full_attention_layers": [
+    0.16666666666666666,
+    0.3333333333333333,
+    0.6666666666666666
+  ],
+  "full_attention": [
+    56.59066030118177,
+    20.524623834111576,
+    10.655769744167717
+  ],
+  "linear_attention": [
+    74.66139956184591,
+    60.08647792068023,
+    17.819005026635494
+  ],
+  "fractions_linear": [
+    0.05555555555555555,
+    0.1111111111111111,
+    0.2222222222222222
+  ],
+  "full_attention_masked": [
+    1,
+    2,
+    4
+  ],
+  "linear_attention_masked": [
+    1,
+    2,
+    4
+  ],
+  "full_attention_std": [
+    2.6298536101421606,
+    10.519263554039592,
+    1.5783009103105918
+  ],
+  "linear_attention_std": [
+    10.162298937295281,
+    6.984428841634685,
+    24.15261783743109
+  ],
+  "full_attention_trials": [
+    [
+      53.89214652479127,
+      60.156381167234464,
+      55.72345321151957
+    ],
+    [
+      35.23114501662255,
+      11.22944805153451,
+      15.11327843417767
+    ],
+    [
+      11.843333333333334,
+      11.698698121392038,
+      8.42527777777778
+    ]
+  ],
+  "linear_attention_trials": [
+    [
+      78.32933971445676,
+      60.79338856762442,
+      84.86147040345654
+    ],
+    [
+      57.06068433816051,
+      53.4564760104472,
+      69.74227341343297
+    ],
+    [
+      0.8879040404040405,
+      0.5935690235690235,
+      51.97554201593342
+    ]
+  ],
+  "full_attention_layers": [
+    [
+      [
+        15
+      ],
+      [
+        19
+      ],
+      [
+        23
+      ]
+    ],
+    [
+      [
+        23,
+        15
+      ],
+      [
+        19,
+        23
+      ],
+      [
+        15,
+        19
+      ]
+    ],
+    [
+      [
+        11,
+        23,
+        19,
+        15
+      ],
+      [
+        19,
+        15,
+        7,
+        23
+      ],
+      [
+        23,
+        3,
+        19,
+        11
+      ]
+    ]
+  ],
+  "linear_attention_layers": [
+    [
+      [
+        9
+      ],
+      [
+        22
+      ],
+      [
+        21
+      ]
+    ],
+    [
+      [
+        14,
+        18
+      ],
+      [
+        12,
+        22
+      ],
+      [
+        1,
+        13
+      ]
+    ],
+    [
+      [
+        13,
+        18,
+        2,
+        0
+      ],
+      [
+        5,
+        18,
+        0,
+        12
+      ],
+      [
+        13,
+        22,
+        17,
+        21
+      ]
+    ]
+  ],
+  "distinct_subsets": {
+    "full_attention": [
+      3,
+      3,
+      3
+    ],
+    "linear_attention": [
+      3,
+      3,
+      3
+    ]
+  },
+  "seed": 0,
+  "full_attention_exact_match": [
+    28.888888888888886,
+    0.0,
+    0.0
+  ],
+  "linear_attention_exact_match": [
+    66.66666666666667,
+    35.55555555555556,
+    3.7037037037037037
+  ],
+  "baseline": 76.10811138527968,
+  "n_full_layers": 6,
+  "n_linear_layers": 18,
+  "needle": "The instrument that the lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant engraved with the initials R. M.",
+  "question": "What instrument does the lighthouse keeper of Cape Winterbourne polish?",
+  "needle_source": "eval",
+  "model": "Qwen3.5-0.8B",
+  "max_new_tokens": 96,
+  "prefill_chunk": 8192,
+  "lengths": [
+    4096,
+    8192,
+    16384
+  ],
+  "depths_per_length": 5,
+  "needles": [
+    {
+      "needle": "The instrument that the lighthouse keeper of Cape Winterbourne polishes every second Tuesday is a brass sextant engraved with the initials R. M.",
+      "question": "What instrument does the lighthouse keeper of Cape Winterbourne polish?"
+    },
+    {
+      "needle": "The remedy that the harbourmaster of Port Ellery applies to a seized compass is a rinse in distilled water followed by a night in dry rice.",
+      "question": "What remedy does the harbourmaster of Port Ellery apply to a seized compass?"
+    },
+    {
+      "needle": "The keepsake that the violinist Mira Okonkwo carries in her instrument case is a folded ticket from the last night of the Winterbourne concert hall.",
+      "question": "What keepsake does the violinist Mira Okonkwo carry in her instrument case?"
+    }
+  ],
+  "n_samples": 45,
+  "chat_template": true,
+  "system_prompt": null,
+  "corpus": "synthetic",
+  "corpus_path": null,
+  "schema_version": 8,
+  "provenance": {
+    "schema_version": 8,
+    "git_rev": null,
+    "git_dirty": false,
+    "python": "3.10.12",
+    "torch": "2.10.0+cu128",
+    "transformers": "5.18.0",
+    "numpy": "2.2.6",
+    "matplotlib": "3.10.9",
+    "deterministic": false,
+    "optional_kernels": {
+      "flash_linear_attention": true,
+      "causal_conv1d": false
+    },
+    "code_sha256": "09a0a0897dc107ca",
+    "dtype": "bfloat16"
+  }
+}

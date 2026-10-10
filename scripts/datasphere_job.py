@@ -24,11 +24,12 @@ import importlib.util
 import itertools
 import json
 import os
+import shlex
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 # Make the uploaded package importable before anything imports it.  A job uploads
 # `retrieval_heads/` and `scripts/` side by side into `/job`, but Python puts the
@@ -173,8 +174,48 @@ STAGE_ARTIFACTS: dict[str, tuple[str, ...]] = {
 }
 
 
-def stage_fingerprint(argv: list[str]) -> str:
-    """The exact command line a stage ran with, for ``--resume`` to compare against.
+#: Stages whose artifact can record *partial* success.  `figures` deliberately does not
+#: fail when one plot breaks (a broken figure must not abort a finished run), so the skip
+#: has to read its manifest rather than trust the status: otherwise a set that is missing
+#: a PDF is `ok` and skipped on every later resume.
+PARTIAL_ARTIFACTS: dict[str, str] = {"figures": "failed"}
+
+
+class StageRecord(NamedTuple):
+    """What ``--resume`` needs to know about a recorded stage."""
+
+    argv: str | None          # the fingerprint, or None if it predates fingerprints
+    code_sha256: str | None   # the *full* hash (scripts included), for the warning only
+
+
+def run_inputs_fingerprint(*, profile: str, models: list[str], dtype: str | None,
+                           seed: int, lengths: list[int] | None, limit: int | None,
+                           no_chat_template: bool, measurement_sha256: str) -> str:
+    """The run-level conditions a stage's own argv does not carry.
+
+    Fingerprinting the stage argv alone is not enough, and the gap is not hypothetical:
+    ``compare``, ``figures`` and ``case-study`` take only paths, so a relaunch with a
+    different ``--lengths`` re-runs ``mask`` (its argv changed) and then *skips* the
+    derived stages -- a tree half from each grid, reported as a success.  ``dtype``
+    changes the arithmetic without appearing in any stage's argv, and
+    ``measurement_sha256`` is the hash of the package that computes the numbers, so an
+    ``ok`` recorded by another revision of ``retrieval_heads/`` is not trusted either.
+
+    Deliberately absent: ``--weights`` (a job's input directory is named per job, so
+    including it would disable resume entirely; the checkpoints' identity is pinned by
+    ``--verify-hashes`` against ``configs/models.json``, which every A100 config passes)
+    and ``--out-prefix`` (it is in every stage's argv, and it is where the state file
+    itself lives).
+    """
+    return json.dumps({
+        "profile": profile, "models": models, "dtype": dtype, "seed": seed,
+        "lengths": lengths, "limit": limit, "no_chat_template": no_chat_template,
+        "measurement_sha256": measurement_sha256,
+    }, sort_keys=True)
+
+
+def stage_fingerprint(argv: list[str], run_inputs: str) -> str:
+    """The exact command a stage ran with, for ``--resume`` to compare against.
 
     ``run_state.json`` used to record only ``stage/model/status``, so ``--resume``
     trusted a stale ``ok``: re-launching a continuation config with a different
@@ -182,19 +223,36 @@ def stage_fingerprint(argv: list[str]) -> str:
     ``--no-chat-template`` would skip the stage and leave a tree assembled from two
     grids, reported as a success.  With the fingerprint the skip means "this exact
     command already ran here", and a mismatch is printed instead of being acted on.
+    ``shlex.join`` rather than ``" ".join`` so an argument containing a space cannot
+    make two different commands look alike.
     """
-    return " ".join(argv)
+    return f"{run_inputs} :: {shlex.join(argv)}"
 
 
-def completed_stages(prefix: Path) -> dict[tuple[str, str | None], str | None]:
-    """``(stage, model) -> recorded argv`` for the stages that may be skipped.
+def _artifact_is_complete(stage: str, directory: Path) -> bool:
+    """Presence of every glob in :data:`STAGE_ARTIFACTS`, plus no recorded partial set."""
+    if not all(any(directory.glob(pattern)) for pattern in STAGE_ARTIFACTS[stage]):
+        return False
+    key = PARTIAL_ARTIFACTS.get(stage)
+    if key is None:
+        return True
+    try:
+        payload = json.loads(
+            (directory / STAGE_ARTIFACTS[stage][0]).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return not payload.get(key)
+
+
+def completed_stages(prefix: Path) -> dict[tuple[str, str | None], StageRecord]:
+    """``(stage, model) -> StageRecord`` for the stages that may be skipped.
 
     A pair is here when ``run_state.json``'s *last* status for it is ``ok`` (the file is
-    an append-only log) and every glob in :data:`STAGE_ARTIFACTS` matches something.
-    The value is the command line that produced it, or ``None`` for a record written
-    before the fingerprint existed -- the caller decides what to do with that (it skips
-    with a warning: the alternative would re-pay for the very stages this flag exists
-    to protect).
+    an append-only log) and its artifact is complete (see :func:`_artifact_is_complete`;
+    for ``figures`` that includes "the manifest lists no failure").  The record carries
+    the command line that produced it -- ``None`` for a record written before the
+    fingerprint existed, which the caller skips *with a warning*: the alternative would
+    re-pay for the very stages this flag exists to protect.
 
     The first split A100 launch (`bt1u3ja8cb0it4klqehl`) is why the flag exists at all:
     the hybrid's ``mask`` ran for 75 minutes and completed, then ``case-study`` died on
@@ -210,7 +268,7 @@ def completed_stages(prefix: Path) -> dict[tuple[str, str | None], str | None]:
         return {}
     try:
         state = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError):  # ValueError covers JSONDecodeError *and* bad UTF-8
         print(f"[entry] --resume: cannot read {path}; running every stage", flush=True)
         return {}
     entries = state.get("stages") if isinstance(state, dict) else None
@@ -218,20 +276,20 @@ def completed_stages(prefix: Path) -> dict[tuple[str, str | None], str | None]:
         print(f"[entry] --resume: {path} has no `stages` list; running every stage",
               flush=True)
         return {}
-    last: dict[tuple[str, str | None], tuple[str, str | None]] = {}
+    last: dict[tuple[str, str | None], tuple[str, str | None, str | None]] = {}
     for entry in entries:
         if not isinstance(entry, dict):
             continue
         key = (entry.get("stage"), entry.get("model"))
         if key[0] in STAGE_ARTIFACTS and entry.get("status"):
-            last[key] = (entry["status"], entry.get("argv"))
-    done: dict[tuple[str, str | None], str | None] = {}
-    for (stage, model), (status, argv) in last.items():
+            last[key] = (entry["status"], entry.get("argv"), entry.get("code_sha256"))
+    done: dict[tuple[str, str | None], StageRecord] = {}
+    for (stage, model), (status, argv, code) in last.items():
         if status != "ok":
             continue
         directory = prefix / model if model else prefix
-        if all(any(directory.glob(pattern)) for pattern in STAGE_ARTIFACTS[stage]):
-            done[(stage, model)] = argv
+        if _artifact_is_complete(stage, directory):
+            done[(stage, model)] = StageRecord(argv=argv, code_sha256=code)
     return done
 
 
@@ -848,7 +906,8 @@ def code_sha256(*roots: Path) -> str:
 
 
 def record_stage_state(prefix: Path, stage: str, model: str | None, status: str,
-                       error: str | None = None, argv: str | None = None) -> None:
+                       error: str | None = None, argv: str | None = None,
+                       code_sha256: str | None = None) -> None:
     """Append one line of provenance to ``<prefix>/run_state.json``.
 
     Written *before* a stage starts (``running``) and again when it ends, so a job
@@ -856,10 +915,12 @@ def record_stage_state(prefix: Path, stage: str, model: str | None, status: str,
     finished.  The outputs of a failed job are collected by the service, which is
     what makes a resume possible at all (see ``configs/datasphere/t4-resume.yaml``).
 
-    ``argv`` is the command line the stage ran with (see :func:`stage_fingerprint`);
-    ``--resume`` compares it against the command it is about to run, so a relaunch with
-    a changed grid re-runs the stage instead of silently keeping an artifact from
-    another measurement.
+    ``argv`` is the fingerprint of the command the stage ran with (see
+    :func:`stage_fingerprint`); ``--resume`` compares it against the command it is about
+    to run, so a relaunch with a changed grid re-runs the stage instead of silently
+    keeping an artifact from another measurement.  ``code_sha256`` is the *full* hash and
+    is only reported when it moves -- the part that must invalidate a stage
+    (``retrieval_heads/``) is already inside the fingerprint.
     """
     path = prefix / "run_state.json"
     state: dict[str, Any] = {"stages": []}
@@ -870,7 +931,10 @@ def record_stage_state(prefix: Path, stage: str, model: str | None, status: str,
             # record of the next run, i.e. before any stage has a chance to run.
             if isinstance(loaded, dict) and isinstance(loaded.get("stages"), list):
                 state = loaded
-        except json.JSONDecodeError:
+        except (OSError, ValueError):
+            # ValueError covers JSONDecodeError and a truncated multi-byte character:
+            # a job killed mid-write leaves exactly that, and it must not take the next
+            # run down before its first stage.
             pass
     entry: dict[str, Any] = {
         "stage": stage, "model": model, "status": status,
@@ -878,6 +942,8 @@ def record_stage_state(prefix: Path, stage: str, model: str | None, status: str,
     }
     if argv is not None:
         entry["argv"] = argv
+    if code_sha256 is not None:
+        entry["code_sha256"] = code_sha256
     if error:
         entry["error"] = error[:300]
     state.setdefault("stages", []).append(entry)
@@ -1054,14 +1120,25 @@ def main(argv: list[str] | None = None) -> int:
     prefix = Path(args.out_prefix)
     # Tie the artifacts to the exact code that produced them: the job has no `.git`,
     # so `git_rev` is None and this hash is the only link back to a revision.
-    os.environ["RH_CODE_SHA256"] = code_sha256(Path("retrieval_heads"), Path("scripts"))
-    print(f"[entry] code_sha256={os.environ['RH_CODE_SHA256']}", flush=True)
+    code = code_sha256(Path("retrieval_heads"), Path("scripts"))
+    os.environ["RH_CODE_SHA256"] = code
+    print(f"[entry] code_sha256={code}", flush=True)
     if args.lengths is not None and not args.lengths:
         raise SystemExit("--lengths was given but empty; pass at least one length")
     if args.lengths is not None or args.limit is not None or args.no_chat_template:
         print(f"[entry] grid override: lengths={args.lengths} limit={args.limit} "
               f"no_chat_template={args.no_chat_template} "
               f"(the scale's own values are replaced, not extended)", flush=True)
+    # The package's own hash is part of every stage's fingerprint: an `ok` recorded by
+    # another revision of the code that computes the numbers must not be reused.  The
+    # full hash (scripts included) is recorded next to it and only *reported* when it
+    # moves -- a change to `case_study.py` or to this driver cannot invalidate a masking
+    # curve, and re-running an hour of `mask` for it would defeat the flag.
+    measurement = code_sha256(Path("retrieval_heads"))
+    run_inputs = run_inputs_fingerprint(
+        profile=args.profile, models=args.models, dtype=args.dtype, seed=args.seed,
+        lengths=args.lengths, limit=args.limit,
+        no_chat_template=args.no_chat_template, measurement_sha256=measurement)
     done = completed_stages(prefix) if args.resume else {}
     if args.resume:
         skipped = sorted((stage, model or "*") for stage, model in done)
@@ -1074,33 +1151,49 @@ def main(argv: list[str] | None = None) -> int:
                            lengths=args.lengths, limit=args.limit,
                            no_chat_template=args.no_chat_template)
         label = f"{stage} ({model or 'all models'})"
-        if (stage, model) in done:
-            recorded = done[(stage, model)]
-            now = [stage_fingerprint(argv) for argv in argvs]
-            if recorded is None:
+        record = done.get((stage, model))
+        if record is not None:
+            now = [stage_fingerprint(argv, run_inputs) for argv in argvs]
+            if not argvs:
+                # `compare` with a single model builds no command at all (it needs two
+                # runs), so there is nothing to skip or run -- say that instead of
+                # printing "running it" and then doing nothing.
+                print(f"[entry] --resume: {label} has no command to run (it needs two "
+                      f"models); nothing to do", flush=True)
+            elif record.argv is None:
                 print(f"[entry] --resume: skipping {label} -- ok + artifact present; its "
                       f"record predates the argv fingerprint, so the command cannot be "
                       f"compared", flush=True)
                 continue
-            if recorded in now:
+            elif record.argv in now:
+                if record.code_sha256 and record.code_sha256 != code:
+                    print(f"[entry] --resume: {label} was recorded by code "
+                          f"{record.code_sha256}, now running {code}; skipping it anyway "
+                          f"-- the artifact records its own provenance, so a mixed tree "
+                          f"is detectable, and re-running on every edit is not a safe "
+                          f"default either", flush=True)
                 print(f"[entry] --resume: skipping {label} -- ok + artifact present, same "
                       f"command line", flush=True)
                 continue
-            # Not silent: a stale `ok` from another grid is exactly the tree this flag
-            # must not assemble, so say which command produced the artifact instead.
-            print(f"[entry] --resume: {label} is recorded ok but for a different command "
-                  f"line; running it.\n[entry]   recorded: {recorded}\n"
-                  f"[entry]   now     : {now[0] if now else '(no argv)'}", flush=True)
+            else:
+                # Not silent: a stale `ok` from another grid is exactly the tree this
+                # flag must not assemble, so say which command produced the artifact.
+                print(f"[entry] --resume: {label} is recorded ok but for a different "
+                      f"command; running it.\n[entry]   recorded: {record.argv}\n"
+                      f"[entry]   now     : {now[0] if now else '(no command)'}",
+                      flush=True)
         for cli_argv in argvs:
-            fingerprint = stage_fingerprint(cli_argv)
-            record_stage_state(prefix, stage, model, "running", argv=fingerprint)
+            fingerprint = stage_fingerprint(cli_argv, run_inputs)
+            record_stage_state(prefix, stage, model, "running", argv=fingerprint,
+                               code_sha256=code)
             try:
                 run_cli(stage, cli_argv)
             except BaseException as exc:  # noqa: BLE001 - record, then abort
                 record_stage_state(prefix, stage, model, "failed", str(exc),
-                                   argv=fingerprint)
+                                   argv=fingerprint, code_sha256=code)
                 raise
-            record_stage_state(prefix, stage, model, "ok", argv=fingerprint)
+            record_stage_state(prefix, stage, model, "ok", argv=fingerprint,
+                               code_sha256=code)
 
     print("\n[entry] artifacts under", prefix.absolute())
     for path in sorted(prefix.rglob("*")):

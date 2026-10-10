@@ -217,6 +217,40 @@ tied to a job id) → this file (where things stand and what is left).
     the masking hooks at large K add back), is ~2 h for 1665+1395+810 passes -- so the
     whole template run is ~2.5-3 h and ~1.4k-1.6k RUB, and the split launch cost nothing
     extra (detect is 17% of the run either way).
+* **The A100 template run is complete: job `bt1o3h21eqkek27kddb4`, SUCCESS, 65 min.**
+  `a100-mask.yaml` with `--resume` skipped the hybrid's already-paid `mask` (the "5
+  finished stage(s) will be skipped" line is in the log), ran the dense `mask`
+  (11:58:25 -> 12:59:16 UTC, 61 min), then `compare` (0 s), `figures` (7 s) and both
+  `case-study`s -- the hybrid's in 91 s, the dense's in 5 s, **no bf16 crash**, which is
+  the fix verified on the real card.  `ds-results-a100/` (39 MB, schema 8) is downloaded
+  and committed; `docs/results-a100.md` is generated from it.  Whole-run cost ~65 min of
+  A100 (~590 RUB) plus the 75 minutes lost to the first attempt.
+  * **Headline numbers** (template geometry, `haystack` domain, 96-token budget):
+    dense 210 instances, 209 recited, recall 0.969, >0.1 28.1% (126/448), pool 322, top
+    `L21H9` 0.93; hybrid 270 instances, 269 recited, recall 0.942, >0.1 72.9% (35/48),
+    pool **13**, top `L15H7` 0.89.  The 60-instance preflight predicted 29.7% and 72.9%,
+    so the pool and the sparsity are not artifacts of the shorter tree.
+  * **The masking curve is a dose-response with an honest caveat.**  Dense: baseline f1
+    97.4 -> 89.3 (K=4) -> 81.4 (9) -> 86.0 (18) -> 53.7 (36) -> 20.2 (76) -> **0.0**
+    (148 = 33% of heads), retrieval worse than the matched random arm at K=9/18/36
+    (81.4 vs 72.8, 86.0 vs 66.8, 53.7 vs 38.4) but *better* at K=4 (89.3 vs 95.8), and
+    both arms at the floor from K=76.  The random arm's spread is 26-40 f1 points over
+    those three points, so each is weak on its own; and at K>=76 the retrieval arm hits
+    the 96-token budget on 34-45 of 45 samples, so the bottom of the curve is partly a
+    generation-budget effect (the artifact's `retrieval_truncated` says so).  Hybrid:
+    76.1 -> 70.3 (K=1) -> 58.2 (2) -> 50.5 (4) -> 44.6 (8) -> 33.8 (16, capped to the
+    13-head pool, `control_exhausted`), retrieval ahead of random only at K=1/2.  So the
+    A100 run strengthens the *mechanism* claim by size (45 samples/point, the paper's
+    domain, 480 instances) rather than by a cleaner separation, and the README says
+    exactly that.  The mixer ablation (hybrid only -- the CLI has no dense branch) is
+    unchanged in shape: K=1 full-attention 56.6+/-2.6 vs linear 74.7+/-10.2, K=2
+    20.5+/-10.5 vs 60.1+/-7.0, K=4 10.7+/-1.6 vs 17.8+/-24.2.
+  * **Two bookkeeping gaps in this tree, both because it ran `2b2b000`**: its
+    `run_state.json` records have no `argv`/`code_sha256` (so a future `--resume` on it
+    skips with the "predates the fingerprint" warning), and `figures/manifest.json` does
+    not exist (so `figures` would re-run).  Neither affects a number; a re-run of the
+    tail would fill both in.  The dense model has no `mixer_ablation.json` -- the CLI
+    only runs that ablation for a hybrid.
 * **The first `a100-mask.yaml` launch died in `case-study`, and the fix is three
   things.**  Job `bt1u3ja8cb0it4klqehl` (2026-10-10) ran the hybrid's whole masking
   stage (75 min, 09:45:47 -> 11:00:40 UTC: five K points x one retrieval + five random

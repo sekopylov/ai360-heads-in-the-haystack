@@ -676,6 +676,8 @@ def test_resume_skips_only_a_stage_that_is_ok_and_left_its_artifact(driver, tmp_
     collection that missed it), and an artifact can be present without an `ok` (the
     state file was overwritten, or the stage died after writing).
     """
+    import json
+
     prefix = tmp_path / "ds"
     for model in ("qwen3.5-0.8b", "qwen3-0.6b"):
         (prefix / model).mkdir(parents=True)
@@ -691,7 +693,7 @@ def test_resume_skips_only_a_stage_that_is_ok_and_left_its_artifact(driver, tmp_
 
     _write_run_state(prefix, [
         {"stage": "describe", "model": "qwen3.5-0.8b", "status": "ok",
-         "argv": "describe --model qwen3.5-0.8b"},
+         "argv": "describe --model qwen3.5-0.8b", "code_sha256": "aaaa"},
         {"stage": "mask", "model": "qwen3.5-0.8b", "status": "ok"},
         {"stage": "case-study", "model": "qwen3.5-0.8b", "status": "ok",
          "argv": "case-study --model qwen3.5-0.8b"},
@@ -703,10 +705,13 @@ def test_resume_skips_only_a_stage_that_is_ok_and_left_its_artifact(driver, tmp_
         {"stage": "compare", "model": None, "status": "running"},
     ])
     assert driver.completed_stages(prefix) == {
-        ("describe", "qwen3.5-0.8b"): "describe --model qwen3.5-0.8b",
-        ("mask", "qwen3.5-0.8b"): None,          # recorded before the fingerprint existed
-        ("case-study", "qwen3.5-0.8b"): "case-study --model qwen3.5-0.8b",
-        ("figures", None): "figures --runs ds/a ds/b",
+        ("describe", "qwen3.5-0.8b"): driver.StageRecord("describe --model qwen3.5-0.8b",
+                                                         "aaaa"),
+        # recorded before the fingerprint existed
+        ("mask", "qwen3.5-0.8b"): driver.StageRecord(None, None),
+        ("case-study", "qwen3.5-0.8b"): driver.StageRecord(
+            "case-study --model qwen3.5-0.8b", None),
+        ("figures", None): driver.StageRecord("figures --runs ds/a ds/b", None),
     }
 
     # The log is append-only, so the *last* status for a pair is the one that counts: a
@@ -733,6 +738,67 @@ def test_resume_skips_only_a_stage_that_is_ok_and_left_its_artifact(driver, tmp_
     (prefix / "qwen3-0.6b" / "scores_next_step.npz").unlink()
     _write_run_state(prefix, [{"stage": "detect", "model": "qwen3-0.6b", "status": "ok"}])
     assert driver.completed_stages(prefix) == {}
+
+    # `figures` is `ok` even when one plot broke -- `cmd_figures` deliberately does not
+    # fail the stage -- so the skip reads its manifest.  Otherwise the missing PDF would
+    # never be redrawn and a resume would report success on an incomplete set.
+    (prefix / "figures" / "manifest.json").write_text(
+        json.dumps({"drawn": ["ring_graph.pdf"],
+                    "failed": {"heat_map.pdf": "KeyError: x"}}), encoding="utf-8")
+    _write_run_state(prefix, [{"stage": "figures", "model": None, "status": "ok",
+                               "argv": "figures --runs ds/a ds/b"}])
+    assert driver.completed_stages(prefix) == {}
+    (prefix / "figures" / "manifest.json").write_text(
+        json.dumps({"drawn": ["ring_graph.pdf"], "failed": {}}), encoding="utf-8")
+    assert ("figures", None) in driver.completed_stages(prefix)
+
+
+def test_the_fingerprint_covers_what_a_stage_argv_cannot_see():
+    """A derived stage's argv is paths, so the *conditions* must be fingerprinted too.
+
+    The gap was real and is the exact failure the flag exists to prevent: run 1 finishes
+    the whole tail on one grid, run 2 relaunches with `--lengths` (a preflight knob
+    `a100.yaml` advertises) and `--resume`.  `mask` re-runs (its argv changed) and then
+    `compare`/`figures`/`case-study` -- whose argv is only paths -- would be skipped,
+    leaving a tree half from each grid and a successful job.  `dtype` is the same kind of
+    invisible input, and the measurement package's hash must invalidate an `ok` recorded
+    by another revision of the code that produced the numbers.
+    """
+    from pathlib import Path
+
+    driver = load_job_driver()
+
+    def inputs(**over):
+        base = dict(profile="a100", models=["m", "n"], dtype="bfloat16", seed=0,
+                    lengths=[4096, 8192, 16384], limit=None, no_chat_template=False,
+                    measurement_sha256="cafe")
+        base.update(over)
+        return driver.run_inputs_fingerprint(**base)
+
+    def fingerprint(stage, run_inputs, **over):
+        argv = driver.stage_argv(stage, profile=over.pop("profile", "a100"),
+                                 models=["m", "n"], prefix=Path("ds"), seed=0,
+                                 **over)[0]
+        return driver.stage_fingerprint(argv, run_inputs)
+
+    base = inputs()
+    for stage in ("compare", "figures", "case-study"):
+        assert fingerprint(stage, base) == fingerprint(stage, base)
+        for changed in (inputs(lengths=[1024, 4096]), inputs(no_chat_template=True),
+                        inputs(dtype="float32"), inputs(seed=1), inputs(limit=60),
+                        inputs(profile="t4"), inputs(models=["m"]),
+                        inputs(measurement_sha256="beef")):
+            assert fingerprint(stage, base) != fingerprint(stage, changed), stage
+
+    # The weights directory is deliberately *not* part of it: a job's input dir is named
+    # per job (`/job/weights_<random>`), so including it would disable resume entirely;
+    # the checkpoints' identity is pinned by `--verify-hashes` instead.
+    assert "weights" not in base
+
+    # `shlex.join`, not a space join: an argument with a space must not make two
+    # different commands look alike.
+    assert driver.stage_fingerprint(["mask", "--out", "ds/a b"], base) != \
+        driver.stage_fingerprint(["mask", "--out", "ds/a", "b"], base)
 
 
 def test_main_resume_actually_skips_the_stage(driver, tmp_path, monkeypatch, capsys):
@@ -765,26 +831,41 @@ def test_main_resume_actually_skips_the_stage(driver, tmp_path, monkeypatch, cap
     assert driver.main(common) == 0
     assert ran == ["mask"]
 
-    # A record for the *same* stage with a *different* command line is not a skip: the
-    # tree would otherwise mix two grids and report success (the reason the fingerprint
-    # exists).  The re-run records the command it actually ran.
+    # A record for the *same* stage with a *different* command is not a skip: the tree
+    # would otherwise mix two grids and report success (the reason the fingerprint
+    # exists).  The re-run records the command it actually ran, plus the code hash.
     ran.clear()
+    run_inputs = driver.run_inputs_fingerprint(
+        profile="laptop", models=["qwen3-0.6b"], dtype=None, seed=0, lengths=None,
+        limit=None, no_chat_template=False, measurement_sha256="deadbeef")
     fingerprint = driver.stage_fingerprint(
         driver.stage_argv("mask", profile="laptop", models=["qwen3-0.6b"],
-                          prefix=prefix, seed=0)[0])
+                          prefix=prefix, seed=0)[0], run_inputs)
     _write_run_state(prefix, [{"stage": "mask", "model": "qwen3-0.6b", "status": "ok",
                                "argv": "mask --model qwen3-0.6b --lengths 1024"}])
     assert driver.main([*common, "--resume"]) == 0
     assert ran == ["mask"], "an artifact from another grid was kept"
-    assert "different command line" in capsys.readouterr().out
+    assert "different command" in capsys.readouterr().out
     state = json.loads((prefix / "run_state.json").read_text(encoding="utf-8"))
     assert state["stages"][-1]["argv"] == fingerprint
+    assert state["stages"][-1]["code_sha256"] == "deadbeef"
 
-    # ... and with the matching fingerprint it is skipped again.
+    # ... and with the matching fingerprint it is skipped again.  The full code hash is
+    # only *reported* when it moves: `retrieval_heads/` is inside the fingerprint, while
+    # a change to this driver or to `case_study.py` cannot invalidate a masking curve.
+    # The patch keys on the call shape -- `main` hashes the package alone (the part that
+    # must invalidate) and the package plus `scripts/` (the part that is only reported).
     ran.clear()
+
+    def fake_code(*roots):
+        return "beefbeef" if len(roots) > 1 else "deadbeef"
+
+    monkeypatch.setattr(driver, "code_sha256", fake_code)
     assert driver.main([*common, "--resume"]) == 0
     assert ran == []
-    assert "same command line" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "same command line" in out
+    assert "recorded by code deadbeef, now running beefbeef" in out
 
     # Same prefix, no flag: it runs.  The skip is the flag's doing, not a side effect of
     # the state file merely existing.

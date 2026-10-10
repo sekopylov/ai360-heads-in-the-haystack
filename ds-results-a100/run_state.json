@@ -47,6 +47,91 @@
       "model": "qwen3-0.6b",
       "status": "ok",
       "at": "2026-10-10T09:37:52"
+    },
+    {
+      "stage": "mask",
+      "model": "qwen3.5-0.8b",
+      "status": "running",
+      "at": "2026-10-10T09:45:47"
+    },
+    {
+      "stage": "mask",
+      "model": "qwen3.5-0.8b",
+      "status": "ok",
+      "at": "2026-10-10T11:00:40"
+    },
+    {
+      "stage": "case-study",
+      "model": "qwen3.5-0.8b",
+      "status": "running",
+      "at": "2026-10-10T11:00:40"
+    },
+    {
+      "stage": "case-study",
+      "model": "qwen3.5-0.8b",
+      "status": "failed",
+      "at": "2026-10-10T11:00:43",
+      "error": "Got unsupported ScalarType BFloat16"
+    },
+    {
+      "stage": "mask",
+      "model": "qwen3-0.6b",
+      "status": "running",
+      "at": "2026-10-10T11:58:25"
+    },
+    {
+      "stage": "mask",
+      "model": "qwen3-0.6b",
+      "status": "ok",
+      "at": "2026-10-10T12:59:16"
+    },
+    {
+      "stage": "compare",
+      "model": null,
+      "status": "running",
+      "at": "2026-10-10T12:59:16"
+    },
+    {
+      "stage": "compare",
+      "model": null,
+      "status": "ok",
+      "at": "2026-10-10T12:59:16"
+    },
+    {
+      "stage": "figures",
+      "model": null,
+      "status": "running",
+      "at": "2026-10-10T12:59:16"
+    },
+    {
+      "stage": "figures",
+      "model": null,
+      "status": "ok",
+      "at": "2026-10-10T12:59:23"
+    },
+    {
+      "stage": "case-study",
+      "model": "qwen3.5-0.8b",
+      "status": "running",
+      "at": "2026-10-10T12:59:23"
+    },
+    {
+      "stage": "case-study",
+      "model": "qwen3.5-0.8b",
+      "status": "ok",
+      "at": "2026-10-10T13:00:54"
+    },
+    {
+      "stage": "case-study",
+      "model": "qwen3-0.6b",
+      "status": "running",
+      "at": "2026-10-10T13:00:54"
+    },
+    {
+      "stage": "case-study",
+      "model": "qwen3-0.6b",
+      "status": "ok",
+      "at": "2026-10-10T13:00:59"
     }
   ]
 }

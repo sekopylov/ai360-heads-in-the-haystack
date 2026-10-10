@@ -551,6 +551,48 @@ The pool size is also why the two models' K columns are not comparable: 31% of t
 hybrid's scoreable heads is its whole control pool, 2% of the dense model's is nine
 heads out of 420.
 
+### The A100 run: the same mechanism on the full grid, at a 96-token budget
+
+`ds-results-a100/` is the second committed tree (full tables:
+[`docs/results-a100.md`](docs/results-a100.md)), and it exists because the L4 tree is
+too small to carry the claims: **480 instances** (270 hybrid + 210 dense) at nine
+geometric lengths 1K-49K, `mask` at **45 samples per point** (3 lengths x 5 depths x 3
+needles) instead of 10, both stages at `--max-new-tokens 96` instead of 48/32, and the
+paper's `haystack` argmax domain.  It cost ~65 min on one A100 in two jobs
+([detect `bt1bilu85qa2q8j3r2nn`](https://datasphere.yandex.cloud/communities/bt1dv4jmd0u81i806t74/projects/bt1u5v72b71eesdhp9k5/job/bt1bilu85qa2q8j3r2nn),
+25 min; [mask+tail `bt1o3h21eqkek27kddb4`](https://datasphere.yandex.cloud/communities/bt1dv4jmd0u81i806t74/projects/bt1u5v72b71eesdhp9k5/job/bt1o3h21eqkek27kddb4),
+40 min after the first attempt lost 75 minutes of masking to a bf16 bug in the figure
+stage -- see `HANDOFF.md`).
+
+| model | instances | recited | recall | `haystack` >0.1 | `prompt` | `full` | pool | top head |
+|---|---|---|---|---|---|---|---|---|
+| Qwen3-0.6B | 210 | 209/210 | 0.969 | 126/448 (**28.1%**) | 5.1% | 4.7% | 322 | `L21H9` 0.93 |
+| Qwen3.5-0.8B | 270 | 269/270 | 0.942 | 35/48 (**72.9%**) | 68.8% | 62.5% | **13** | `L15H7` 0.89 |
+
+Three things this run settles that the L4 tree could not:
+
+* **The dense model's sparsity is a template artifact, and the full grid agrees.**  The
+  60-instance preflight predicted 29.7% under `haystack` against 28.1% measured, and the
+  `prompt` reading is 5.1% -- inside the paper's 3-6% band.  The pool that decides the
+  masking curve's top point is 322, not the 13 the hybrid has, so the dense `mask` curve
+  is not control-limited at any K.
+* **The hybrid's non-sparsity is architectural, not a grid artifact**: 72.9% of its 48
+  scoreable heads clear 0.1 on 270 instances, exactly what the preflight said, and its
+  control pool is 13 -- so its last K point (16, capped to 13) is one deterministic
+  intervention, flagged `control_exhausted` in the artifact.
+* **The masking curve is a dose-response, and the honest reading is narrower than "the
+  causal claim holds".**  On the dense model the retrieval arm degrades monotonically
+  (97.4 baseline -> 89.3 -> 81.4 -> 86.0 -> 53.7 -> 20.2 -> **0.0** at K=148, a third of
+  the heads), and it is *worse* than the matched random arm from K=9 to K=36
+  (81.4 vs 72.8, 86.0 vs 66.8, 53.7 vs 38.4).  But the random arm's spread is
+  26-40 f1 points there, so those three points are weak individually; at K=4 random is
+  *better* (95.8 vs 89.3), and at K=76/148 both arms are at or near the floor.  The
+  hybrid's curve is flatter still (70.3 vs 65.9 at K=1, 50.5 vs 59.2 at K=4).  What the
+  A100 adds is not a stronger claim but a *bigger* one: the same direction, on 45
+  samples per point and the paper's domain, with the degenerate points marked.
+  Note the truncation counters: at K>=76 the retrieval arm hits the 96-token budget on
+  34-45 of 45 samples, so the bottom of the curve is partly a generation-budget effect.
+
 ### Downstream: CoT vs extractive QA under masking — a pipeline check, not a measurement
 
 Read this section as "the stage runs end to end and its artifacts are auditable", not

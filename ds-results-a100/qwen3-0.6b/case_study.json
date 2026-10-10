@@ -1,0 +1,199 @@
+{
+  "model": "Qwen3-0.6B",
+  "pairing": "next_step",
+  "argmax_domain": "haystack",
+  "capture_method": "patch",
+  "chat_template": true,
+  "system_prompt": null,
+  "enable_thinking": false,
+  "prompt_tokens": 4159,
+  "filler_seed": 0,
+  "length_requested": 4096,
+  "depth": 0.5,
+  "max_new_tokens": 96,
+  "needle_index": 0,
+  "needle_span": [
+    2064,
+    2086
+  ],
+  "haystack_span": [
+    3,
+    4135
+  ],
+  "generated_text": "The best thing to do in San Francisco is to eat a sandwich in Dolores Park on a sunny day.",
+  "top_heads": [
+    {
+      "head": "L16H14",
+      "score": 0.9473684210526315,
+      "considered_steps": 22,
+      "copied_tokens": [
+        13,
+        264,
+        304,
+        311,
+        374,
+        389,
+        653,
+        1850,
+        1899,
+        3166,
+        4589,
+        5540,
+        5836,
+        8180,
+        12879,
+        24244,
+        27874,
+        39698
+      ]
+    },
+    {
+      "head": "L16H15",
+      "score": 0.9473684210526315,
+      "considered_steps": 22,
+      "copied_tokens": [
+        13,
+        264,
+        304,
+        311,
+        374,
+        389,
+        653,
+        1850,
+        1899,
+        3166,
+        4589,
+        5540,
+        5836,
+        8180,
+        12879,
+        24244,
+        27874,
+        39698
+      ]
+    },
+    {
+      "head": "L21H8",
+      "score": 0.9473684210526315,
+      "considered_steps": 22,
+      "copied_tokens": [
+        13,
+        264,
+        304,
+        311,
+        374,
+        389,
+        653,
+        1850,
+        1899,
+        3166,
+        4589,
+        5540,
+        5836,
+        8180,
+        12879,
+        24244,
+        27874,
+        39698
+      ]
+    },
+    {
+      "head": "L21H9",
+      "score": 0.9473684210526315,
+      "considered_steps": 22,
+      "copied_tokens": [
+        13,
+        264,
+        304,
+        311,
+        374,
+        389,
+        653,
+        1850,
+        1899,
+        3166,
+        4589,
+        5540,
+        5836,
+        8180,
+        12879,
+        24244,
+        27874,
+        39698
+      ]
+    },
+    {
+      "head": "L20H14",
+      "score": 0.8947368421052632,
+      "considered_steps": 22,
+      "copied_tokens": [
+        264,
+        304,
+        311,
+        374,
+        389,
+        653,
+        1850,
+        1899,
+        3166,
+        4589,
+        5540,
+        5836,
+        8180,
+        12879,
+        24244,
+        27874,
+        39698
+      ]
+    },
+    {
+      "head": "L23H14",
+      "score": 0.8947368421052632,
+      "considered_steps": 22,
+      "copied_tokens": [
+        264,
+        304,
+        311,
+        374,
+        389,
+        653,
+        1850,
+        1899,
+        3166,
+        4589,
+        5540,
+        5836,
+        8180,
+        12879,
+        24244,
+        27874,
+        39698
+      ]
+    }
+  ],
+  "case": {
+    "head": "L16H14",
+    "token": 1850,
+    "input_position": 2065,
+    "step": 0,
+    "argmax_attention": 0.1748046875
+  },
+  "schema_version": 8,
+  "provenance": {
+    "schema_version": 8,
+    "git_rev": null,
+    "git_dirty": false,
+    "python": "3.10.12",
+    "torch": "2.10.0+cu128",
+    "transformers": "5.18.0",
+    "numpy": "2.2.6",
+    "matplotlib": "3.10.9",
+    "deterministic": false,
+    "optional_kernels": {
+      "flash_linear_attention": true,
+      "causal_conv1d": false
+    },
+    "code_sha256": "0e4ab94baf5502a1",
+    "dtype": "bfloat16"
+  }
+}
