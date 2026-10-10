@@ -108,15 +108,21 @@ $CLI project job execute -p "$PROJECT" -c configs/datasphere/t4-bootstrap.yaml
 
 # then, with ~40 s startup instead of ~9 min.  Run it blocking *in the background*:
 # that is the only mode that streams progress, and the job itself lives on the
-# service, so losing the laptop connection does not stop it.
+# service, so losing the laptop connection does not stop it.  The `grep` drops one
+# line the CLI logs on *every* RPC -- `auth.py` warns inside `create_iam_token`, which
+# `Client.md` rebuilds per request, so the same true statement arrives every ~5 s and
+# drowns the progress (findings §20).
 mkdir -p logs
-nohup $CLI project job execute -p "$PROJECT" -c configs/datasphere/t4-cached.yaml \
-    > "logs/ds_$(date +%m%d_%H%M).log" 2>&1 &
+nohup $CLI project job execute -p "$PROJECT" -c configs/datasphere/t4-cached.yaml 2>&1 \
+    | grep -v --line-buffered "iam token from env var is not refreshable" \
+    > "logs/ds_$(date +%m%d_%H%M).log" &
 tail -f logs/ds_*.log
 ```
 
-`job attach` and the job page show stdout only after completion, so they are not a
-way to watch progress; `--async` is for runs where no live stream is needed.
+The job page shows stdout only after completion.  `job attach` *does* stream (and
+waits for the end) -- the earlier note that it does not was an artifact of that same
+spam line being the only thing visible; with the filter it is how a client re-attaches
+after a disconnect, and `--async` remains for runs where no live stream is needed.
 Artifacts and logs come back with
 `$CLI project job download-files --id <job_id> --with-logs`.
 
@@ -141,13 +147,17 @@ together they are `a100.yaml`'s stage list, so nothing runs twice), `laptop.yaml
 `paper.yaml` and `smoke.yaml`.  Every A100 config also passes `--bootstrap-venv` beside
 `--use-venv` (the cached venv's lock stamp is verified before it is used, and the job log
 prints whether `fla`/`causal_conv1d` are importable) and `--verify-hashes` (the
-checkpoint digests are recomputed).  The three continuation configs
-(`a100-detect`, `a100-mask`, `a100-resume`) additionally pass `--resume`, which skips
-every `(stage, model)` that `run_state.json` records as `ok` with its artifact present —
-the first split launch lost the hybrid's 75-minute `mask` to a crash in the stage after
-it, and a relaunch must not buy it twice.  The monolithic configs and the preflights
-deliberately leave the flag off: a fresh full run must never skip a stage on the
-strength of a stale file.  Everything non-obvious about this path — the pip
+checkpoint digests are recomputed).  The two continuation configs (`a100-mask`,
+`a100-resume`) additionally pass `--resume`, which skips every `(stage, model)` that
+`run_state.json` records as `ok`, with its artifact present *and* the same command line
+(the argv is recorded with each stage, so a relaunch with a changed `--lengths` or
+`--no-chat-template` re-runs it instead of keeping an artifact from another grid) — the
+first split launch lost the hybrid's 75-minute `mask` to a crash in the stage after it,
+and a relaunch must not buy it twice.  The flag only appears where the tree it reads is
+staged by `local-paths` (`a100-detect` *produces* that tree and must start from an empty
+prefix, or stale artifacts would ride along into the collected output); the monolithic
+configs and the preflights leave it off, because a fresh full run must never skip a stage
+on the strength of a stale file.  Everything non-obvious about this path — the pip
 crash that shapes the requirements file, the `cmd` grammar, why the cached venv
 cannot be the entry point, what the "T4" slot actually hands out — is written up
 in [`docs/datasphere-findings.md`](docs/datasphere-findings.md).
@@ -825,7 +835,11 @@ meaningful within a family.
   the one stage that runs a standalone script cannot abort the run between two
   expensive `mask` stages (it did exactly that once, on bf16).  A relaunch of a
   continuation config passes `--resume`, which skips every `(stage, model)` that
-  `run_state.json` records as `ok` *and* whose artifact is present.
+  `run_state.json` records as `ok`, whose artifact is present, and whose recorded command
+  line matches the one about to run.  The artifact check names the file the *next* stage
+  actually opens (`detect` on the `.npz` the ablations load; `figures` on the manifest it
+  writes last, which also records any figure it could not draw, so a partial set is
+  legible instead of being `ok` and silent).
 * **Flash attention is used for the prefill, `eager` for the capture.**  `detect` and
   the ablations prefill through SDPA (`--prefill-impl sdpa`, the default, never
   overridden by a config), which picks the FlashAttention-2 kernel in bf16; the steps

@@ -317,17 +317,24 @@ def test_the_a100_split_halves_do_not_overlap_and_share_one_prefix(configs):
         assert args.no_chat_template == full.no_chat_template, name
 
 
-def test_only_the_continuation_configs_ask_to_resume(configs):
-    """`--resume` is opt-in, and only where re-launching is the point.
+def test_only_the_configs_that_stage_their_tree_ask_to_resume(configs):
+    """`--resume` is opt-in, and only where it can actually fire.
 
     A *fresh* full run must never skip a stage because a stale artifact happens to sit
     in the prefix, so the monolithic configs and the preflights leave it off.  The
     continuation configs pass it: the first split A100 launch (job
     `bt1u3ja8cb0it4klqehl`) lost the hybrid's 75-minute `mask` to a crash in the stage
     after it, and the relaunch must not buy it twice.
+
+    The second half of the assertion is the one that matters, and the flag alone is not
+    enough to satisfy it: `--resume` reads `<out-prefix>/run_state.json`, so a config
+    whose `local-paths` do not upload that tree starts in an empty container, finds no
+    state, and silently re-runs everything.  `a100-detect.yaml` is exactly that case --
+    it *produces* the tree (and must not start from an old one, or stale artifacts would
+    ride along into the collected output), so it does not pass the flag at all.
     """
     driver = load_job_driver()
-    continuation = {"a100-detect.yaml", "a100-mask.yaml", "a100-resume.yaml"}
+    continuation = {"a100-mask.yaml", "a100-resume.yaml"}
     for name, config in configs.items():
         tokens = [token.replace("${WEIGHTS}", "/w").replace("${DS_PROJECT_HOME}", "/disk")
                   for token in config["cmd"].split()]
@@ -335,6 +342,12 @@ def test_only_the_continuation_configs_ask_to_resume(configs):
         assert args.resume == (name in continuation), (
             f"{name}: --resume should be {name in continuation}"
         )
+        if args.resume:
+            staged = config.get("env", {}).get("python", {}).get("local-paths", [])
+            assert args.out_prefix in staged, (
+                f"{name}: --resume reads {args.out_prefix}/run_state.json, so that tree "
+                f"must arrive via local-paths (got {staged})"
+            )
     # And the list is real, not an empty expectation.
     assert continuation <= set(configs)
 

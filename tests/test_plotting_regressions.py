@@ -295,6 +295,44 @@ def test_cmd_figures_writes_every_figure(tmp_path):
                  "mixer_ablation.pdf", "corr_map.pdf"):
         assert name in produced, (name, sorted(produced))
 
+    # The manifest is the stage's artifact, and the only record of a *partial* set: the
+    # per-figure `safe()` deliberately does not fail the stage, so without this a missing
+    # PDF existed only as a line in the job log.  It is also what the driver's `--resume`
+    # checks -- `figures/*.pdf` would be satisfied by one leftover PDF from an old run.
+    manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["failed"] == {}, manifest["failed"]
+    assert sorted(manifest["drawn"]) == sorted(produced), (manifest["drawn"], produced)
+    assert manifest["runs"] == [str(run)]
+
+
+def test_cmd_figures_records_a_figure_it_could_not_draw(tmp_path, monkeypatch):
+    """A figure that raises must leave a trace in the artifact, not only in the log."""
+    import json
+
+    import retrieval_heads.cli as cli
+    import retrieval_heads.plotting as plotting
+
+    run = tmp_path / "m"
+    run.mkdir()
+    info = attention_info(1, 2)
+    RetrievalScores(info=info, score=torch.tensor([[0.9, 0.1]]),
+                    activation_freq=torch.zeros(1, 2), n_instances=1).save(
+        run / "scores_next_step")
+
+    def boom(_runs):
+        raise ValueError("no pie for you")
+
+    monkeypatch.setattr(plotting, "plot_score_pie", boom)
+    out = tmp_path / "figs"
+    assert cli.main(["figures", "--runs", str(run), "--out", str(out)]) == 0, (
+        "a broken figure must not fail the stage"
+    )
+    manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    assert "ring_graph.pdf" in manifest["failed"], manifest
+    assert "ValueError: no pie for you" == manifest["failed"]["ring_graph.pdf"]
+    assert "ring_graph.pdf" not in manifest["drawn"]
+    assert manifest["drawn"], "the other figures were still drawn"
+
 
 def test_plot_task_cot_gets_a_figure_title():
     import matplotlib.pyplot as plt

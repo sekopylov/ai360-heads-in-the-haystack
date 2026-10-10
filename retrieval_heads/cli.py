@@ -840,14 +840,19 @@ def cmd_figures(args: argparse.Namespace) -> int:
                 warn_if_stale(payload, str(candidate), log=log)
                 store[label] = payload
 
+    drawn: list[str] = []
+    failed: dict[str, str] = {}
+
     def safe(name: str, factory) -> None:
         # One unplottable figure (e.g. mixer sweeps with different K sets) must not
         # abort the stage after half the PDFs were already written.  Catching only
         # ValueError still let a malformed artifact's KeyError kill the stage.
         try:
             save_fig(factory(), fig_dir / name)
+            drawn.append(name)
         except Exception as exc:  # noqa: BLE001 - a figure must never kill the stage
             log.warning("skipping figure %s: %s", name, exc)
+            failed[name] = f"{type(exc).__name__}: {exc}"
 
     if runs:
         safe("ring_graph.pdf", lambda: plot_score_pie(runs))
@@ -877,6 +882,20 @@ def cmd_figures(args: argparse.Namespace) -> int:
         safe(name, lambda result=result: plot_task_cot(result))
     if mixers:
         safe("mixer_ablation.pdf", lambda: plot_mixer_ablation(mixers))
+    # The manifest is what makes a *partial* set legible: `safe` above deliberately does
+    # not fail the stage (a broken figure must not abort a finished run), so without a
+    # record the only trace of a missing PDF was a line in the job log -- and the job
+    # log is not the deliverable.  It is also the driver's `--resume` artifact for this
+    # stage: `figures/*.pdf` would be satisfied by one leftover PDF from an older run.
+    save_json(add_provenance({
+        "runs": [str(run) for run in args.runs],
+        "pairing": args.pairing,
+        "drawn": sorted(drawn),
+        "failed": failed,
+    }), fig_dir / "manifest.json")
+    if failed:
+        log.warning("%d of %d figure(s) could not be drawn: %s",
+                    len(failed), len(failed) + len(drawn), sorted(failed))
     return 0
 
 def _same_layout(runs: dict[str, Any]) -> bool:

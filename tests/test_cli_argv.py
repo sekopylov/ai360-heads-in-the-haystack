@@ -293,11 +293,15 @@ def test_driver_has_exactly_one_main_and_it_runs_the_stages():
     assert not duplicates, f"duplicate top-level function names: {duplicates}"
 
 
-def test_stage_plan_is_model_major_so_each_model_loads_once():
+def test_stage_plan_is_model_major_so_each_model_loads_once_per_segment():
     """Order the stages so the one-model cache can actually be reused.
 
-    A full run used to load each checkpoint once per stage (ten loads, ~50 s each
-    on the job GPU); grouping a model's stages keeps it to two.
+    A full run used to load each checkpoint once per stage (ten loads, ~50 s each on the
+    job GPU); grouping a model's stages keeps it to one load per model *per segment*.
+    The count is not two for every config: a stage listed after a model-free one starts a
+    new segment, so `a100.yaml`'s `...,compare,figures,case-study` costs four loads -- the
+    price of not letting a figure crash abort the run between two `mask` stages (see the
+    next test).  Two extra loads of tens of seconds against an hour of masking.
     """
     driver = load_job_driver()
     models = ["qwen3.5-0.8b", "qwen3-0.6b"]
@@ -317,6 +321,17 @@ def test_stage_plan_is_model_major_so_each_model_loads_once():
     assert [stage for stage, model in plan if model is None] == ["compare", "figures"]
     assert all(model is not None for stage, model in plan
                if stage in driver.MODEL_STAGES)
+
+    # One segment (no model stage after `compare,figures`): exactly two loads.
+    assert len(plan) == 2 * 5 + 2, plan
+
+    # The A100 list adds `case-study` after the model-free stages: a second segment, so
+    # four loads -- and both masks still finish before anything else.
+    a100 = driver.stage_plan(["describe", "detect", "mask", "compare", "figures",
+                              "case-study"], models)
+    assert [stage for stage, _ in a100 if stage in ("mask", "case-study")] == [
+        "mask", "mask", "case-study", "case-study"], a100
+    assert [model for stage, model in a100 if stage == "case-study"] == models
 
 
 def test_a_stage_listed_after_the_model_free_ones_runs_after_them():
@@ -355,6 +370,20 @@ def test_run_state_records_every_stage(tmp_path):
     assert [(e["stage"], e["status"]) for e in state["stages"]] == [
         ("detect", "running"), ("detect", "ok"), ("mask", "failed")]
     assert state["stages"][-1]["error"] == "boom"
+
+    # The argv is what `--resume` compares against, so it has to survive the round trip.
+    driver.record_stage_state(tmp_path, "mask", "qwen3-0.6b", "ok",
+                              argv="mask --model qwen3-0.6b")
+    state = json.loads((tmp_path / "run_state.json").read_text(encoding="utf-8"))
+    assert state["stages"][-1]["argv"] == "mask --model qwen3-0.6b"
+    assert "argv" not in state["stages"][0], "a record without an argv gained a null one"
+
+    # A state file that is not `{"stages": [...]}` must not crash the next run's first
+    # record (which would happen before any stage had a chance to start).
+    (tmp_path / "run_state.json").write_text("[]", encoding="utf-8")
+    driver.record_stage_state(tmp_path, "detect", "qwen3-0.6b", "ok")
+    state = json.loads((tmp_path / "run_state.json").read_text(encoding="utf-8"))
+    assert [e["stage"] for e in state["stages"]] == ["detect"]
 
 
 def test_load_keeps_exactly_one_model_resident(monkeypatch):
@@ -651,27 +680,33 @@ def test_resume_skips_only_a_stage_that_is_ok_and_left_its_artifact(driver, tmp_
     for model in ("qwen3.5-0.8b", "qwen3-0.6b"):
         (prefix / model).mkdir(parents=True)
     (prefix / "figures").mkdir()
-    # ok *and* artifact -> skipped
+    # ok *and* artifact -> resumable
     for name in ("model_info.json", "masking_curve.json", "case_study.json"):
         (prefix / "qwen3.5-0.8b" / name).write_text("{}", encoding="utf-8")
-    (prefix / "figures" / "masking_recall.pdf").write_bytes(b"%PDF")
+    (prefix / "figures" / "manifest.json").write_text("{}", encoding="utf-8")
     # artifact present but the status is not `ok` -> still runs
+    (prefix / "qwen3-0.6b" / "scores_next_step.npz").write_bytes(b"npz")
     (prefix / "qwen3-0.6b" / "scores_next_step.json").write_text("{}", encoding="utf-8")
     (prefix / "correlation.json").write_text("{}", encoding="utf-8")
 
     _write_run_state(prefix, [
-        {"stage": "describe", "model": "qwen3.5-0.8b", "status": "ok"},
+        {"stage": "describe", "model": "qwen3.5-0.8b", "status": "ok",
+         "argv": "describe --model qwen3.5-0.8b"},
         {"stage": "mask", "model": "qwen3.5-0.8b", "status": "ok"},
-        {"stage": "case-study", "model": "qwen3.5-0.8b", "status": "ok"},
+        {"stage": "case-study", "model": "qwen3.5-0.8b", "status": "ok",
+         "argv": "case-study --model qwen3.5-0.8b"},
         # ok, but `masking_curve.json` is not in this model's directory -> re-run
         {"stage": "mask", "model": "qwen3-0.6b", "status": "ok"},
-        {"stage": "figures", "model": None, "status": "ok"},
+        {"stage": "figures", "model": None, "status": "ok",
+         "argv": "figures --runs ds/a ds/b"},
         {"stage": "detect", "model": "qwen3-0.6b", "status": "failed"},
         {"stage": "compare", "model": None, "status": "running"},
     ])
     assert driver.completed_stages(prefix) == {
-        ("describe", "qwen3.5-0.8b"), ("mask", "qwen3.5-0.8b"),
-        ("case-study", "qwen3.5-0.8b"), ("figures", None),
+        ("describe", "qwen3.5-0.8b"): "describe --model qwen3.5-0.8b",
+        ("mask", "qwen3.5-0.8b"): None,          # recorded before the fingerprint existed
+        ("case-study", "qwen3.5-0.8b"): "case-study --model qwen3.5-0.8b",
+        ("figures", None): "figures --runs ds/a ds/b",
     }
 
     # The log is append-only, so the *last* status for a pair is the one that counts: a
@@ -680,17 +715,30 @@ def test_resume_skips_only_a_stage_that_is_ok_and_left_its_artifact(driver, tmp_
         {"stage": "mask", "model": "qwen3.5-0.8b", "status": "ok"},
         {"stage": "mask", "model": "qwen3.5-0.8b", "status": "failed"},
     ])
-    assert driver.completed_stages(prefix) == set()
+    assert driver.completed_stages(prefix) == {}
 
-    # A state file that cannot be read means "skip nothing", never "skip everything".
+    # A state file that cannot be read -- or is not shaped like the driver's -- means
+    # "skip nothing", never "skip everything".
     (prefix / "run_state.json").write_text("{not json", encoding="utf-8")
-    assert driver.completed_stages(prefix) == set()
+    assert driver.completed_stages(prefix) == {}
+    (prefix / "run_state.json").write_text("[]", encoding="utf-8")
+    assert driver.completed_stages(prefix) == {}
+    (prefix / "run_state.json").write_text('{"stages": {"mask": "ok"}}', encoding="utf-8")
+    assert driver.completed_stages(prefix) == {}
     (prefix / "run_state.json").unlink()
-    assert driver.completed_stages(prefix) == set()
+    assert driver.completed_stages(prefix) == {}
+
+    # `detect` is resumed on the `.npz` the ablations load, not on a `.json` sidecar that
+    # can survive without it (the two are written together, but only the npz is read).
+    (prefix / "qwen3-0.6b" / "scores_next_step.npz").unlink()
+    _write_run_state(prefix, [{"stage": "detect", "model": "qwen3-0.6b", "status": "ok"}])
+    assert driver.completed_stages(prefix) == {}
 
 
 def test_main_resume_actually_skips_the_stage(driver, tmp_path, monkeypatch, capsys):
     """The skip must reach `main`, and only when the flag is passed."""
+    import json
+
     prefix = tmp_path / "ds"
     (prefix / "qwen3-0.6b").mkdir(parents=True)
     (prefix / "qwen3-0.6b" / "masking_curve.json").write_text("{}", encoding="utf-8")
@@ -706,7 +754,37 @@ def test_main_resume_actually_skips_the_stage(driver, tmp_path, monkeypatch, cap
               "--out-prefix", str(prefix)]
     assert driver.main([*common, "--resume"]) == 0
     assert ran == [], "a finished stage was paid for a second time"
-    assert "skipping mask" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "skipping mask" in out
+    assert "predates the argv fingerprint" in out, (
+        "a record without an argv must say why it was trusted"
+    )
+
+    # Same prefix, no flag: it runs.  The skip is the flag's doing, not a side effect of
+    # the state file merely existing.
+    assert driver.main(common) == 0
+    assert ran == ["mask"]
+
+    # A record for the *same* stage with a *different* command line is not a skip: the
+    # tree would otherwise mix two grids and report success (the reason the fingerprint
+    # exists).  The re-run records the command it actually ran.
+    ran.clear()
+    fingerprint = driver.stage_fingerprint(
+        driver.stage_argv("mask", profile="laptop", models=["qwen3-0.6b"],
+                          prefix=prefix, seed=0)[0])
+    _write_run_state(prefix, [{"stage": "mask", "model": "qwen3-0.6b", "status": "ok",
+                               "argv": "mask --model qwen3-0.6b --lengths 1024"}])
+    assert driver.main([*common, "--resume"]) == 0
+    assert ran == ["mask"], "an artifact from another grid was kept"
+    assert "different command line" in capsys.readouterr().out
+    state = json.loads((prefix / "run_state.json").read_text(encoding="utf-8"))
+    assert state["stages"][-1]["argv"] == fingerprint
+
+    # ... and with the matching fingerprint it is skipped again.
+    ran.clear()
+    assert driver.main([*common, "--resume"]) == 0
+    assert ran == []
+    assert "same command line" in capsys.readouterr().out
 
     # Same prefix, no flag: it runs.  The skip is the flag's doing, not a side effect of
     # the state file merely existing.

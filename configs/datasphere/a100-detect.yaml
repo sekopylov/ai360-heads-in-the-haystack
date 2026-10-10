@@ -31,18 +31,20 @@ desc: first half of the split A100 launch -- describe,detect on the full grid on
 # The monolithic `a100.yaml` stays the default for a launch that is happy to read those
 # numbers afterwards; this pair is for the launch that wants to act on them.
 #
-# Geometry: the pair to this file is `a100-notemplate.yaml`'s split (same flags plus
-# `--no-chat-template`); the two axes are independent, and both should be run or the
-# results doc must say which was.  If only one geometry is run, this one is comparable
-# with the committed `ds-results/` tree (same template, task solved); see the geometry
-# note in `a100.yaml`.
+# Geometry: the template-free geometry has no split of its own -- `a100-notemplate.yaml`
+# is monolithic, so if that axis is run, its detect and mask are paid for in one job.
+# The two axes are independent, and both should be run or the results doc must say which
+# was.  If only one geometry is run, this one is comparable with the committed
+# `ds-results/` tree (same template, task solved); see the geometry note in `a100.yaml`.
 #
-# `--resume` (also in `a100-mask.yaml`) skips stages `run_state.json` already records as
-# `ok` with their artifact present.  Here it means a re-launch of this half after a
-# crash does not re-buy the 25 minutes of `detect`; `a100.yaml` itself does *not* carry
-# it, because a fresh full run must never skip a stage on the strength of a stale file.
+# No `--resume` here, deliberately: this is the *producer* of `ds-results-a100/`, and its
+# `local-paths` do not carry the tree (starting a detect run from a previous tree would
+# let stale artifacts -- a `masking_curve.json`, say -- ride along into the collected
+# output).  Without the tree in the job there is no `run_state.json` to read, so the flag
+# could never fire; it lives in the two configs that *do* stage the tree they read
+# (`a100-mask.yaml`, `a100-resume.yaml`), and a test asserts that pairing.
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --resume --stages describe,detect --out-prefix ds-results-a100
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --stages describe,detect --out-prefix ds-results-a100
 
 flags:
   - attach-project-disk

@@ -327,19 +327,21 @@ PROJECT=bt1u5v72b71eesdhp9k5
 # once: build the persistent venv and validate every stage on the GPU
 $CLI project job execute -p "$PROJECT" -c configs/datasphere/t4-bootstrap.yaml
 
-# then, cheaply (~40 s startup).  Blocking mode is the only one that streams
-# progress, so run it in the background with the output in a log file; the job
-# itself runs on the service and survives a client disconnect.
+# then, cheaply (~40 s startup).  Blocking mode streams progress, so run it in the
+# background with the output in a log file; the job itself runs on the service and
+# survives a client disconnect.  The grep drops the per-RPC token warning (finding 20).
 mkdir -p logs
-nohup $CLI project job execute -p "$PROJECT" -c configs/datasphere/t4-cached.yaml \
-    > "logs/ds_$(date +%m%d_%H%M).log" 2>&1 &
+SPAM='iam token from env var is not refreshable'
+nohup $CLI project job execute -p "$PROJECT" -c configs/datasphere/t4-cached.yaml 2>&1 \
+    | grep -v --line-buffered "$SPAM" > "logs/ds_$(date +%m%d_%H%M).log" &
 tail -f logs/ds_*.log
 ```
 
-`job attach` does not stream the job's stdout (it waits, printing only its own
-keep-alive lines), and the job page shows it after completion -- so neither is a
-progress view.  Once the run ends, logs and artifacts come back with
-`$CLI project job download-files --id <job_id> --with-logs --output-dir <dir>`.
+`job attach` **does** stream the job's stdout (and waits for the end) -- the earlier
+claim here that it only printed its own keep-alive lines was an artifact of finding 20:
+those keep-alives were the only lines that got through the spam.  The job page still
+shows stdout only after completion.  Once the run ends, logs and artifacts come back
+with `$CLI project job download-files --id <job_id> --with-logs --output-dir <dir>`.
 
 `t4.yaml` is the cacheless variant (full platform env build every time).  It
 remains the reference path if the project disk is unavailable.
@@ -493,3 +495,38 @@ this project (needle answer shape, CoT baseline at the floor, and this) were
 invisible in the code and only showed up as implausible *numbers* in a real run.
 Print the realized values, not the requested ones.  A fourth instance of the same
 pattern is that the first "after" column here was itself an unverified number.
+
+## 20. The CLI logs its token warning on every RPC
+
+`datasphere` 1.40.0 prints
+
+```
+[WARNING] - iam token from env var is not refreshable, so it may expire over time
+```
+
+on **every** gRPC call, not once.  `auth.py` warns inside `create_iam_token`, and
+`Client.md` is a `@property` that rebuilds the metadata (and hence re-creates the
+token) for each request -- including the ~5-second keep-alive polls of a blocking
+`job execute`, so a two-hour run buries its own progress under ~1500 copies of a
+statement that is true exactly once.  Set `YC_IAM_TOKEN` (as
+`scripts/datasphere_auth.sh` does) and you get the spam; let the CLI call `yc` per
+request and you get an authentication round trip per RPC instead.
+
+It cost more than noise: the runbook used to say "`job attach` does not stream -- it
+waits, printing only its keep-alive lines", and those keep-alive lines *were* this
+warning.  Re-checked with the line filtered out (`bt1o3h21eqkek27kddb4`): `job attach`
+streams the job's stdout and waits for completion, so it is the way to re-attach after
+a client disconnect, and the blocking `job execute` is not the only progress view.
+
+The fix is to filter the stream, not to patch the CLI (the venv is disposable and
+would lose the patch on a rebuild):
+
+```bash
+SPAM='iam token from env var is not refreshable'
+nohup $CLI project job execute -p "$PROJECT" -c <config>.yaml 2>&1 \
+    | grep -v --line-buffered "$SPAM" > "logs/ds_$(date +%m%d_%H%M).log" &
+```
+
+`--log-level` cannot be used for this: the job's own stdout/stderr go through the same
+root logger at INFO (`Client._write_log` -> `logger.info`), so raising the level to
+`ERROR` would silence the job along with the warning.
