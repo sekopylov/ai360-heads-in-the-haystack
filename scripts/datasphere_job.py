@@ -291,16 +291,22 @@ def scale_fingerprint(profile: str) -> str:
     # nothing when the *real* detect grid moved, and the preflight would measure over
     # scores from a grid it is not pricing: the same class of hole this function exists
     # to close, just one level down.
-    parts = [SCALES[profile]]
     producer = SCALES[profile].get("producer_scale")
     if producer:
         if producer not in SCALES:
             raise SystemExit(
                 f"[entry] scale {profile!r} names producer_scale {producer!r}, which is "
                 f"not a scale; known: {sorted(SCALES)}")
-        parts.append(SCALES[producer])
-    blob = json.dumps(parts, sort_keys=True).encode("utf-8")
-    return hashlib.sha256(blob).hexdigest()[:16]
+        blob = json.dumps([SCALES[profile], SCALES[producer]], sort_keys=True)
+    else:
+        # The single-dict form is the one this function hashed before `producer_scale`
+        # existed, and it is kept deliberately: wrapping every scale in a list would
+        # change every scale's hash, so any tree with recorded fingerprints would be
+        # replayed for no reason at all.  (Coarse on purpose the other way too -- the
+        # whole selected scale, not the stage's own grid -- because over-invalidating
+        # costs money while under-invalidating mixes two grids into one tree.)
+        blob = json.dumps(SCALES[profile], sort_keys=True)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
 def run_inputs_fingerprint(*, profile: str, models: list[str], dtype: str | None,
@@ -472,6 +478,15 @@ def fetch_weights(target: Path, registry: Path, models: list[str]) -> int:
                 f"[entry] {key}: the registry entry names neither `files` nor `shards`, "
                 f"so there is nothing to fetch; a silent success here would leave the "
                 f"cache without the checkpoint")
+        if not (entry.get("shards") or {}):
+            # The weaker version of the same trap: `files` are the tokenizer and config,
+            # `shards` are the weights.  An entry with only `files` would download a few
+            # megabytes, print a success line, and pass `verify_weights` -- with no
+            # checkpoint in the cache at all.
+            raise SystemExit(
+                f"[entry] {key}: the registry entry has no `shards`, so no weights would "
+                f"be fetched at all (`files` are the tokenizer/config sidecars); re-pin "
+                f"with scripts/pin_registry.py")
         for name, digest in sorted(wanted.items()):
             _check_cache_name(key, name)
             if not _is_sha256(digest):
@@ -498,6 +513,13 @@ def fetch_weights(target: Path, registry: Path, models: list[str]) -> int:
         print(f"[entry] {key}: {total} file(s) -> {directory}", flush=True)
         for index, (name, digest) in enumerate(sorted(wanted.items()), 1):
             path = directory / name
+            if path.is_symlink():
+                # A file-level link would be followed by the hash *and* by the rename,
+                # which is how a shared disk turns "already complete" into a write
+                # somewhere else.  The directory check above does not cover this.
+                raise SystemExit(
+                    f"[entry] {key}/{name} is a symbolic link; refusing to treat it as a "
+                    f"cached checkpoint (the project disk is shared)")
             if path.exists() and _sha256(path) == digest:
                 skipped += 1
                 continue
@@ -1003,16 +1025,16 @@ def report_environment() -> None:
         # `docs/datasphere-findings.md` section 18 is a 16K float32 prefill that asked
         # for 20.6 GiB in one allocation on a 22 GiB L4.
         #
-        # The probe below used to test flash on a bare, unmasked `(1, 2, 64, 32)` tensor
-        # -- neither the shape the run uses nor the call it makes (the chunked prefill
-        # passes an attention mask, which flash does not accept, so the *real* prefill
-        # never goes through the path this tested).  It also claimed the materialised
-        # matrix is "~25.8 GB for the dense model (16 Q-heads)", which was true of the
-        # 0.6B/0.8B pair and is not true of the round that follows: at chunk 8192 and a
-        # 49152-token prefix, 32 Q-heads is ~52 GiB.  So the second probe runs the real
-        # call shape -- masked, chunked, 32 Q-heads -- and reports whether the scores
-        # were materialised, which is the thing that decides whether the 32-Q-head models
-        # (Qwen3-4B/8B/30B-A3B, both Ministral) can run at the configured chunk.
+        # The flash probe below is the *cheapest* form of the question, and it is not the
+        # form the run asks.  The chunked prefill calls the model with `past_key_values`
+        # and no `attention_mask`, so transformers uses `is_causal=True` for the first
+        # chunk (and for any unchunked prefill) -- an unmasked call, which is closer to
+        # this probe than an earlier comment here claimed -- and builds a **bool**
+        # `(1, 1, chunk, prefix)` mask only from the second chunk on.  So this probe
+        # answers "can bf16 reach flash at all", which is necessary and not sufficient.
+        # It also used to claim the materialised matrix is "~25.8 GB for the dense model
+        # (16 Q-heads)", true of the 0.6B/0.8B pair and not of the round that follows: at
+        # chunk 8192 and a 49152-token prefix, 32 Q-heads is 48 GiB (1.5 GiB per Q-head).
         try:
             import torch.nn.attention as attn
 
@@ -1024,10 +1046,10 @@ def report_environment() -> None:
             print(f"[entry] SDPA flash backend: NOT available "
                   f"({type(exc).__name__}: {exc}) -- bf16 SDPA will use another "
                   f"backend and the chunked-prefill memory bound may not hold")
-        # Deliberately a small version of the real shape: the question is *which kernel*
-        # runs, and materialisation is visible at any size.  A peak near
-        # `heads x chunk x prefix x 4` means math; a peak near the inputs' own size means
-        # a fused kernel.  Scaling up to the real grid is then arithmetic.
+        # So the second probe runs a masked call at a small version of the real shape:
+        # the question is *which kernel* runs, and materialisation is visible at any size.
+        # A peak near `heads x chunk x prefix x 4` means math; a peak near the inputs' own
+        # size means a fused kernel.  Scaling up to the real grid is then arithmetic.
         try:
             torch.cuda.empty_cache()
             torch.cuda.reset_peak_memory_stats()
@@ -1043,9 +1065,11 @@ def report_environment() -> None:
                   f"(heads, chunk, prefix) fp32 score matrix is {materialised:.2f} GiB")
             if peak > materialised / 2:
                 print("[entry]   -> the math backend MATERIALISED the scores. At the real "
-                      "grid (chunk 8192, prefix 49152) that is ~52 GiB for a 32-Q-head "
-                      "model, which will not fit beside the weights: lower "
-                      "--prefill-chunk for Qwen3-4B/8B/30B-A3B and the Ministral pair.")
+                      "grid (chunk 8192, prefix 49152) that is 48 GiB for a 32-Q-head "
+                      "model and 24 GiB for a 16-Q-head one, so Qwen3-30B-A3B (61.4 GiB "
+                      "of weights+KV) and Ministral-3-14B (33.5) would not fit and "
+                      "Qwen3-8B (22.0) / Ministral-3-8B (23.0) would be tight: lower "
+                      "--prefill-chunk for those four.")
             else:
                 print("[entry]   -> fused kernel; the chunked-prefill memory bound holds")
             del q, k, mask
@@ -1093,6 +1117,11 @@ def verify_weights(root: Path, registry: Path, keys: list[str] | None = None, *,
         for name, digest in pinned.items():
             _check_cache_name(key, name)
             target = leaf / name
+            if target.is_symlink():
+                # Same rule as `fetch_weights`: a link is not a cached checkpoint, and
+                # following one on a shared disk reads bytes this job does not own.
+                missing.append(f"{key}/{name} (symbolic link)")
+                continue
             if not target.exists() or target.stat().st_size == 0:
                 missing.append(f"{key}/{name}")
                 continue

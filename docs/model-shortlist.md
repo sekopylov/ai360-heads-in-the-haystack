@@ -99,15 +99,18 @@ open and were read directly.
 Weights are `params x 2 bytes`; KV is computed from the configs above.  The budget is
 `weights + KV + workspace <= 80 GiB`, and **the workspace column is not optional**: at
 `--prefill-chunk 8192` and 49152 tokens a *materialised* score matrix is
-`8192 x 49152 x 4 B = 1.61 GB per Q-head`, i.e. ~26 GiB at 16 Q-heads and ~52 GiB at 32.
-That is not hypothetical -- `docs/datasphere-findings.md` section 18 is a 16K float32
-prefill that asked for 20.6 GiB in one allocation on a 22 GiB L4.  It is a *fallback*
-risk, not the normal path: the run is bf16, the prefill uses `sdpa` (`capture_impl`
-`eager` applies only to the last token and the decode steps, where the matrix is
-`(heads, 1, seq)`), and bf16 SDPA reaches flash or mem-efficient, neither of which
-materialises.  So the rows below are the weights+KV budget, and the 32-Q-head models
-(Qwen3-4B/8B/30B-A3B, both Ministral) are the ones where a math-backend fallback would
-not fit.  `report_environment` probes the flash backend at job start.
+`8192 x 49152 x 4 B = 1.61 GB = 1.5 GiB per Q-head`, i.e. 24 GiB at 16 Q-heads and 48 GiB
+at 32.  That is not hypothetical -- `docs/datasphere-findings.md` section 18 is a 16K
+float32 prefill that asked for 20.6 GiB in one allocation on a 22 GiB L4.  It is a
+*fallback* risk, not the normal path: the run is bf16, the prefill uses `sdpa`
+(`capture_impl` `eager` applies only to the last token and the decode steps, where the
+matrix is `(heads, 1, seq)`), and bf16 SDPA reaches flash or mem-efficient, neither of
+which materialises.  So the rows below are the weights+KV budget; against a 48 GiB
+fallback the models that would **not** fit are Qwen3-30B-A3B (61.4 + 48 = 109) and
+Ministral-3-14B (33.5 + 48 = 81.5), with Qwen3-8B (70.0) and Ministral-3-8B (71.0) inside
+but with little margin -- not the whole 32-Q-head group, which an earlier version of this
+paragraph claimed.  `report_environment` probes the real masked prefill path at job start
+and says which kernel it got.
 
 Resident weights are smaller than the checkpoint for the Qwen3.5 models:
 `AutoModelForCausalLM` resolves `qwen3_5` to `Qwen3_5ForCausalLM`, so the vision tower
@@ -126,15 +129,15 @@ columns are shown where they differ.
 | **Qwen3-8B** | **1152** | **15.3** | **6.8** | **22.0** | **fits comfortably** |
 | **Qwen3-14B** | **1600** | **27.5** | **7.5** | **35.0** | **fits comfortably** |
 | Qwen3-32B | 4096 | 61.0 | 12.0 | 73.0 | borderline: ~7 GiB for activations/workspace, no margin |
-| **Qwen3-30B-A3B** (MoE, 3.3B active) | **1536** | **56.9** | **4.5** | **61.4** | **fits** (~19 GiB spare) -- but 32 Q-heads, so a math fallback needs ~52 GiB and would OOM |
+| **Qwen3-30B-A3B** (MoE, 3.3B active) | **1536** | **56.9** | **4.5** | **61.4** | **fits** (~19 GiB spare) -- but 32 Q-heads, so a math fallback needs 48 GiB and would OOM |
 | Qwen3.5-0.8B | 48 | 1.63 (1.40 resident) | 0.56 | 2.2 | trivially fits |
 | Qwen3.5-2B | 48 | 4.2 | 0.6 | 4.8 | fits (same head count as the 0.8B) |
 | Qwen3.5-4B | 128 | 8.68 (7.6 resident) | 1.50 | 10.2 | fits comfortably |
 | **Qwen3.5-9B** | **128** | **18.0 (16.6 resident)** | **1.5** | **19.5** | **fits comfortably** |
 | Qwen3.5-27B | 384 | 51.7 | 3.0 | 54.7 | fits |
-| Qwen3.5-35B-A3B | 160 | 67.0 (64.4 resident) | 0.9 | 67.9 | fits, ~15 GiB spare resident; 16 Q-heads, so even a math fallback needs ~26 GiB and does **not** fit |
+| Qwen3.5-35B-A3B | 160 | 67.0 (64.4 resident) | 0.9 | 67.9 | fits, ~15 GiB spare resident; 16 Q-heads, so a math fallback needs 24 GiB and does **not** fit |
 | Ministral-3-8B | 1088 | 16.61 | 6.38 | 23.0 | fits (32 Q-heads: workspace is the risk) |
-| Ministral-3-14B | 1280 | 25.97 | 7.50 | 33.5 | fits comfortably on weights+KV; 32 Q-heads, so a math fallback needs ~52 GiB and would OOM |
+| Ministral-3-14B | 1280 | 25.97 | 7.50 | 33.5 | fits on weights+KV; 32 Q-heads, so a math fallback needs 48 GiB and would OOM (81.5 total) |
 | Gemma 4 12B Unified | 128 (8 global) | 22.3 | 15.8 | 38.0 | fits, after the code change |
 | Gemma 4 26B-A4B | 80 (5 global) | 46.9 | 10.3 | 57.3 | fits, after the code change |
 | Gemma 3 12B | 128 (8 global) | 22.4 | 18.0 | 40.4 | fits, but gated + sliding decision |
@@ -245,6 +248,7 @@ comparison from 0.6B/0.8B to 4B.
   `describe`-only GPU (or big-RAM) step, and it is the first thing to run per model.
 * The cost table is an extrapolation from the 0.6B baseline, not a measurement.
 * Gemma 3/3n numbers come from ungated mirrors because the originals are gated.
-* Whether `output_attentions`/the patch yields maps for Qwen3.5's *text* stack inside the
-  VL wrapper is already proven by the existing 0.8B run, so it is assumed for the larger
-  sizes; nothing else about the larger sizes was executed.
+* Whether `output_attentions`/the patch yields maps for Qwen3.5's *text* stack is already
+  proven by the existing 0.8B run, so it is assumed for the larger sizes; nothing else
+  about the larger sizes was executed.  (Not "inside the VL wrapper": that run loaded
+  `Qwen3_5ForCausalLM`, the text-only class -- see §4.)

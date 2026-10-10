@@ -1182,6 +1182,23 @@ def test_fetch_weights_refuses_a_bad_name_or_digest_before_downloading(driver, t
         driver.fetch_weights(target, registry, ["toy"])
     assert downloads == []
 
+    # The weaker version of the same trap: `files` only.  That would fetch a few megabytes
+    # of tokenizer, print a success line and pass `verify_weights`, with no checkpoint.
+    write_entry({**base, "files": {"config.json": "0" * 64}, "shards": {}})
+    with pytest.raises(SystemExit, match="no `shards`"):
+        driver.fetch_weights(target, registry, ["toy"])
+    assert downloads == []
+
+    # A symbolic link is not a cached checkpoint: the hash and the rename both follow it.
+    write_entry({**base, "shards": {"model.safetensors": "0" * 64}})
+    (target / "Toy").mkdir(parents=True, exist_ok=True)
+    link = target / "Toy" / "model.safetensors"
+    link.symlink_to(src / "model.safetensors")
+    with pytest.raises(SystemExit, match="symbolic link"):
+        driver.fetch_weights(target, registry, ["toy"])
+    assert downloads == []
+    link.unlink()
+
     # ... and a well-formed entry still downloads, so the guards are not refusing work.
     payload = b"weights"
     write_entry({**base, "shards": {"model.safetensors":

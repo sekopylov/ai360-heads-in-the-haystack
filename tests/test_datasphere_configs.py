@@ -379,7 +379,7 @@ def test_the_mask_preflight_is_cheap_and_runs_only_mask(configs):
     `--lengths`/`--limit`), and `--random-trials 0` is refused by the CLI
     (`random_trials < 1` raises).  It is a scale now, which is what makes it runnable --
     and this test is what keeps it cheap: a grid edit that quietly restored the real
-    sample count would turn a ~143 RUB measurement into an 18-hour job.
+    sample count would turn a ~123 RUB measurement into an 18-hour job.
     """
     driver = load_job_driver()
     if "a100-preflight-mask" not in driver.SCALES:

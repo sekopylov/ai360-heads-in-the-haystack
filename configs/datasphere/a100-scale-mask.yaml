@@ -47,7 +47,7 @@ desc: scale-up round, second half -- mask,compare,figures,case-study on the dete
 # To settle it before committing 18 hours rather than after, run
 # `configs/datasphere/a100-preflight-mask.yaml`: the same K points and token budget on
 # 4096/16384/32768 tokens (a 64x span in attention work, which is what separates the two
-# terms) at 1 depth x 1 needle x 1 trial.  It costs ~0.3 h / ~143 RUB for four models and
+# terms) at 1 depth x 1 needle x 1 trial.  It costs ~0.2 h / ~123 RUB for four models and
 # must run after `a100-scale-detect.yaml`, because `mask` ranks heads from the detect
 # scores.
 #
