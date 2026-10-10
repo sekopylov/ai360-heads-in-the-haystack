@@ -180,6 +180,21 @@ STAGE_ARTIFACTS: dict[str, tuple[str, ...]] = {
 #: a PDF is `ok` and skipped on every later resume.
 PARTIAL_ARTIFACTS: dict[str, str] = {"figures": "failed"}
 
+#: Whether a stage *reads* other stages' artifacts.  A derived stage's own argv is only
+#: paths, so its fingerprint also carries the commands of every producer in the plan: the
+#: grid itself lives in `SCALES`, `scripts/` is deliberately outside `measurement_sha256`,
+#: and without this an edit to `SCALES['a100']['mask']` would re-run `mask` and then skip
+#: `compare`/`figures` over the tree they are supposed to describe.
+#:
+#: Deliberately coarse -- every producer in the plan, not a per-stage dependency graph:
+#: the stages marked here are the cheap ones (seconds to a minute), so over-invalidating
+#: them costs nothing, while the expensive producers keep their own exact argv.  The
+#: mapping covers every stage, so adding one to `STAGES` without deciding fails a test.
+STAGE_IS_DERIVED: dict[str, bool] = {
+    "describe": False, "detect": False, "mask": False, "qa": False, "cot": False,
+    "compare": True, "figures": True, "case-study": True,
+}
+
 
 class StageRecord(NamedTuple):
     """What ``--resume`` needs to know about a recorded stage."""
@@ -197,10 +212,18 @@ def registry_fingerprint(models: list[str]) -> str:
     the entries in use means an edit to some other model does not invalidate a finished
     stage, while a change to this run's model does -- the alternative was to trust a
     registry that nothing hashes at all.
+
+    Only the fields that decide the numbers are hashed, not the resolved absolute path:
+    the same entry reached from a different layout must not re-run a stage (the job mounts
+    the tree at `/job`, a local run has it elsewhere, and the digest set is what makes two
+    checkpoints the same file).
     """
     from retrieval_heads.cli import resolve_model
 
-    used = {key: resolve_model(key)[1] for key in models}
+    used = {}
+    for key in models:
+        _path, settings = resolve_model(key)
+        used[key] = {name: settings.get(name) for name in ("dtype", "files", "shards")}
     blob = json.dumps(used, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(blob).hexdigest()[:16]
 
@@ -238,7 +261,8 @@ def run_inputs_fingerprint(*, profile: str, models: list[str], dtype: str | None
     }, sort_keys=True)
 
 
-def stage_fingerprint(argv: list[str], run_inputs: str) -> str:
+def stage_fingerprint(argv: list[str], run_inputs: str,
+                      producers: list[list[str]] = ()) -> str:
     """The exact command a stage ran with, for ``--resume`` to compare against.
 
     ``run_state.json`` used to record only ``stage/model/status``, so ``--resume``
@@ -249,8 +273,39 @@ def stage_fingerprint(argv: list[str], run_inputs: str) -> str:
     command already ran here", and a mismatch is printed instead of being acted on.
     ``shlex.join`` rather than ``" ".join`` so an argument containing a space cannot
     make two different commands look alike.
+
+    ``producers`` are the commands of the stages whose artifacts this one reads (see
+    :data:`STAGE_IS_DERIVED`), so a `SCALES` edit that re-runs a producer also
+    invalidates the stage that consumes its output.
     """
-    return f"{run_inputs} :: {shlex.join(argv)}"
+    parts = [run_inputs, shlex.join(argv)]
+    parts.extend(shlex.join(other) for other in producers)
+    return " :: ".join(parts)
+
+
+def plan_argv(plan: list[tuple[str, str | None]], *, profile: str, models: list[str],
+              prefix: Path, seed: int, lengths: list[int] | None = None,
+              limit: int | None = None,
+              no_chat_template: bool = False) -> dict[tuple[str, str | None], list[list[str]]]:
+    """Build every stage's argv once, so the fingerprint and the run cannot disagree.
+
+    Model-needing stages get their own model (the plan is model-major within a segment);
+    a model-free stage gets the whole list.
+    """
+    return {
+        (stage, model): stage_argv(
+            stage, profile=profile, models=[model] if model else models, prefix=prefix,
+            seed=seed, lengths=lengths, limit=limit,
+            no_chat_template=no_chat_template)
+        for stage, model in plan
+    }
+
+
+def producer_argvs(argvs_by_pair: dict[tuple[str, str | None], list[list[str]]]
+                   ) -> list[list[str]]:
+    """The commands of every non-derived stage in the plan, in plan order."""
+    return [argv for (stage, _model), argvs in argvs_by_pair.items()
+            if not STAGE_IS_DERIVED[stage] for argv in argvs]
 
 
 def _artifact_is_complete(stage: str, directory: Path) -> bool:
@@ -1174,16 +1229,21 @@ def main(argv: list[str] | None = None) -> int:
         skipped = sorted((stage, model or "*") for stage, model in done)
         print(f"[entry] --resume: {len(skipped)} finished stage(s) will be skipped: "
               f"{skipped or 'none'}", flush=True)
-    for stage, model in stage_plan(stages, args.models):
-        targets = [model] if model else args.models
-        argvs = stage_argv(stage, profile=args.profile, models=targets,
-                           prefix=prefix, seed=args.seed,
-                           lengths=args.lengths, limit=args.limit,
-                           no_chat_template=args.no_chat_template)
+    plan = stage_plan(stages, args.models)
+    argvs_by_pair = plan_argv(plan, profile=args.profile, models=args.models,
+                              prefix=prefix, seed=args.seed, lengths=args.lengths,
+                              limit=args.limit,
+                              no_chat_template=args.no_chat_template)
+    producers = producer_argvs(argvs_by_pair)
+    for stage, model in plan:
+        argvs = argvs_by_pair[(stage, model)]
+        # A derived stage reads other stages' artifacts, so their commands are part of
+        # what makes its own result valid (see STAGE_IS_DERIVED).
+        extra = producers if STAGE_IS_DERIVED[stage] else []
         label = f"{stage} ({model or 'all models'})"
         record = done.get((stage, model))
         if record is not None:
-            now = [stage_fingerprint(argv, run_inputs) for argv in argvs]
+            now = [stage_fingerprint(argv, run_inputs, extra) for argv in argvs]
             if not argvs:
                 # `compare` with a single model builds no command at all (it needs two
                 # runs), so there is nothing to skip or run -- say that instead of
@@ -1213,7 +1273,7 @@ def main(argv: list[str] | None = None) -> int:
                       f"[entry]   now     : {now[0] if now else '(no command)'}",
                       flush=True)
         for cli_argv in argvs:
-            fingerprint = stage_fingerprint(cli_argv, run_inputs)
+            fingerprint = stage_fingerprint(cli_argv, run_inputs, extra)
             record_stage_state(prefix, stage, model, "running", argv=fingerprint,
                                code_sha256=code)
             try:

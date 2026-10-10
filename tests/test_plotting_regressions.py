@@ -368,7 +368,7 @@ def test_the_manifest_says_which_files_a_failed_figure_left_behind(tmp_path, mon
     manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
     assert "ring_graph.pdf" not in manifest["drawn"]
     assert "png encoder exploded" in manifest["failed"]["ring_graph.pdf"]
-    assert "(written: ring_graph.pdf)" in manifest["failed"]["ring_graph.pdf"], manifest
+    assert "(on disk: ring_graph.pdf)" in manifest["failed"]["ring_graph.pdf"], manifest
     # ... and the file really is there, which is what the note claims.
     assert (out / "ring_graph.pdf").exists()
     assert not (out / "ring_graph.png").exists()

@@ -282,9 +282,21 @@ def test_driver_has_exactly_one_main_and_it_runs_the_stages():
 
     called = {node.func.id for node in ast.walk(mains[0])
               if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
-    assert "stage_argv" in called, "main() must build argv through stage_argv"
+    # `stage_argv` used to be called directly here; it moved into `plan_argv`, which
+    # builds every stage's command once so the fingerprint and the run cannot disagree.
+    assert "plan_argv" in called, "main() must build argv through plan_argv"
     assert "reexec_into_venv" in called, "main() must honour --use-venv"
     assert "prepare_models" in called, "main() must link the checkpoints"
+
+    def calls_of(name: str) -> set[str]:
+        nodes = [node for node in tree.body
+                 if isinstance(node, ast.FunctionDef) and node.name == name]
+        assert len(nodes) == 1, f"expected exactly one {name}()"
+        return {node.func.id for node in ast.walk(nodes[0])
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+
+    # ... and the helper must go through `stage_argv`, not build commands by hand.
+    assert "stage_argv" in calls_of("plan_argv"), "plan_argv() must use stage_argv"
 
     # The old assertion compared a set's size to the list's size, which is a
     # tautology; the thing worth guarding is duplicate function names.
@@ -793,7 +805,7 @@ def test_resume_says_so_when_there_is_no_command_to_compare(driver, tmp_path, mo
         "stages"][-1]["status"] == "ok", "the existing record was left alone"
 
 
-def test_the_fingerprint_covers_what_a_stage_argv_cannot_see():
+def test_the_fingerprint_covers_what_a_stage_argv_cannot_see(monkeypatch):
     """A derived stage's argv is paths, so the *conditions* must be fingerprinted too.
 
     The gap was real and is the exact failure the flag exists to prevent: run 1 finishes
@@ -803,10 +815,22 @@ def test_the_fingerprint_covers_what_a_stage_argv_cannot_see():
     leaving a tree half from each grid and a successful job.  `dtype` is the same kind of
     invisible input, and the measurement package's hash must invalidate an `ok` recorded
     by another revision of the code that produced the numbers.
+
+    The registry is faked: this test is in the *fast* suite, and CI has no checkpoints on
+    disk (`resolve_model` raises `SystemExit` for a missing one, which made this test the
+    only fast test that needed the weight directories).
     """
     from pathlib import Path
 
+    import retrieval_heads.cli as cli
+
     driver = load_job_driver()
+
+    monkeypatch.setattr(cli, "resolve_model",
+                        lambda key: (f"/models/{key}",
+                                     {"path": f"models/{key}", "dtype": "bfloat16",
+                                      "files": {"config.json": "aa"},
+                                      "shards": {"model.safetensors": "bb"}}))
 
     def inputs(**over):
         base = dict(profile="a100", models=["m", "n"], dtype="bfloat16", seed=0,
@@ -850,6 +874,61 @@ def test_the_fingerprint_covers_what_a_stage_argv_cannot_see():
     # different commands look alike.
     assert driver.stage_fingerprint(["mask", "--out", "ds/a b"], base) != \
         driver.stage_fingerprint(["mask", "--out", "ds/a", "b"], base)
+
+
+def test_a_scales_edit_invalidates_the_stages_that_read_its_artifacts(monkeypatch):
+    """The grid itself lives in `SCALES`, which no fingerprint covered.
+
+    `scripts/` is deliberately outside `measurement_sha256` (a change to `case_study.py`
+    must not re-buy an hour of `mask`), and `run_inputs` carries only the profile *name*.
+    So editing `SCALES['a100']['mask']` and relaunching with `--resume` re-ran `mask`
+    (its argv changed) and then *skipped* `compare`/`figures` -- whose argv is only paths
+    -- over the very curve they are supposed to describe.  A derived stage's fingerprint
+    now carries every producer's command, so the edit moves it too.
+    """
+    from pathlib import Path
+
+    driver = load_job_driver()
+    models = ["qwen3.5-0.8b", "qwen3-0.6b"]
+    stages = ["mask", "compare", "figures", "case-study"]
+    run_inputs = "conditions"
+
+    def fingerprints():
+        plan = driver.stage_plan(stages, models)
+        argvs = driver.plan_argv(plan, profile="a100", models=models, prefix=Path("ds"),
+                                 seed=0)
+        producers = driver.producer_argvs(argvs)
+        return {
+            pair: [driver.stage_fingerprint(argv, run_inputs,
+                                            producers if driver.STAGE_IS_DERIVED[pair[0]]
+                                            else ())
+                   for argv in argvs[pair]]
+            for pair in argvs
+        }
+
+    before = fingerprints()
+    # Every stage is classified, so a new one cannot slip through undecided.
+    assert set(driver.STAGE_IS_DERIVED) == set(driver.STAGES)
+    assert [s for s, derived in driver.STAGE_IS_DERIVED.items() if derived] == [
+        "compare", "figures", "case-study"]
+
+    # Edit one grid flag in the scale table, exactly as the config comments invite.
+    monkeypatch.setattr(driver, "SCALES",
+                        {**driver.SCALES,
+                         "a100": {**driver.SCALES["a100"],
+                                  "mask": [*driver.SCALES["a100"]["mask"], "--extra"]}})
+    after = fingerprints()
+
+    assert before[("mask", "qwen3-0.6b")] != after[("mask", "qwen3-0.6b")], "producer"
+    for pair in (("compare", None), ("figures", None), ("case-study", "qwen3-0.6b")):
+        assert before[pair] != after[pair], (
+            f"{pair[0]} was skipped over a tree produced by a different grid"
+        )
+    # The rule is deliberately coarse: `case-study` reads `scores_*` (a `detect`
+    # artifact, not in this plan), yet a `mask` edit still moves its fingerprint.  That
+    # over-invalidation costs ~90 s, which is the price of not maintaining a dependency
+    # graph for the cheap stages -- and the expensive producers are unaffected.
+    assert before[("case-study", "qwen3-0.6b")] != after[("case-study", "qwen3-0.6b")]
 
 
 #: Driver inputs that are deliberately outside the resume fingerprint, with the reason.
