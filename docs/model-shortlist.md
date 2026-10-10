@@ -150,19 +150,41 @@ the capture (`layers x heads` per decode step), `mask` by prefill+decode work
 The knobs that move this: `--random-trials 5 -> 3` cuts ~40% of the `mask` arms, and
 `--lengths` trims the grid (the t4 scale's 2 lengths are ~1/3 of the A100's 3).
 
-## 7. What adding one model involves
+## 7. What adding one model involves — and the 10 GiB ceiling
 
 1. A `configs/models.json` entry: `repo`, `path`, `dtype`, `architectures`, the file list
    and **SHA-256 pins** (the registry is what `--verify-hashes` checks, and it is now part
    of the `--resume` fingerprint).
-2. `scripts/download_models.sh` for the weights.  **Disk**: bf16 weights are 8-67 GiB per
-   model, and the project disk is shared — check the quota before pulling 30B+, and note
-   that `--download-weights` (fetch inside the job, ephemeral disk) avoids the shared disk
-   at the price of a per-job download.  Gated repos need `HF_TOKEN` support that the
-   script does not have.
-3. For a *new architecture class* only (Gemma): the two changes in §2, each with a test,
+2. `scripts/download_models.sh` for the weights (locally; there is no `HF_TOKEN` support,
+   so a gated repo — Gemma 3/3n — is not fetchable at all today).
+3. **Delivery to the job, which is the binding constraint.**  The tested path is the
+   `inputs` variable (`models: {var: WEIGHTS}`), and the CLI caps `inputs` **plus** the
+   `local-paths` zips at **10 GiB total, 5 GiB per file**
+   (`UPLOAD_FILES_MAX_TOTAL_SIZE_BYTES`).  The current 3.2 GB of weights sit far below it;
+   the moment a model is bigger than that, the path breaks:
+
+   | model | weights | `inputs` path (<= 10 GiB) |
+   |---|---|---|
+   | Qwen3-1.7B / Qwen3.5-2B | 4.1 / 4.5 GiB | fits |
+   | **Qwen3-4B / Qwen3.5-4B** | **7.5 / 8.7 GiB** | **fits — the largest pair the tested path carries** |
+   | Qwen3-8B / Qwen3.5-9B | 15.3 / 18.0 GiB | **does not fit** |
+   | Qwen3-14B, Qwen3-30B-A3B | 27.5 / 56.9 GiB | does not fit |
+
+   So the 8-9B pair (and everything above) needs one of the two untested routes:
+   **`--download-weights`** (fetch inside the job; needs egress from the job VM, re-downloads
+   per job, never exercised here) or the **project disk** (`attach-project-disk` +
+   `${DS_PROJECT_HOME}/models`, uploaded once through JupyterLab; the disk is shared, so
+   its quota has to be checked before pulling 30-110 GiB into it).
+4. For a *new architecture class* only (Gemma): the two changes in §2, each with a test,
    plus a `describe` artifact to confirm the scoreable/linear/windowed split on the real
    checkpoint.
+
+**Consequence for the plan.**  The recommendation in §5 is about *science per rouble*; the
+logistics reorder it slightly.  If the next launch must use the already-proven delivery
+path, the pair to add is **Qwen3-4B + Qwen3.5-4B** (7.5 and 8.7 GiB — both fit, both
+drop-in, and 1152 vs 128 scoreable heads at 4B already dwarfs the 0.6B/0.8B pair).  If the
+project disk (or `--download-weights`) is sorted out first, go straight to the 8-9B pair,
+which is the better experiment for the same number of GPU hours.
 
 ## 8. Not verified here
 
