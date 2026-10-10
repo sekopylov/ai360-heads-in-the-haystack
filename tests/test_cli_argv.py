@@ -992,6 +992,45 @@ def test_a_detect_grid_edit_is_caught_when_detect_ran_in_another_job(monkeypatch
         )
 
 
+def test_the_mask_preflight_fingerprint_follows_the_scale_that_produced_its_scores(
+        monkeypatch):
+    """A scale that reads another scale's tree must hash that scale's grid too.
+
+    `a100-preflight-mask` is mask-only: it ranks the heads it ablates from
+    `scores_next_step.npz`, which `a100-scale-detect.yaml` wrote under the `a100` scale.
+    Its own `detect` entry is a copy that never runs, so hashing only the preflight's
+    entry would notice nothing when the real detect grid moved -- and the preflight would
+    quietly price a run whose scores came from a different grid.  `producer_scale` is the
+    declaration that closes it, and this test is what keeps it honest.
+    """
+    driver = load_job_driver()
+    if "a100-preflight-mask" not in driver.SCALES:
+        pytest.skip("no mask preflight scale")
+    assert driver.SCALES["a100-preflight-mask"].get("producer_scale") == "a100", (
+        "the preflight reads the a100 detect tree; without producer_scale its "
+        "fingerprint cannot see an edit to that grid"
+    )
+
+    before = driver.scale_fingerprint("a100-preflight-mask")
+    # Editing the *producer's* grid must move it ...
+    monkeypatch.setattr(driver, "SCALES",
+                        {**driver.SCALES,
+                         "a100": {**driver.SCALES["a100"],
+                                  "detect": [*driver.SCALES["a100"]["detect"], "--extra"]}})
+    assert driver.scale_fingerprint("a100-preflight-mask") != before
+    monkeypatch.undo()
+
+    # ... and so must the preflight's own grid.
+    before = driver.scale_fingerprint("a100-preflight-mask")
+    monkeypatch.setattr(driver, "SCALES",
+                        {**driver.SCALES,
+                         "a100-preflight-mask": {
+                             **driver.SCALES["a100-preflight-mask"],
+                             "mask": [*driver.SCALES["a100-preflight-mask"]["mask"],
+                                      "--extra"]}})
+    assert driver.scale_fingerprint("a100-preflight-mask") != before
+
+
 #: Driver inputs that are deliberately outside the resume fingerprint, with the reason.
 #: The list is not documentation-only: the test below fails when `parse_args` grows a
 #: dest, so every new flag has to be classified rather than forgotten.

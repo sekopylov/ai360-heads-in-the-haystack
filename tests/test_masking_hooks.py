@@ -210,6 +210,50 @@ def test_discover_modules_skips_vision_towers():
     assert all("vision" not in names[layer] for layer in attention)
 
 
+def test_a_none_projection_still_counts_as_present():
+    """`hasattr` cannot tell "absent" from "set to None", and Gemma 4 relies on the gap.
+
+    `modeling_gemma4.py` sets `self.v_proj = ... else None` on the unified-K/V layers
+    (`use_alternative_attention = config.attention_k_eq_v and not is_sliding`), and
+    `nn.Module.__setattr__` with a `None` value still creates the attribute -- so the
+    signature check passes and those layers are discovered as ordinary scoreable
+    attention.  An earlier version of `docs/model-shortlist.md` claimed
+    `build_model_info` would raise instead; it does not, and the difference matters
+    because a silent mis-census is harder to notice than a crash.
+
+    The contrast is the KV-sharing form (Gemma 4 E2B/E4B, Gemma 3n), which never assigns
+    the attribute at all -- that one really is refused, by the coverage invariant.
+    """
+    from retrieval_heads.models import _is_attention_module
+
+    class UnifiedKV(nn.Module):
+        """Gemma 4's global layer: `v_proj` exists and is None."""
+
+        def __init__(self):
+            super().__init__()
+            self.layer_idx = 0
+            self.q_proj = nn.Linear(4, 4, bias=False)
+            self.k_proj = nn.Linear(4, 4, bias=False)
+            self.o_proj = nn.Linear(4, 4, bias=False)
+            self.v_proj = None
+
+    class SharedKV(nn.Module):
+        """The E-variant / Gemma 3n form: no `k_proj`/`v_proj` attribute at all."""
+
+        def __init__(self):
+            super().__init__()
+            self.layer_idx = 0
+            self.q_proj = nn.Linear(4, 4, bias=False)
+            self.o_proj = nn.Linear(4, 4, bias=False)
+
+    assert hasattr(UnifiedKV(), "v_proj"), "None is a value, not an absence"
+    assert _is_attention_module(UnifiedKV()), (
+        "the unified-K/V layer is discovered as attention; if this ever starts "
+        "returning False, `docs/model-shortlist.md` §2 needs updating, not this test"
+    )
+    assert not _is_attention_module(SharedKV())
+
+
 class _FakeSample:
     def __init__(self, prompt_ids, needle_span):
         self.input_ids = torch.tensor([prompt_ids])

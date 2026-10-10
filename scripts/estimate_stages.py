@@ -22,7 +22,9 @@ Both stages are counted in **passes** (one prompt, one generation), not tokens:
   scales with `scoreable layers x Q-heads`) and prefill+decode (which scales with the
   **active** parameters -- a MoE reads only its active experts).
 * `mask` is `samples x (1 baseline + k_points x (1 + random_trials))` passes, plus
-  the token-mixer ablation for a hybrid (3 K x 2 kinds x 3 subsets).
+  the token-mixer ablation for a hybrid (`len(mixer_k) x 2 kinds x --mixer-trials x
+  samples`, where `mixer_k` is the CLI's `k <= 4` subset and is 2 values, not 3, on
+  three of the four hybrids).
 
 Two anchors (below) fix the constants, and that is also the model's weakness: with two
 models and four measured numbers it has **no degrees of freedom left**, so it is a fit,
@@ -159,6 +161,7 @@ def grid(scale: str) -> dict:
         "mask_needles": flag_int(mask, "--needles", 1),
         "k_frac": [float(v) for v in flag_values(mask, "--k-frac")],
         "trials": flag_int(mask, "--random-trials", 3),
+        "mixer_trials": flag_int(mask, "--mixer-trials", 3),
         "mask_flags": mask,
     }
 
@@ -200,7 +203,12 @@ def resolved_k_values(g: dict, n_heads: int) -> list[int]:
 
     args = SimpleNamespace(k=None, k_frac=flag_values(g["mask_flags"], "--k-frac"))
     info = SimpleNamespace(n_scoreable_heads=n_heads, name="estimate")
-    return resolve_k(args, info)
+    # `cmd_mask` passes `DEFAULT_K_FRACS["mask"]` when neither `--k` nor `--k-frac` is
+    # given, so a scale that sets no fractions must be priced the same way rather than
+    # as a single 5%-of-heads point.
+    from retrieval_heads.cli import DEFAULT_K_FRACS
+
+    return resolve_k(args, info, default_fracs=DEFAULT_K_FRACS["mask"])
 
 
 def mixer_k_values(k_values: list[int]) -> list[int]:
@@ -216,7 +224,10 @@ def mask_seconds(key: str, g: dict, *, random_trials: int | None = None) -> tupl
     k_points = len(k_values)
     passes = samples * (1 + k_points * (1 + trials))
     if hybrid:
-        passes += len(mixer_k_values(k_values)) * 2 * 3 * samples
+        # `token_mixer_ablation` runs `len(mixer_k) x 2 kinds x n_trials x samples`.
+        # The multiplier is `--mixer-trials` (CLI default 3), not "3 subsets": the
+        # preflight sets it to 1, and pricing that as 3 overstated the preflight by 16%.
+        passes += len(mixer_k_values(k_values)) * 2 * g["mixer_trials"] * samples
     mean_tokens = sum(g["mask_lengths"]) / len(g["mask_lengths"])
     per_pass = MASK_OVERHEAD_S + compute_seconds(active, mean_tokens)
     return passes * per_pass, passes
@@ -267,7 +278,14 @@ def main(argv: list[str] | None = None) -> int:
     models = args.models or list(MODELS)
     want_detect = args.only in ("both", "detect")
     want_mask = args.only in ("both", "mask")
-    head = f"{'model':17s} {'inst':>4s} {'score':>5s} {'passes':>7s}"
+    # The counters belong to their own stage: printing detect instances under a
+    # mask-only run (or mask passes under a detect-only one) was a number for a stage the
+    # table is not pricing.
+    head = f"{'model':17s} {'score':>5s}"
+    if want_detect:
+        head += f" {'inst':>5s}"
+    if want_mask:
+        head += f" {'passes':>7s}"
     if want_detect:
         head += f" {'detect':>8s}"
     if want_mask:
@@ -283,7 +301,11 @@ def main(argv: list[str] | None = None) -> int:
         cost = (detect if want_detect else 0.0) + (mask if want_mask else 0.0)
         total += cost
         scoreable = MODELS[key][4] * MODELS[key][3]
-        row = f"{key:17s} {instances:>4d} {scoreable:>5d} {passes:>7d}"
+        row = f"{key:17s} {scoreable:>5d}"
+        if want_detect:
+            row += f" {instances:>5d}"
+        if want_mask:
+            row += f" {passes:>7d}"
         if want_detect:
             row += f" {detect / 3600:>7.1f}h"
         if want_mask:

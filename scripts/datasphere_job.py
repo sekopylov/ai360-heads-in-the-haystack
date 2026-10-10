@@ -143,19 +143,22 @@ SCALES: dict[str, dict[str, list[str]]] = {
     # *compute*, so the mask column is an extrapolation (`estimate_stages.py` says so in
     # its docstring).  The term the model is missing is the one that grows with length --
     # attention is quadratic in the prefill and the capture's row-argmax is linear in the
-    # KV -- so this grid keeps the K points, the depths/needles ratio and the 96-token
-    # budget, and spends its samples on **lengths** instead: 4096 -> 32768 is a 64x span
-    # in attention work against a 4x span in the linear term, which is what separates the
-    # two.  Per point that is 3 lengths x 1 depth x 1 needle = 3 samples, 1 random trial,
-    # 1 mixer trial: minutes per model rather than hours.
+    # KV -- so this grid keeps the K points, the token budget and the prefill chunk, and
+    # spends its samples on **lengths** instead: 4096 -> 32768 is an 8x span in length,
+    # i.e. 64x in attention work against 8x in the linear term, which is what separates
+    # the two.  Depths, needles and both trial counts drop to one, so a model costs
+    # minutes instead of hours.
     #
     # It is a *mask* grid, so it reads the `a100` detect tree -- `cmd_mask` loads
     # `scores_next_step.npz` to rank the heads it ablates.  Run it after
     # `a100-scale-detect.yaml`, against the same `--out-prefix`, and on the models whose
     # per-pass cost the table is least sure about.  The `detect` entry is present so the
     # scale is well formed (`stage_argv` and `estimate_stages.grid` both read it) and is
-    # the `a100` grid, not a smaller one: this scale never runs detect.
+    # the `a100` grid, not a smaller one: this scale never runs detect.  `producer_scale`
+    # is what makes the fingerprint notice an edit to the grid that *did* produce those
+    # scores -- see `scale_fingerprint`.
     "a100-preflight-mask": {
+        "producer_scale": "a100",
         "detect": ["--profile", "paper", "--argmax-domain", "haystack",
                    "--prefill-chunk", "8192", "--max-new-tokens", "96",
                    "--preflight",
@@ -281,7 +284,22 @@ def scale_fingerprint(profile: str) -> str:
     """
     if profile not in SCALES:
         raise SystemExit(f"[entry] unknown scale {profile!r}; known: {sorted(SCALES)}")
-    blob = json.dumps(SCALES[profile], sort_keys=True).encode("utf-8")
+    # A scale that reads another scale's artifacts must carry that scale's grid too.
+    # `a100-preflight-mask` is mask-only and its `detect` entry is a copy that never
+    # runs -- the scores it ranks heads from come from `a100-scale-detect.yaml`, which
+    # ran under `a100`.  Hashing only the preflight's own entry would therefore notice
+    # nothing when the *real* detect grid moved, and the preflight would measure over
+    # scores from a grid it is not pricing: the same class of hole this function exists
+    # to close, just one level down.
+    parts = [SCALES[profile]]
+    producer = SCALES[profile].get("producer_scale")
+    if producer:
+        if producer not in SCALES:
+            raise SystemExit(
+                f"[entry] scale {profile!r} names producer_scale {producer!r}, which is "
+                f"not a scale; known: {sorted(SCALES)}")
+        parts.append(SCALES[producer])
+    blob = json.dumps(parts, sort_keys=True).encode("utf-8")
     return hashlib.sha256(blob).hexdigest()[:16]
 
 
@@ -387,9 +405,15 @@ def _download(url: str, target: Path) -> int:
 
 
 def _is_sha256(value: Any) -> bool:
-    """Whether `value` can be compared against a computed digest at all."""
+    """Whether `value` can be compared against a computed digest at all.
+
+    Lowercase only, on purpose: `_sha256` returns lowercase and the comparison is a plain
+    `!=`, so accepting uppercase here would let a pin pass validation and then fail
+    forever at download time with "re-pin", which is the wrong message.  Every one of the
+    142 pins in `configs/models.json` is lowercase.
+    """
     return (isinstance(value, str) and len(value) == 64
-            and all(c in "0123456789abcdef" for c in value.lower()))
+            and all(c in "0123456789abcdef" for c in value))
 
 
 def _check_cache_name(key: str, name: str) -> None:
@@ -433,22 +457,21 @@ def fetch_weights(target: Path, registry: Path, models: list[str]) -> int:
     if unknown:
         raise SystemExit(f"[entry] not in {registry}: {unknown}; known: {sorted(entries)}")
     target.mkdir(parents=True, exist_ok=True)
-    fetched = skipped = 0
+
+    # Validate *every* entry before the first byte, not each one as its turn comes: a typo
+    # in the last model's pin otherwise costs the whole download of the first nine (up to
+    # ~200 GiB) before it surfaces.
+    wanted_by_key: dict[str, dict[str, str]] = {}
     for key in models:
         entry = entries[key]
-        directory = target / Path(entry["path"]).name
-        wanted = {**entry.get("files", {}), **entry.get("shards", {})}
-        total = len(wanted)
-        if not total:
+        wanted = {**(entry.get("files") or {}), **(entry.get("shards") or {})}
+        if not wanted:
             # The loop below would fall straight through and print a success line for a
             # checkpoint whose bytes were never fetched.
             raise SystemExit(
                 f"[entry] {key}: the registry entry names neither `files` nor `shards`, "
                 f"so there is nothing to fetch; a silent success here would leave the "
                 f"cache without the checkpoint")
-        # Validate every name and digest *before* the first byte: a typo used to cost the
-        # whole download (tens of GiB) before it surfaced, and a name decides where the
-        # write and the rename land.
         for name, digest in sorted(wanted.items()):
             _check_cache_name(key, name)
             if not _is_sha256(digest):
@@ -456,6 +479,22 @@ def fetch_weights(target: Path, registry: Path, models: list[str]) -> int:
                     f"[entry] {key}/{name}: {digest!r} is not a sha256 hex digest, so "
                     f"the download could not be verified; re-pin with "
                     f"scripts/pin_registry.py")
+        # The registry key is the model directory's leaf, and the disk is shared: a
+        # symlink planted there would send every write (and the rename) through it.
+        directory = target / Path(entry["path"]).name
+        if directory.is_symlink():
+            raise SystemExit(
+                f"[entry] {key}: {directory} is a symbolic link; refusing to write the "
+                f"weights cache through it (the project disk is shared and nothing here "
+                f"may follow a link out of its own namespace)")
+        wanted_by_key[key] = wanted
+
+    fetched = skipped = 0
+    for key in models:
+        entry = entries[key]
+        directory = target / Path(entry["path"]).name
+        wanted = wanted_by_key[key]
+        total = len(wanted)
         print(f"[entry] {key}: {total} file(s) -> {directory}", flush=True)
         for index, (name, digest) in enumerate(sorted(wanted.items()), 1):
             path = directory / name
@@ -957,13 +996,23 @@ def report_environment() -> None:
               f"{props.total_memory / 2**30:.1f} GiB | cuda {torch.version.cuda} | "
               f"{torch.cuda.device_count()} device(s)")
         # The prefill runs through SDPA, which picks the flash kernel in bf16 -- but
-        # only if this GPU and this torch build support it.  The chunked-prefill
-        # memory bound assumes it does: on the math fallback the score matrix is
-        # materialised as (heads, chunk, seq), which at 49K/8192 is ~12.9 GB for the
-        # hybrid (8 Q-heads, fp32) and ~25.8 GB for the dense model (16) -- inside the
-        # A100's 80 GB either way, but not inside the 22 GiB L4 that OOM'd on this.
-        # The bootstrap job probed this on the L4; doing it here means every job's log
-        # answers it for the card it actually got, before the grid rather than after it.
+        # only if this GPU and this torch build support it.  The chunked-prefill memory
+        # bound assumes SDPA does not materialise the `(heads, chunk, seq)` score matrix.
+        # bf16 SDPA reaches flash or mem-efficient, neither of which does -- but the
+        # **math** fallback does, and that is not hypothetical:
+        # `docs/datasphere-findings.md` section 18 is a 16K float32 prefill that asked
+        # for 20.6 GiB in one allocation on a 22 GiB L4.
+        #
+        # The probe below used to test flash on a bare, unmasked `(1, 2, 64, 32)` tensor
+        # -- neither the shape the run uses nor the call it makes (the chunked prefill
+        # passes an attention mask, which flash does not accept, so the *real* prefill
+        # never goes through the path this tested).  It also claimed the materialised
+        # matrix is "~25.8 GB for the dense model (16 Q-heads)", which was true of the
+        # 0.6B/0.8B pair and is not true of the round that follows: at chunk 8192 and a
+        # 49152-token prefix, 32 Q-heads is ~52 GiB.  So the second probe runs the real
+        # call shape -- masked, chunked, 32 Q-heads -- and reports whether the scores
+        # were materialised, which is the thing that decides whether the 32-Q-head models
+        # (Qwen3-4B/8B/30B-A3B, both Ministral) can run at the configured chunk.
         try:
             import torch.nn.attention as attn
 
@@ -975,6 +1024,36 @@ def report_environment() -> None:
             print(f"[entry] SDPA flash backend: NOT available "
                   f"({type(exc).__name__}: {exc}) -- bf16 SDPA will use another "
                   f"backend and the chunked-prefill memory bound may not hold")
+        # Deliberately a small version of the real shape: the question is *which kernel*
+        # runs, and materialisation is visible at any size.  A peak near
+        # `heads x chunk x prefix x 4` means math; a peak near the inputs' own size means
+        # a fused kernel.  Scaling up to the real grid is then arithmetic.
+        try:
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
+            heads, chunk, prefix, dim = 32, 2048, 8192, 128
+            q = torch.randn(1, heads, chunk, dim, dtype=torch.bfloat16, device="cuda")
+            k = torch.randn(1, heads, prefix, dim, dtype=torch.bfloat16, device="cuda")
+            mask = torch.zeros(1, 1, chunk, prefix, dtype=torch.bfloat16, device="cuda")
+            torch.nn.functional.scaled_dot_product_attention(q, k, k, attn_mask=mask)
+            peak = torch.cuda.max_memory_allocated() / 2**30
+            materialised = heads * chunk * prefix * 4 / 2**30
+            print(f"[entry] SDPA masked prefill probe (32 Q-heads, chunk {chunk} vs "
+                  f"{prefix} prefix): peak {peak:.2f} GiB; a materialised "
+                  f"(heads, chunk, prefix) fp32 score matrix is {materialised:.2f} GiB")
+            if peak > materialised / 2:
+                print("[entry]   -> the math backend MATERIALISED the scores. At the real "
+                      "grid (chunk 8192, prefix 49152) that is ~52 GiB for a 32-Q-head "
+                      "model, which will not fit beside the weights: lower "
+                      "--prefill-chunk for Qwen3-4B/8B/30B-A3B and the Ministral pair.")
+            else:
+                print("[entry]   -> fused kernel; the chunked-prefill memory bound holds")
+            del q, k, mask
+            torch.cuda.empty_cache()
+        except Exception as exc:  # noqa: BLE001 - report it, never fail the job here
+            print(f"[entry] SDPA masked prefill probe failed "
+                  f"({type(exc).__name__}: {exc}) -- the chunked-prefill memory bound is "
+                  f"unverified for this card; check --prefill-chunk before a long run")
     else:
         print("[entry] GPU: none -- stages will run on CPU")
 
@@ -993,6 +1072,11 @@ def verify_weights(root: Path, registry: Path, keys: list[str] | None = None, *,
 
     A half-downloaded tree must not be mistaken for a ready one: the previous code
     printed "already present, leaving it alone" and carried on.
+
+    The names go through the same :func:`_check_cache_name` as `fetch_weights`.  This is
+    the path every A100 config actually uses, and `leaf / "/abs.safetensors"` resolves to
+    the absolute path -- so a registry entry could make this function read (and, with
+    ``--verify-hashes``, hash) a file outside the cache instead of reporting it missing.
     """
     data = json.loads(registry.read_text(encoding="utf-8"))["models"]
     if keys is not None:
@@ -1007,6 +1091,7 @@ def verify_weights(root: Path, registry: Path, keys: list[str] | None = None, *,
         leaf = root / Path(entry["path"]).name
         pinned = {**(entry.get("files") or {}), **(entry.get("shards") or {})}
         for name, digest in pinned.items():
+            _check_cache_name(key, name)
             target = leaf / name
             if not target.exists() or target.stat().st_size == 0:
                 missing.append(f"{key}/{name}")

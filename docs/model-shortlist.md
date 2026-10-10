@@ -20,9 +20,11 @@ The method needs a real attention map, so a model is only scoreable if all three
    dense and change `n_all_heads` silently.
 3. **The capture can patch it** — `eager_attention_forward` must be reachable from the
    attention class's module globals.  Verified for `qwen3`, `qwen3_moe`, `qwen3_5`,
-   `qwen3_5_moe`, `qwen3_next`, `gemma3`, `gemma4`, `gemma3n` in the installed
-   `transformers` 5.18: **all of them expose it**, so no capture work is needed for any
-   candidate below.
+   `qwen3_5_moe`, `qwen3_next`, `gemma3`, `gemma4`, `gemma3n` and — added when the
+   third family entered the round — `ministral3` in the installed `transformers` 5.18:
+   **all of them expose it**, so no capture work is needed for any candidate below.
+   (`ministral3` matters most of the nine: it is one of the ten checkpoints actually
+   pinned, and the list above it was written before it was chosen.)
 
 At 49K the budget is `weights + KV + workspace <= 80 GiB`, with the KV cache sized from
 the layers that keep one (a linear layer's recurrent state does not grow with context):
@@ -42,21 +44,36 @@ KV_GiB = 2 (K,V) * sum_over_layers(kv_heads * head_dim) * seq * 2 bytes / 2**30
 The third class is the interesting one and the one the code does **not** handle yet.  Two
 concrete obstacles, both read out of the installed implementation:
 
-* **Gemma 4's global layers have no `v_proj`.**  In `modeling_gemma4.py`,
-  `use_alternative_attention = config.attention_k_eq_v and not is_sliding`, and
-  `self.v_proj = (... if not self.use_alternative_attention else None)`.  With
-  `attention_k_eq_v: true` (Gemma 4 12B / 26B-A4B / 31B) the global layers therefore fail
-  the `q/k/v/o` signature, are not linear either, and `build_model_info` **raises**.  A
-  small change is needed to accept the unified-K/V form (`k_proj` supplies both K and V).
-* **KV sharing.**  Gemma 4 E2B/E4B (`num_kv_shared_layers` 20/18) and Gemma 3n (10/15)
-  drop `k_proj`/`v_proj` on the last N layers entirely: their attention maps are computed
-  against another layer's K/V, so those "heads" are not their own and must be excluded or
-  marked.  Gemma 3 and Gemma 4 12B/26B/31B have no sharing (`0`).
+* **Gemma 4's global layers have no `v_proj` — and that is *not* a crash.**  In
+  `modeling_gemma4.py`, `use_alternative_attention = config.attention_k_eq_v and not
+  is_sliding`, and `self.v_proj = (... if not self.use_alternative_attention else None)`.
+  An earlier version of this document said the global layers therefore "fail the `q/k/v/o`
+  signature ... and `build_model_info` **raises**".  That is wrong, and the reason is worth
+  keeping: the signature test is `all(hasattr(module, attr) ...)`, and
+  `nn.Module.__setattr__` with a `None` value still creates the attribute
+  (`object.__setattr__`, nothing in `_modules`).  So `hasattr(module, "v_proj")` is **True**
+  and the layer is discovered as ordinary scoreable attention.  The real consequence is
+  quieter and worse: with `attention_k_eq_v: true` (Gemma 4 12B / 26B-A4B / 31B) those
+  layers are scored as if V were their own projection when it is `k_proj`'s output, and
+  nothing raises.  The fix is the same kind of decision as the sliding-window one below --
+  recognise the unified-K/V form and mark it, rather than rely on a signature that cannot
+  see the difference between "absent" and "`None`".
+* **KV sharing is the form that does raise.**  Gemma 4 E2B/E4B (`num_kv_shared_layers`
+  20/18) and Gemma 3n (10/15) never assign `k_proj`/`v_proj` on the last N layers at all,
+  so `hasattr` is false, the layer is neither attention nor a known mixer, and the coverage
+  invariant in `build_model_info` fires.  Their attention maps are also computed against
+  another layer's K/V, so those "heads" are not their own and must be excluded or marked.
+  Gemma 3 and Gemma 4 12B/26B/31B have no sharing (`0`).
 * **Gemma 3's sliding layers would dilute the number.**  They are discovered as scoreable
   (all four projections exist), so the `>0.1` share would be computed over ~6x more heads
   than can ever fire.  Excluding `layer_types == "sliding_attention"` from the score (and
   reporting them like the linear mixers) is the honest fix — and `ModelInfo.layer_types`
   already carries the config's own list.
+* **"Structurally 0" is a mid-context statement.**  The depth grid is `iter_depths(10)`,
+  which includes 0 and 1, so at depth 1 the needle sits next to the query and even a
+  512-token window sees it; at 4K with a 1024-token window depths ~0.75 and above are
+  visible too.  The conclusion (exclude the sliding layers) is unchanged, but the phrase
+  should not be read as "zero on every sample".
 
 ## 3. Compatibility, verified
 
@@ -68,8 +85,8 @@ concrete obstacles, both read out of the installed implementation:
 | Qwen3.5-35B-A3B/122B-A10B | `qwen3_5_moe` | yes | yes | as above | **drop-in** |
 | Qwen3-Next-80B-A3B | `qwen3_next` | yes | yes | `full_attention_interval: 4` -> 12 of 48 layers | drop-in, but **151 GiB** of weights: not one A100 |
 | Gemma 3 4B/12B/27B | `gemma3` | yes | yes | all layers scoreable, 5 local : 1 global | needs the sliding-window decision; **repos are gated** (401) |
-| Gemma 4 12B/26B/31B | `gemma4`, `gemma4_unified` | yes (>= 5.5) | yes | global layers have `v_proj = None` | **needs code** (unified K/V) |
-| Gemma 4 E2B/E4B, Gemma 3n | `gemma4`, `gemma3n` | yes | yes | + KV sharing on the last N layers | needs both changes; weakest candidates |
+| Gemma 4 12B/26B/31B | `gemma4`, `gemma4_unified` | yes (>= 5.5) | yes | global layers carry `v_proj = None` (unified K/V) | **needs code**, but silently: the layer is discovered as ordinary attention, so nothing raises — see §2 |
+| Gemma 4 E2B/E4B, Gemma 3n | `gemma4`, `gemma3n` | yes | yes | `k_proj`/`v_proj` never assigned on the shared layers | needs both changes; weakest candidates (this one *does* raise) |
 
 Provenance caveat: `google/gemma-3-*` and `google/gemma-3n-*` configs answer **401**
 (gated licence), so their numbers here come from ungated mirrors
@@ -79,20 +96,45 @@ open and were read directly.
 
 ## 4. Fits on one A100 80 GB at 49K?
 
-Weights are `params x 2 bytes`; KV is computed from the configs above.
+Weights are `params x 2 bytes`; KV is computed from the configs above.  The budget is
+`weights + KV + workspace <= 80 GiB`, and **the workspace column is not optional**: at
+`--prefill-chunk 8192` and 49152 tokens a *materialised* score matrix is
+`8192 x 49152 x 4 B = 1.61 GB per Q-head`, i.e. ~26 GiB at 16 Q-heads and ~52 GiB at 32.
+That is not hypothetical -- `docs/datasphere-findings.md` section 18 is a 16K float32
+prefill that asked for 20.6 GiB in one allocation on a 22 GiB L4.  It is a *fallback*
+risk, not the normal path: the run is bf16, the prefill uses `sdpa` (`capture_impl`
+`eager` applies only to the last token and the decode steps, where the matrix is
+`(heads, 1, seq)`), and bf16 SDPA reaches flash or mem-efficient, neither of which
+materialises.  So the rows below are the weights+KV budget, and the 32-Q-head models
+(Qwen3-4B/8B/30B-A3B, both Ministral) are the ones where a math-backend fallback would
+not fit.  `report_environment` probes the flash backend at job start.
+
+Resident weights are smaller than the checkpoint for the Qwen3.5 models:
+`AutoModelForCausalLM` resolves `qwen3_5` to `Qwen3_5ForCausalLM`, so the vision tower
+and the `mtp.*` block are skipped (the committed
+`ds-results-a100/qwen3.5-0.8b/model_info.json` records `model_class =
+Qwen3_5ForCausalLM`).  The Ministral checkpoints go the other way: `mistral3` is not in
+the causal-LM mapping, so `load_model` falls through to
+`AutoModelForImageTextToText` and the 24-layer pixtral tower **is** resident.  Both
+columns are shown where they differ.
 
 | model | scoreable heads | weights GiB | KV @49K GiB | total GiB | verdict |
 |---|---|---|---|---|---|
+| Qwen3-0.6B | 448 | 1.4 | 5.25 | 6.7 | trivially fits |
 | Qwen3-1.7B | 448 | 3.8 | 5.2 | 9.0 | trivially fits |
-| Qwen3-4B | 1152 | 7.5 | 6.8 | 14.2 | fits |
+| Qwen3-4B | 1152 | 7.5 | 6.8 | 14.2 | fits (32 Q-heads: workspace is the risk, not weights) |
 | **Qwen3-8B** | **1152** | **15.3** | **6.8** | **22.0** | **fits comfortably** |
 | **Qwen3-14B** | **1600** | **27.5** | **7.5** | **35.0** | **fits comfortably** |
 | Qwen3-32B | 4096 | 61.0 | 12.0 | 73.0 | borderline: ~7 GiB for activations/workspace, no margin |
-| **Qwen3-30B-A3B** (MoE, 3.3B active) | **1536** | **56.9** | **4.5** | **61.4** | **fits** (~19 GiB spare) |
+| **Qwen3-30B-A3B** (MoE, 3.3B active) | **1536** | **56.9** | **4.5** | **61.4** | **fits** (~19 GiB spare) -- but 32 Q-heads, so a math fallback needs ~52 GiB and would OOM |
+| Qwen3.5-0.8B | 48 | 1.63 (1.40 resident) | 0.56 | 2.2 | trivially fits |
 | Qwen3.5-2B | 48 | 4.2 | 0.6 | 4.8 | fits (same head count as the 0.8B) |
-| **Qwen3.5-9B** | **128** | **18.0** | **1.5** | **19.5** | **fits comfortably** |
+| Qwen3.5-4B | 128 | 8.68 (7.6 resident) | 1.50 | 10.2 | fits comfortably |
+| **Qwen3.5-9B** | **128** | **18.0 (16.6 resident)** | **1.5** | **19.5** | **fits comfortably** |
 | Qwen3.5-27B | 384 | 51.7 | 3.0 | 54.7 | fits |
-| Qwen3.5-35B-A3B | 160 | 67.0 | 0.9 | 67.9 | fits, ~12 GiB spare (load the text-only class to drop the vision tower) |
+| Qwen3.5-35B-A3B | 160 | 67.0 (64.4 resident) | 0.9 | 67.9 | fits, ~15 GiB spare resident; 16 Q-heads, so even a math fallback needs ~26 GiB and does **not** fit |
+| Ministral-3-8B | 1088 | 16.61 | 6.38 | 23.0 | fits (32 Q-heads: workspace is the risk) |
+| Ministral-3-14B | 1280 | 25.97 | 7.50 | 33.5 | fits comfortably on weights+KV; 32 Q-heads, so a math fallback needs ~52 GiB and would OOM |
 | Gemma 4 12B Unified | 128 (8 global) | 22.3 | 15.8 | 38.0 | fits, after the code change |
 | Gemma 4 26B-A4B | 80 (5 global) | 46.9 | 10.3 | 57.3 | fits, after the code change |
 | Gemma 3 12B | 128 (8 global) | 22.4 | 18.0 | 40.4 | fits, but gated + sliding decision |

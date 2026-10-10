@@ -15,13 +15,13 @@ desc: one cheap mask grid at three lengths, to replace the mask cost table's ext
 #
 # This job measures the missing term instead of guessing it.  It keeps the K points, the
 # 96-token budget and the prefill chunk of the real grid, and spends its samples on
-# **lengths** -- 4096 -> 32768 is a 64x span in attention work against a 4x span in the
-# linear term, which is what separates overhead from compute.  Depths and needles drop to
-# one each and the trials to one, so a model costs minutes instead of hours:
+# **lengths** -- 4096 -> 32768 is an 8x span in length, i.e. 64x in attention work against
+# 8x in the linear term, which is what separates overhead from compute.  Depths, needles
+# and both trial counts drop to one, so a model costs minutes instead of hours:
 #
 #   .venv/bin/python scripts/estimate_stages.py --scale a100-preflight-mask --only mask \
 #       --models qwen3-0.6b qwen3-8b qwen3.5-9b ministral-3-14b
-#   -> 0.3 h / ~143 RUB for the four
+#   -> 0.2 h / ~123 RUB for the four
 #
 # The four models are chosen to span both axes of the fit, not to be a sample of the
 # round: `qwen3-0.6b` is one of the two anchor models, so it re-measures a known point on
