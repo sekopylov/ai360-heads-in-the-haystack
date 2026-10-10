@@ -98,11 +98,11 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 #
 # Honest note on the grid: the paper's own detection grid is 20 lengths sampled
 # uniformly over 1K-50K (with 10 depths and 3 needle sets, ~600 instances per model);
-# this profile is 9 geometric lengths, i.e. 270 per model, and for Qwen3-0.6B the two
-# longest are dropped by `within_context_limit` (its max_position_embeddings is 40960),
-# leaving 7 x 10 x 3 = 210.  If the A100 is being paid for, widening `--lengths` to
-# the paper's 20 is the knob to turn -- it is the cheapest way to make the run
-# actually paper-scale.
+# this profile is 9 geometric lengths -- 9 x 10 x 3 = 270 instances for the hybrid --
+# and Qwen3-0.6B loses the two longest to `within_context_limit` (its
+# max_position_embeddings is 40960), leaving 7 x 10 x 3 = 210 for the dense model.
+# If the A100 is being paid for, widening `--lengths` to the paper's 20 is the knob to
+# turn -- it is the cheapest way to make the run actually paper-scale.
 #
 # What it costs (Russia, incl. VAT, from the DataSphere pricing page):
 #   gt4i.1 (L4)  234.00 RUB/hour

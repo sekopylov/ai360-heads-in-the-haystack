@@ -320,6 +320,36 @@ def test_token_mixer_masker_rejects_a_foreign_model():
 
 
 
+def _readme_masking_rows() -> dict[tuple[str, int], str]:
+    """The README's masking table as ``{(model, K label): the whole row}``.
+
+    Anchoring on the row is the point: a substring search over the whole file catches
+    a *stale* table but not a *shuffled* one -- if K=18's numbers end up in the K=36
+    row, every substring is still present and the check passes while the table lies.
+    The K column is the only one whose third cell looks like ``9 (2%)``, so it selects
+    this table out of the README's dozen; a continuation row (empty model cell)
+    belongs to the model named above it.
+    """
+    import re
+    from pathlib import Path
+
+    rows: dict[tuple[str, int], str] = {}
+    model = None
+    for line in (Path(__file__).resolve().parent.parent / "README.md").read_text(
+            encoding="utf-8").splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) < 5 or all(set(cell) <= {"-", ":"} for cell in cells):
+            continue
+        if cells[0]:
+            model = cells[0]
+        match = re.match(r"(\d+) \(", cells[2])
+        if model is not None and match:
+            rows[(model, int(match.group(1)))] = line.replace("**", "")
+    return rows
+
+
 def test_the_readme_masking_table_matches_the_committed_artifacts():
     """Pin the README's masking table to the tree it claims to describe.
 
@@ -330,30 +360,51 @@ def test_the_readme_masking_table_matches_the_committed_artifacts():
     the field name is the trap, which `MaskingCurve.random_trials` now says in prose.)
     The random cells are checked against `per_sample[k]["random"]`, the only place the
     per-trial recall and exact-match series exist.
+
+    Every number is looked up **inside its own row**, so a transposed or re-attributed
+    table fails here instead of looking plausible.
     """
     import json
     from pathlib import Path
 
-    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(
-        encoding="utf-8").replace("**", "")
-    cases = [("qwen3-0.6b", 9), ("qwen3-0.6b", 18), ("qwen3-0.6b", 36),
-             ("qwen3.5-0.8b", 1), ("qwen3.5-0.8b", 8), ("qwen3.5-0.8b", 16)]
-    for model, k in cases:
-        path = (Path(__file__).resolve().parent.parent / "ds-results" / model
-                / "masking_curve.json")
-        curve = json.loads(path.read_text(encoding="utf-8"))
-        i = curve["k_values"].index(k)
+    root = Path(__file__).resolve().parent.parent
+    rows = _readme_masking_rows()
+    assert rows, "the masking table was not found in README.md"
+    # The README labels the hybrid's last point by its *effective* K (15), because the
+    # random arm caps both arms at the 15-head pool; `k_values` still says 16.
+    cases = [("qwen3-0.6b", "Qwen3-0.6B", 0), ("qwen3-0.6b", "Qwen3-0.6B", 1),
+             ("qwen3-0.6b", "Qwen3-0.6B", 2), ("qwen3.5-0.8b", "Qwen3.5-0.8B", 0),
+             ("qwen3.5-0.8b", "Qwen3.5-0.8B", 3), ("qwen3.5-0.8b", "Qwen3.5-0.8B", 4)]
+    for model, display, i in cases:
+        curve = json.loads((root / "ds-results" / model / "masking_curve.json").read_text(
+            encoding="utf-8"))
+        k, label = curve["k_values"][i], curve["k_effective"][i]
+        row = rows.get((display, label))
+        assert row is not None, (
+            f"README has no {display} K={label} row (the table has "
+            f"{sorted(k for m, k in rows if m == display)})"
+        )
         trials = curve["per_sample"][str(k)]["random"]
         recall = ", ".join(f"{t['recall']:.1f}" for t in trials)
-        assert recall in readme, (
-            f"README has no per-trial recall {recall!r} for {model} K={k}; the table "
-            f"and the artifact have drifted apart"
+        assert recall in row, (
+            f"the {display} K={label} row does not contain its per-trial recall "
+            f"{recall!r}; the table and the artifact have drifted apart (or the rows "
+            f"were shuffled -- the numbers are present elsewhere in the file)"
         )
-        assert f"{curve['retrieval'][i]:.1f} / " in readme, (model, k)
-        if k == 9:
+        assert f"{curve['retrieval'][i]:.1f} / " in row, (
+            f"the {display} K={label} row does not carry retrieval "
+            f"{curve['retrieval'][i]:.1f} in the retrieval column"
+        )
+        assert f"{label} (" in row, (display, label)
+        if model == "qwen3-0.6b" and i == 0:
+            # The README prints per-trial exact-match for this one row only: it is the
+            # place where a control trial beats the baseline (10/10 against 9/10), and
+            # the hybrid's exact column is 0% for a metric reason stated below it.
             exact = ", ".join(f"{t['exact_match'] / 10:.0f}/10" for t in trials)
-            assert exact in readme, f"README has no per-trial exact {exact!r}"
-    for model in ("qwen3-0.6b", "qwen3.5-0.8b"):
-        curve = json.loads((Path(__file__).resolve().parent.parent / "ds-results"
-                            / model / "masking_curve.json").read_text(encoding="utf-8"))
-        assert f"{curve['baseline']:.1f} f1" in readme, model
+            assert exact in row, f"the {display} K={label} row lacks exact {exact!r}"
+        if i == 0:
+            # The baseline is printed on the model's first row, so a model swap would
+            # leave the two blocks carrying each other's baseline.
+            assert f"{curve['baseline']:.1f} f1" in row, (
+                f"the {display} baseline is not on the {display} K={label} row"
+            )

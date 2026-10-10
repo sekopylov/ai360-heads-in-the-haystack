@@ -190,6 +190,22 @@ tied to a job id) → this file (where things stand and what is left).
     refused at both capture paths; "captured nothing" names the kernel).  Also refuted
     while checking: `_patch_targets` caches by `id(namespace)` but the dict *values*
     hold the namespace objects, so the ids cannot be recycled while the cache lives.
+  * **Mini-review of the same round: one editorial residue and one real gap in the new
+    tripwire, both fixed.**  (a) The per-model split landed in three places but not in
+    two: `a100.yaml`'s "Honest note on the grid" still read "9 geometric lengths, i.e.
+    270 per model" in the same sentence as "leaving 7 x 10 x 3 = 210", and
+    `run-in-datasphere.md` said "`detect` 270 инстансов на модель" (i.e. 540, not 480)
+    plus a bare "то есть 270".  Both now say 270 for the hybrid and 210 for the dense
+    model, and the runbook's budget line was brought up to the tenth round's unit
+    (~4.35k prefill+decode passes, ~3.87k of them the 4-16K ablations, `--random-trials
+    5 -> 3` removing ~990).  (b) The README masking-table tripwire searched substrings
+    across the whole file, so it caught a *stale* table but not a *shuffled* one --
+    moving K=18's cells into the K=36 row left every substring present and the test
+    green.  It now parses the table into `{(model, K label): the row}` and asserts each
+    number inside its own row (plus the baseline on the model's first row), which was
+    verified by simulating the shuffle: the old check passes it, the new one fails both
+    rows.  The hybrid's last row is keyed by its *effective* K (15, not `k_values`' 16),
+    which the parser reads from `k_effective`.
   * Process note: this round was run with the reviewer's report already in hand rather
     than by a subagent, per the instruction to wind the subagents down; no second
     reviewer was launched, so this is a confirmation pass on one report, not a new
@@ -215,11 +231,13 @@ tied to a job id) → this file (where things stand and what is left).
     measurement needs `--data file.jsonl`; the config comments say so and
     `a100-resume.yaml` mirrors the new tail (`compare,figures,case-study`).
   * **The budget is stated as arithmetic, not adjectives.**  `a100.yaml` now carries the
-    generation counts (detect 270/model; mask 1665 dense / 1395 hybrid; mixer 810
-    hybrid ~ 3.9k generations of 4-16K plus 480 prefills) and names `--random-trials 5`
-    as the dominant multiplier and the mixer ablation as the first thing to cut.  The
-    reviewer's own 2475 omitted the hybrid's mask arm; the counts are now checkable in
-    the config rather than estimated in prose.
+    pass counts (detect 210 dense + 270 hybrid = 480; mask 1665 dense / 1395 hybrid;
+    mixer 810 hybrid -- ~3.87k of 4-16K ablations in a ~4.35k total) and names
+    `--random-trials 5` as the dominant multiplier and the mixer ablation as the first
+    thing to cut.  The reviewer's own 2475 omitted the hybrid's mask arm; the counts are
+    now checkable in the config rather than estimated in prose.  (The tenth round then
+    corrected the *unit* -- every generation carries its own prefill, so "prefill +
+    decode" is the pass, not the generation.)
   * **`run-in-datasphere.md` was three rounds stale** -- "3 needles x 5 depths = 15
     samples" (it is 3 lengths x 5 x 3 = 45), "the CLI default is 3x5x1 = 15" (it is
     1x5x1 = 5), and the pre-round-eight truncation numbers (0.684/0.793 -> 0.671/0.755).
