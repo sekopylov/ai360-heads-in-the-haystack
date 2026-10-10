@@ -4,7 +4,13 @@ step by step, writes one result per sample and, with --consume, deletes what it 
 
 python -m rh.metrics results/new/run1/spool --out results/new/run1 --follow --consume
 
+The answer metrics are computed from the answers that rh.run keeps in --out/outputs; these files are never deleted.
+After a change of the answer metrics, samples.jsonl and the summary are built again without the model and the spool:
+
+python -m rh.metrics results/new/run1/spool --out results/new/run1 --rescore
+
 Results in --out:
+    outputs/<sample>.json    written by rh.run: the answer as it is (tokens, text with special tokens), reference, meta
     samples.jsonl            one line per sample: meta, response, answer metrics
     heads/<sample>.npz       head metrics of the sample, each [layer, head] over the layers with attention
     summary.json             aggregate over the samples
@@ -106,11 +112,42 @@ def head_metrics(limits=()):
     return metrics
 
 
-def process_sample(sample_path, wait, delete, limits=()):
+def sample_result(record):
+    """The line of samples.jsonl for one saved answer (a file of outputs/): meta, response and the answer metrics."""
+    result = {"id": record["id"], **record["meta"], "reference": record["reference"], "response": record["response"],
+              "n_tokens": record["n_tokens"], "seconds": record["seconds"],
+              **answer_metrics(record["reference"], record["response"])}
+    if record.get("stopped") is not None:
+        # stopped: the answer ended by itself; at a limit it is truncated when it had not ended by that token
+        result["stopped"] = record["stopped"]
+        result["by_limit"] = {}
+        for limit in record["limits"]:
+            text = record["responses_at"].get(str(limit), record["response"])
+            scores = answer_metrics(record["reference"], text)
+            result["by_limit"][str(limit)] = {"rouge1_recall": scores["rouge1_recall"], "success": scores["success"],
+                                              "truncated": not (record["stopped"] and record["n_tokens"] <= limit)}
+    return result
+
+
+def saved_output(out, info, done, limits):
+    """
+    The saved answer of the sample. A sample generated before the answers were kept has its answer in done.json:
+    it is moved to outputs/ here, so that every answer of the run ends up there.
+    """
+    record = spool.load_output(out, info["id"])
+    if record is None:
+        record = {"id": info["id"], "meta": info["meta"], "reference": info["reference"], "output_ids": done["output_ids"],
+                  "response": done["response"], "responses_at": done.get("responses_at", {}), "limits": list(limits),
+                  "stopped": done.get("stopped"), "n_tokens": done["n_steps"], "seconds": done["seconds"]}
+        spool.save_output(out, record)
+    return record
+
+
+def process_sample(sample_path, out, wait, delete, limits=()):
     """
     Reads the chunks of one sample in order, as they appear; with delete every chunk is removed as soon as it is
     read, so a sample may be larger than the buffer of the run. wait() is called when the next file is not there
-    yet and returns False to give up.
+    yet and returns False to give up. The answer is taken from out/outputs, which stays.
     Returns (status, result, head arrays): status "ok"; "incomplete" when the run stopped before the end of the
     sample; "lost" when some chunks of it are gone (the metrics were interrupted in the middle of it).
     """
@@ -138,18 +175,7 @@ def process_sample(sample_path, wait, delete, limits=()):
                 os.remove(chunk_path)
             chunk += 1
         elif done is not None and done["n_chunks"] == chunk:
-            result = {"id": info["id"], **info["meta"], "reference": info["reference"], "response": done["response"],
-                      "n_tokens": done["n_steps"], "seconds": done["seconds"],
-                      **answer_metrics(info["reference"], done["response"])}
-            if "stopped" in done:
-                # stopped: the answer ended by itself; at a limit it is truncated when it had not ended by that token
-                result["stopped"] = done["stopped"]
-                result["by_limit"] = {}
-                for limit in limits:
-                    text = done.get("responses_at", {}).get(str(limit), done["response"])
-                    scores = answer_metrics(info["reference"], text)
-                    result["by_limit"][str(limit)] = {"rouge1_recall": scores["rouge1_recall"], "success": scores["success"],
-                                                      "truncated": not (done["stopped"] and done["n_steps"] <= limit)}
+            result = sample_result(saved_output(out, info, done, limits))
             heads = {m.name: m.end().astype(np.float32) for m in metrics} if started else {}
             return "ok", result, heads
         elif done is not None or later:
@@ -202,7 +228,7 @@ def consume(spool_dir, out, follow, delete, idle_timeout=3600):
                 continue
             run_json = f"{spool_dir}/run.json"
             limits = spool.load_json(run_json).get("limits", []) if os.path.exists(run_json) else []
-            status, result, heads = process_sample(sample_path, wait, delete, limits)
+            status, result, heads = process_sample(sample_path, out, wait, delete, limits)
             progress[0] = time.time()
             if status != "ok":
                 # not written to samples.jsonl, so the next rh.run generates the sample again
@@ -218,6 +244,30 @@ def consume(spool_dir, out, follow, delete, idle_timeout=3600):
             if delete:
                 remove_sample(sample_path)
             print(f"{sample_id}: rouge {result['rouge1_recall']:.1f}, {result['n_tokens']} tokens, {result['response'][:70]!r}", flush=True)
+
+
+def rescore(out):
+    """
+    Builds samples.jsonl again from the answers saved in out/outputs: for a changed or a new answer metric, without
+    the model and the spool. Only the samples already in samples.jsonl are rewritten, in the same order: a sample
+    gets its line when its head metrics are done too. Lines of samples without a saved answer (runs made before the
+    answers were kept) stay as they are. Returns (rewritten, kept).
+    """
+    path = f"{out}/samples.jsonl"
+    if not os.path.exists(path):
+        return 0, 0
+    with open(path, encoding="utf-8") as f:
+        rows = [json.loads(l) for l in f if l.strip()]
+    records = [spool.load_output(out, row["id"]) for row in rows]
+    rows = [sample_result(record) if record else row for row, record in zip(rows, records)]
+
+    def write(tmp):
+        with open(tmp, "w", encoding="utf-8") as f:
+            for row in rows:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    spool.write_atomic(path, write)
+    rewritten = sum(r is not None for r in records)
+    return rewritten, len(rows) - rewritten
 
 
 def rank(x):
@@ -288,8 +338,13 @@ if __name__ == "__main__":
     parser.add_argument("--follow", action="store_true", help="keep reading until the run has finished")
     parser.add_argument("--consume", action="store_true", help="delete the spool files of every processed sample")
     parser.add_argument("--idle_timeout", type=int, default=3600, help="with --follow: stop when the spool gets no new data for this number of seconds")
+    parser.add_argument("--rescore", action="store_true", help="do not read the spool: compute the answer metrics again from the answers saved in --out/outputs")
     args = parser.parse_args()
 
-    consume(args.spool, args.out, args.follow, args.consume, args.idle_timeout)
+    if args.rescore:
+        rewritten, kept = rescore(args.out)
+        print(f"answer metrics computed again for {rewritten} samples" + (f"; {kept} samples have no saved answer, their lines are kept" if kept else ""), flush=True)
+    else:
+        consume(args.spool, args.out, args.follow, args.consume, args.idle_timeout)
     summary = aggregate(args.spool, args.out)
     print(json.dumps(summary, indent=1, ensure_ascii=False))

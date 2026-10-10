@@ -5,9 +5,11 @@ when asked, delete what they have processed; the run waits while the unread data
     run.json                      model, layers with attention, what is saved, masked heads
     NNNNNN_<id>.sample.npz        prompt tokens, spans, reference answer, meta; written before the generation
     NNNNNN_<id>.CCCCCC.steps.npz  a chunk of consecutive generation steps
-    NNNNNN_<id>.done.json         generated tokens, response text, number of chunks; whether the answer ended by itself
-                                  and its text cut at every token limit of the run; written after the last chunk
+    NNNNNN_<id>.done.json         number of chunks and steps; written after the last chunk
     RUN_DONE                      the run has finished
+
+The answers are not part of this exchange: the run writes every answer as it is into <out>/outputs/<id>.json and
+nothing deletes these files; the answer metrics are computed from them and can be computed again at any time.
 
 A chunk holds per step and per head: the top-k attention positions and values, and the attention mass on every span
 of the sample; with save="rows" also the whole attention row. Files appear under their final name only when complete.
@@ -20,6 +22,7 @@ import time
 import numpy as np
 
 STEPS = ".steps.npz"
+OUTPUTS = "outputs"
 
 
 def write_atomic(path, write):
@@ -45,6 +48,17 @@ def save_npz(path, **arrays):
 def load_json(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+def save_output(out, record):
+    """The answer of one sample, kept for good in <out>/outputs/<id>.json."""
+    os.makedirs(f"{out}/{OUTPUTS}", exist_ok=True)
+    save_json(f"{out}/{OUTPUTS}/{record['id']}.json", record)
+
+
+def load_output(out, sample_id):
+    path = f"{out}/{OUTPUTS}/{sample_id}.json"
+    return load_json(path) if os.path.exists(path) else None
 
 
 class SpoolWriter:
@@ -148,10 +162,9 @@ class SpoolWriter:
             time.sleep(1)
             waited += 1
 
-    def end_sample(self, output_ids, response, seconds, **extra):
+    def end_sample(self):
         self.flush()
-        save_json(f"{self.prefix}.done.json", {"output_ids": [int(i) for i in output_ids], "response": response,
-                                                "n_chunks": self.n_chunks, "n_steps": self.n_steps, "seconds": seconds, **extra})
+        save_json(f"{self.prefix}.done.json", {"n_chunks": self.n_chunks, "n_steps": self.n_steps})
 
     def end_run(self, completed=True):
         save_json(f"{self.path}/RUN_DONE", {"completed": completed})

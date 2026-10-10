@@ -185,8 +185,15 @@ def execute(args, enc, model, attn_layers):
             response = enc.decode(output, skip_special_tokens=True).strip()
             # the text the answer would have had under every shorter limit; decoded here, the metrics have no tokenizer
             responses_at = {str(l): enc.decode(output[:l], skip_special_tokens=True).strip() for l in limits if l < len(output)}
-            writer.end_sample(output, response, round(time.time() - start_time, 2),
-                              stopped=bool(output) and output[-1] in stop, responses_at=responses_at)
+            # the answer as it is, kept in <out>/outputs: the answer metrics are computed from this file, now and
+            # later. stopped: the answer ended by itself and was not cut at the cap. Written before done.json, which
+            # tells the metrics that the sample is complete.
+            spool.save_output(args.out, {
+                "id": sample.id, "meta": sample.meta, "reference": sample.reference,
+                "output_ids": [int(i) for i in output], "text": enc.decode(output), "response": response,
+                "responses_at": responses_at, "limits": limits, "stopped": bool(output) and output[-1] in stop,
+                "n_tokens": len(output), "seconds": round(time.time() - start_time, 2)})
+            writer.end_sample()
             if metrics is None:
                 print(f"{sample.id}: {time.time() - start_time:.1f}s, {len(output)} tokens, {response[:70]!r}", flush=True)
         else:
