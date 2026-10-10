@@ -17,16 +17,26 @@ desc: populate the project-disk weights cache for the scale-up round (no stages,
 # `<name>.part` until the digest matches, so an interrupted run cannot leave something
 # that a later `--verify-hashes` would accept.
 #
-# Run it once (a few hours for ~180 GiB at job bandwidth), then every A100 config can use
+# Run it once (a few hours for ~220 GiB at job bandwidth), then every A100 config can use
 # `--weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models` instead of `${WEIGHTS}`.
 # The path is namespaced under our own directory because the disk is shared -- the same
 # reason `test_cached_configs_use_a_namespaced_venv_path` insists on it for the venv.
+#
+# Re-running is free for what is already there (a file whose digest matches is skipped),
+# so this list is the *whole* round and a second run adds only what is missing: the two
+# Ministral models were added after the first launch and land on the next run.
+#
+# The Ministral pair is the `-BF16` re-release, not the Instruct default: Mistral ships
+# the Instruct weights as FP8, and this project loads bf16.  Both are the same
+# architecture (34 and 40 layers, 32 Q-heads, `sliding_window: null` -- every layer is
+# global), and their native window is 16K stretched by YaRN x16, so 49K is extrapolation
+# for them even though the config says 262144.
 #
 # The digests for files that are not on this laptop came from the Hub's own LFS metadata
 # (`scripts/pin_registry.py`), which is why the verification here is not a formality: it
 # is the first time those pins meet the real bytes.
 
-cmd: python3 scripts/datasphere_job.py --fetch-weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models --models qwen3.5-0.8b qwen3-0.6b qwen3-4b qwen3-8b qwen3-30b-a3b qwen3.5-4b qwen3.5-9b qwen3.5-35b-a3b
+cmd: python3 scripts/datasphere_job.py --fetch-weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models --models qwen3.5-0.8b qwen3-0.6b qwen3-4b qwen3-8b qwen3-30b-a3b qwen3.5-4b qwen3.5-9b qwen3.5-35b-a3b ministral-3-8b ministral-3-14b
 
 flags:
   - attach-project-disk
