@@ -334,6 +334,42 @@ def test_the_a100_split_halves_do_not_overlap_and_share_one_prefix(configs):
         assert args.no_chat_template == full.no_chat_template, name
 
 
+def test_the_scale_detect_half_covers_every_model_the_mask_half_ablates(configs):
+    """`mask` opens the `detect` scores, so its model list must be a subset of detect's.
+
+    The two halves of the scale round are separate jobs, and nothing at runtime connects
+    them: `cmd_mask` does `RetrievalScores.load(<out>/scores_<pairing>)` *before* it loads
+    the checkpoint, so a model with no detect run fails with a `FileNotFoundError`.  The
+    mask half lists all ten and puts the Ministral pair last, so a detect half that lists
+    only eight does not fail early -- it spends the eight models' nineteen hours and then
+    dies on the ninth.  This is the same coverage invariant as the `a100-*` split test,
+    which is why the failure is written down rather than left to the run.
+    """
+    driver = load_job_driver()
+    if not {"a100-scale-detect.yaml", "a100-scale-mask.yaml"} <= set(configs):
+        pytest.skip("scale configs not present")
+
+    def parsed(name: str):
+        tokens = [token.replace("${WEIGHTS}", "/w").replace("${DS_PROJECT_HOME}", "/disk")
+                  for token in configs[name]["cmd"].split()]
+        return driver.parse_args(tokens[2:])
+
+    detect, mask = parsed("a100-scale-detect.yaml"), parsed("a100-scale-mask.yaml")
+    assert detect.out_prefix == mask.out_prefix, (detect.out_prefix, mask.out_prefix)
+    first = [s.strip() for s in detect.stages.split(",") if s.strip()]
+    second = [s.strip() for s in mask.stages.split(",") if s.strip()]
+    assert set(first).isdisjoint(second), (first, second)
+    # The producer/consumer direction: detect is the one that writes `scores_*`.
+    assert "detect" in first and "mask" in second, (first, second)
+    missing = sorted(set(mask.models) - set(detect.models))
+    assert not missing, (
+        f"a100-scale-mask.yaml ablates {missing}, but a100-scale-detect.yaml never runs "
+        f"`detect` for them, so `mask` will die on a missing scores_next_step.npz"
+    )
+    # And the subset is real: a vacuous mask list would pass the assertion above.
+    assert mask.models, "the mask half must name at least one model"
+
+
 def test_only_the_configs_that_stage_their_tree_ask_to_resume(configs):
     """`--resume` is opt-in, and only where it can actually fire.
 

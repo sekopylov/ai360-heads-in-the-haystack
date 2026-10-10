@@ -10,10 +10,17 @@ desc: scale-up round, first half -- describe,detect for all ten checkpoints off 
 #
 # It is the *cheap* half: `detect` is dominated by the capture (`layers x heads` per decode
 # step), while `mask` is dominated by prefill+decode work (parameters) and carries the
-# 1620-pass ablation.  Roughly a third of the total, and it answers "does the >0.1 share
-# grow or shrink with scale, and is the hybrid's non-sparsity architectural" on its own.
-# `mask` for the models that earn it is a second job (the same split as
-# `a100-detect.yaml` / `a100-mask.yaml`).
+# 1620-pass ablation.  About a quarter of the total (5.9 h of the 23.8 h the mask config's
+# table prices), and it answers "does the >0.1 share grow or shrink with scale, and is the
+# hybrid's non-sparsity architectural" on its own.  `mask` for the models that earn it is a
+# second job (the same split as `a100-detect.yaml` / `a100-mask.yaml`).
+#
+# The model list must stay a **superset** of `a100-scale-mask.yaml`'s, because `mask` opens
+# `scores_next_step.npz` to rank the heads it is about to ablate (`cmd_mask` loads it before
+# the checkpoint, so a model with no detect run dies with a FileNotFoundError).  The mask
+# half lists all ten and runs the Ministral pair last, so leaving them out here would not
+# fail early -- it would burn the nineteen hours of the eight models that do work and then
+# die on the ninth.  A test enforces the superset.
 #
 # Weights: `${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models`, filled once by
 # `a100-weights.yaml`.  The `inputs` path cannot carry these (the CLI caps a job's inputs
@@ -34,7 +41,7 @@ desc: scale-up round, first half -- describe,detect for all ten checkpoints off 
 # sparse FFN, so all their layers are scoreable; the Qwen3.5 pair is a Gated DeltaNet
 # hybrid, where only the `full_attention` layers are.
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models --models qwen3-0.6b qwen3.5-0.8b qwen3-4b qwen3.5-4b qwen3-8b qwen3.5-9b qwen3-30b-a3b qwen3.5-35b-a3b --profile a100 --dtype bfloat16 --verify-hashes --resume --stages describe,detect --out-prefix ds-results-scale
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models --models qwen3-0.6b qwen3.5-0.8b qwen3-4b qwen3.5-4b qwen3-8b qwen3.5-9b qwen3-30b-a3b qwen3.5-35b-a3b ministral-3-8b ministral-3-14b --profile a100 --dtype bfloat16 --verify-hashes --resume --stages describe,detect --out-prefix ds-results-scale
 
 flags:
   - attach-project-disk
