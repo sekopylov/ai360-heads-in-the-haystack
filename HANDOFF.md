@@ -217,6 +217,40 @@ tied to a job id) → this file (where things stand and what is left).
     the masking hooks at large K add back), is ~2 h for 1665+1395+810 passes -- so the
     whole template run is ~2.5-3 h and ~1.4k-1.6k RUB, and the split launch cost nothing
     extra (detect is 17% of the run either way).
+* **Review rounds 13-15 (after the A100 run, the loop resumed with subagents).**  Round
+  13 (on `2b2b000`) found three real holes in `--resume`; round 14 (on `7613486`) found
+  that the fix was *incomplete* -- the derived stages' argv is only paths, so a relaunch
+  with a different `--lengths` re-ran `mask` and **skipped** `compare`/`figures`/
+  `case-study`, i.e. exactly the two-grids-reported-as-success tree the flag exists to
+  prevent (reproduced in one command before fixing); round 15 (on `fa11319`) confirmed
+  the three properties of that fix by code and found two more real, low-cost ones (the
+  registry was outside the fingerprint; a valid-JSON non-object manifest crashed
+  `completed_stages` before the first stage).  All are closed in `7613486`/`eec29ec`,
+  each with a test that fails without it:
+  * the fingerprint is now the stage's command line **plus** the run-level conditions its
+    argv cannot carry (`--lengths`/`--limit`/`--no-chat-template`/`--dtype`/`--seed`/
+    `--models`/`--profile`, the `retrieval_heads/` hash, and the registry entries of the
+    models in use), with `shlex.join` rather than a space join;
+  * the full `code_sha256` is recorded next to it and only *reported* when it moves: a
+    change to `case_study.py` or to the driver must not re-buy an hour of `mask`, while
+    a change under `retrieval_heads/` does invalidate;
+  * `figures` writes `figures/manifest.json` (drawn / failed, with the exception text and
+    which files a half-written figure left on disk), and the skip reads it -- `figures/*.pdf`
+    would have been satisfied by one leftover PDF and a partial set stayed `ok` forever;
+  * `--resume` is only in configs that stage the tree they read (`a100-detect` produces
+    it and must start empty -- my comment there claimed the flag worked, and it could not);
+  * the fingerprint has a tripwire:
+    `test_every_driver_input_is_classified_for_the_resume_fingerprint` fails when
+    `parse_args` grows a dest that is neither a fingerprint field nor in a
+    reason-annotated exception list, because two rounds in a row found the same class of
+    bug.
+  * **Honest status of the fingerprint: it has not yet fired in a real job.**  All 22
+    records in the committed `ds-results-a100/run_state.json` predate it, so
+    `bt1o3h21eqkek27kddb4` went through the "predates the fingerprint" warning, not
+    through the comparison.  What that job verified on the card is the bf16 fix.
+  * Also recorded: the prefix is inside every stage's argv, so the *first* resume of a
+    tree staged under another name (`a100-resume`'s rename) re-runs that config's whole
+    stage list.  Safe and cheap, and now stated in the config instead of implied.
 * **The A100 template run is complete: job `bt1o3h21eqkek27kddb4`, SUCCESS, 65 min.**
   `a100-mask.yaml` with `--resume` skipped the hybrid's already-paid `mask` (the "5
   finished stage(s) will be skipped" line is in the log), ran the dense `mask`
