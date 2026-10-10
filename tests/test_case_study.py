@@ -33,17 +33,21 @@ def case_study():
     return module
 
 
-def _stub(case_study, monkeypatch, info, seen: dict):
+def _stub(case_study, monkeypatch, info, seen: dict, row_dtype=None):
     """Replace everything that needs a real model or a plot backend."""
     import torch
+
+    if row_dtype is None:
+        row_dtype = torch.float32
 
     def fake_decode(model, info, input_ids, **kwargs):
         seen["capture"] = kwargs
         return type("T", (), {"steps": []})(), [1, 2, 3]
 
     class FakeStep:
-        # One row per scoreable layer; `main` reads `.cpu().numpy()` and `.max()`.
-        attn = {layer: torch.zeros(2, 4) for layer in info.scoreable_layers}
+        # One row per scoreable layer.  `row_dtype` is what the capture returns in a
+        # real run: the query dtype, i.e. bfloat16 on a GPU job.
+        attn = {layer: torch.zeros(2, 4, dtype=row_dtype) for layer in info.scoreable_layers}
         step = 0
 
     class FakeSample:
@@ -69,16 +73,17 @@ def _stub(case_study, monkeypatch, info, seen: dict):
     monkeypatch.setattr(case_study, "find_copy_step", lambda *a, **k: (FakeStep(), 2, 1))
     monkeypatch.setattr(case_study, "save_json",
                         lambda payload, path: seen.update(json=payload))
-    monkeypatch.setattr(case_study, "plot_attention_distribution", lambda d: None)
+    monkeypatch.setattr(case_study, "plot_attention_distribution",
+                        lambda d: seen.update(distributions=d))
     monkeypatch.setattr(case_study, "save_fig", lambda fig, path: None)
     monkeypatch.setattr(case_study, "add_provenance",
                         lambda payload, **k: (seen.update(provenance_kwargs=k), payload)[1])
     monkeypatch.setattr(case_study, "_load", lambda name, **k: (None, FakeTokenizer(), info))
 
 
-def _run(case_study, monkeypatch, tmp_path, argv, info):
+def _run(case_study, monkeypatch, tmp_path, argv, info, row_dtype=None):
     seen: dict = {}
-    _stub(case_study, monkeypatch, info, seen)
+    _stub(case_study, monkeypatch, info, seen, row_dtype=row_dtype)
     monkeypatch.setattr(sys, "argv", ["case_study", "--model", "toy", "--length", "8",
                                       "--out", str(tmp_path), *argv])
     assert case_study.main() == 0
@@ -156,3 +161,29 @@ def test_the_case_study_records_its_dtype_and_filler_seed(case_study, monkeypatc
     )
     # The other conditions that used to be missing from the artifact.
     assert payload["length_requested"] == 8 and payload["max_new_tokens"] == 32
+
+
+def test_bfloat16_attention_rows_reach_the_figure_as_float32(case_study, monkeypatch, tmp_path):
+    """The first A100 `mask` job died here, after 75 minutes of masking.
+
+    `StepTrace.attn` holds the softmax in the *query* dtype, so on a bf16 GPU run the
+    rows are bfloat16 -- and numpy has no bfloat16, so `.cpu().numpy()` raises
+    `TypeError: Got unsupported ScalarType BFloat16`.  Job `bt1u3ja8cb0it4klqehl`
+    (`case_study.py:203`) died exactly three seconds into this stage, having already
+    paid for the hybrid's whole masking curve.  The stage had only ever run on CPU
+    fp32, so no test saw it: this one hands the figure bf16 rows, as a real GPU run
+    does, and requires float32 arrays at the plot.
+    """
+    import numpy as np
+    import torch
+
+    from tests._helpers import attention_info
+
+    seen = _run(case_study, monkeypatch, tmp_path, [], attention_info(2, 2),
+                row_dtype=torch.bfloat16)
+    rows = [row for row, _span in seen["distributions"].values()]
+    assert len(rows) == 2, "the figure must get the strong and the weak head's row"
+    for row in rows:
+        assert isinstance(row, np.ndarray)
+        assert row.dtype == np.float32, f"matplotlib got {row.dtype}, not float32"
+        assert np.isfinite(row).all()

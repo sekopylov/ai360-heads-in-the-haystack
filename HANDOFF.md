@@ -217,6 +217,56 @@ tied to a job id) → this file (where things stand and what is left).
     the masking hooks at large K add back), is ~2 h for 1665+1395+810 passes -- so the
     whole template run is ~2.5-3 h and ~1.4k-1.6k RUB, and the split launch cost nothing
     extra (detect is 17% of the run either way).
+* **The first `a100-mask.yaml` launch died in `case-study`, and the fix is three
+  things.**  Job `bt1u3ja8cb0it4klqehl` (2026-10-10) ran the hybrid's whole masking
+  stage (75 min, 09:45:47 -> 11:00:40 UTC: five K points x one retrieval + five random
+  arms, then the K<=4 mixer ablation) and then failed three seconds into `case-study`
+  with `TypeError: Got unsupported ScalarType BFloat16` at `case_study.py:203`.  The
+  dense model's `mask` never started.  Root cause is the same pattern as the morning's
+  import bug: `case-study` was added to the stage list in round seven, *after* the last
+  successful GPU run, and `StepTrace.attn` holds the softmax in the query dtype -- so on
+  a bf16 GPU run `.cpu().numpy()` raises (numpy has no bfloat16) while on CPU fp32 it
+  works.  Nothing had exercised it on a GPU.
+  * **Fixed, with a regression test that reproduces the job's own message.**
+    `row_numpy()` upcasts to float32 before `.numpy()`; the new test in
+    `tests/test_case_study.py` hands the figure bf16 rows and fails with
+    `TypeError: Got unsupported ScalarType BFloat16` without the fix.  Verified end to
+    end locally in bf16 (`--dtype bfloat16`, Qwen3-0.6B, 1024 tokens): PDF + PNG + JSON
+    written, `provenance.dtype == "bfloat16"`.
+  * **`--resume` exists now** (`scripts/datasphere_job.py`): it skips every
+    `(stage, model)` that `run_state.json` records as `ok` *and* whose artifact is
+    present (`STAGE_ARTIFACTS`, a glob per stage; the *last* status per pair wins, and an
+    unreadable state file means "skip nothing").  `run_state.json` had recorded the
+    `ok` all along -- nothing read it back, which is why a relaunch would have re-bought
+    the 75 minutes.  Opt-in, and carried only by the continuation configs
+    (`a100-detect`, `a100-mask`, `a100-resume`); `a100.yaml`/`a100-notemplate.yaml` and
+    the preflights leave it off so a fresh full run can never skip on a stale file.
+  * **`stage_plan` is now segmented: the config's stage order is the run order.**
+    Within each run of consecutive model stages the models are still grouped
+    (model-major), but a model-free stage (`compare`/`figures`) ends the segment, so a
+    stage listed after them runs after them.  The A100 configs already list
+    `case-study` last; the old plan put the hybrid's `case-study` *between* the two
+    `mask` stages, so the crash took the dense mask down with it -- and with `--resume`
+    a repeat crash would have blocked it on every relaunch.  Price: two extra weight
+    loads (tens of seconds).  Both the ordering and the skip are pinned by tests.
+  * **The hybrid's mask artifacts are merged** into `ds-results-a100/` (the downloaded
+    tree differed from the committed one by exactly `masking_curve.json`,
+    `mixer_ablation.json` and the appended `run_state.json`), so the relaunch's
+    `local-paths` snapshot carries them and `--resume` sees them.  Verified offline: the
+    plan for the relaunch is `SKIP mask hybrid, RUN mask dense, compare, figures,
+    case-study hybrid, case-study dense` -- the expensive missing piece runs first.
+  * The hybrid's masking numbers, first read (baseline f1 76.1 / exact 55.6; k=1
+    retrieval 70.3 vs random 65.9+/-14.6; k=2 58.2 vs 54.6+/-13.4; k=4 50.5 vs
+    59.2+/-14.6; k=8 44.6 with exact 0.0; k=16 caps to the 13-head pool, 33.8 vs
+    21.0+/-0.0), and the mixer ablation (k=1 full-attention 56.6+/-2.6 vs linear
+    74.7+/-10.2; k=2 20.5+/-10.5 vs 60.1+/-7.0; k=4 10.7+/-1.6 vs 17.8+/-24.2) are
+    consistent with the committed t4 tree's story -- the linear mixers matter more than
+    the full-attention heads at small K, which is the paper's ablation in reverse.  The
+    stage took 75 min against the ~48 min estimate; the estimate is being corrected when
+    the dense half lands.
+  * Note for whoever reads the launch dashboard: the GPU sawtooth screenshot the
+    launcher sent (0-100%, 18.6<->37.3 GB, a 280% CPU spike) was **not this job** -- it
+    was another user's on the same project, so it says nothing about this run.
 * **Review round (the twelfth report, pre-A100): two real defects, one documentation
   defect, and two declines.**  Revision `2752a1d`, so the reviewer read a clean tree.
   * **The cached venv was used without being verified -- fixed, and it was the most

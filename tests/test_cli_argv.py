@@ -319,6 +319,29 @@ def test_stage_plan_is_model_major_so_each_model_loads_once():
                if stage in driver.MODEL_STAGES)
 
 
+def test_a_stage_listed_after_the_model_free_ones_runs_after_them():
+    """`case-study` last means a crash in it cannot kill the expensive stages.
+
+    The first split A100 launch is the evidence: `case-study` died three seconds in on
+    a bf16 bug, and because the plan was model-major it died *between* the hybrid's
+    75-minute `mask` and the dense model's -- so the dense mask never ran, and a plain
+    relaunch would have hit the same stage again before reaching it.  Listing
+    `case-study` after `compare,figures` puts it after every mask; the price is two
+    extra weight loads, which the A100 pays in tens of seconds.
+    """
+    driver = load_job_driver()
+    models = ["qwen3.5-0.8b", "qwen3-0.6b"]
+    plan = driver.stage_plan(["mask", "compare", "figures", "case-study"], models)
+
+    # Both models' masks finish before the first figure stage is asked for anything.
+    stages = [stage for stage, _ in plan]
+    assert stages == ["mask", "mask", "compare", "figures", "case-study", "case-study"], plan
+    assert [model for stage, model in plan if stage == "mask"] == models
+    # The segmented plan must not lose or duplicate a stage of the config.
+    assert sorted(stages) == sorted(["mask", "compare", "figures", "case-study"] * 1
+                                    + ["mask", "case-study"])
+
+
 def test_run_state_records_every_stage(tmp_path):
     """A job that dies half-way must still say how far it got."""
     import json
@@ -601,3 +624,91 @@ def test_the_driver_can_import_the_package_from_a_foreign_cwd(tmp_path):
                           env={**os.environ, "PYTHONPATH": ""})
     assert done.returncode == 0, done.stderr
     assert "importable" in done.stdout
+
+
+def _write_run_state(prefix: Path, entries: list[dict]) -> Path:
+    import json
+
+    prefix.mkdir(parents=True, exist_ok=True)
+    (prefix / "run_state.json").write_text(json.dumps({"stages": entries}),
+                                           encoding="utf-8")
+    return prefix
+
+
+def test_resume_skips_only_a_stage_that_is_ok_and_left_its_artifact(driver, tmp_path):
+    """The split A100 launch is why this exists: 75 minutes of `mask`, lost to a crash.
+
+    Job `bt1u3ja8cb0it4klqehl` completed the hybrid's masking curve and then died three
+    seconds into `case-study`; re-running the config re-paid for the mask, because a
+    stage's granularity is per model and the plan is model-major.  `run_state.json`
+    already recorded the `ok` -- nothing read it back.
+
+    Both halves of the condition matter: a stage can be `ok` with its artifact lost (a
+    collection that missed it), and an artifact can be present without an `ok` (the
+    state file was overwritten, or the stage died after writing).
+    """
+    prefix = tmp_path / "ds"
+    for model in ("qwen3.5-0.8b", "qwen3-0.6b"):
+        (prefix / model).mkdir(parents=True)
+    (prefix / "figures").mkdir()
+    # ok *and* artifact -> skipped
+    for name in ("model_info.json", "masking_curve.json", "case_study.json"):
+        (prefix / "qwen3.5-0.8b" / name).write_text("{}", encoding="utf-8")
+    (prefix / "figures" / "masking_recall.pdf").write_bytes(b"%PDF")
+    # artifact present but the status is not `ok` -> still runs
+    (prefix / "qwen3-0.6b" / "scores_next_step.json").write_text("{}", encoding="utf-8")
+    (prefix / "correlation.json").write_text("{}", encoding="utf-8")
+
+    _write_run_state(prefix, [
+        {"stage": "describe", "model": "qwen3.5-0.8b", "status": "ok"},
+        {"stage": "mask", "model": "qwen3.5-0.8b", "status": "ok"},
+        {"stage": "case-study", "model": "qwen3.5-0.8b", "status": "ok"},
+        # ok, but `masking_curve.json` is not in this model's directory -> re-run
+        {"stage": "mask", "model": "qwen3-0.6b", "status": "ok"},
+        {"stage": "figures", "model": None, "status": "ok"},
+        {"stage": "detect", "model": "qwen3-0.6b", "status": "failed"},
+        {"stage": "compare", "model": None, "status": "running"},
+    ])
+    assert driver.completed_stages(prefix) == {
+        ("describe", "qwen3.5-0.8b"), ("mask", "qwen3.5-0.8b"),
+        ("case-study", "qwen3.5-0.8b"), ("figures", None),
+    }
+
+    # The log is append-only, so the *last* status for a pair is the one that counts: a
+    # stage that succeeded and then failed on a re-run must not be skipped.
+    _write_run_state(prefix, [
+        {"stage": "mask", "model": "qwen3.5-0.8b", "status": "ok"},
+        {"stage": "mask", "model": "qwen3.5-0.8b", "status": "failed"},
+    ])
+    assert driver.completed_stages(prefix) == set()
+
+    # A state file that cannot be read means "skip nothing", never "skip everything".
+    (prefix / "run_state.json").write_text("{not json", encoding="utf-8")
+    assert driver.completed_stages(prefix) == set()
+    (prefix / "run_state.json").unlink()
+    assert driver.completed_stages(prefix) == set()
+
+
+def test_main_resume_actually_skips_the_stage(driver, tmp_path, monkeypatch, capsys):
+    """The skip must reach `main`, and only when the flag is passed."""
+    prefix = tmp_path / "ds"
+    (prefix / "qwen3-0.6b").mkdir(parents=True)
+    (prefix / "qwen3-0.6b" / "masking_curve.json").write_text("{}", encoding="utf-8")
+    _write_run_state(prefix, [{"stage": "mask", "model": "qwen3-0.6b", "status": "ok"}])
+
+    monkeypatch.setattr(driver, "report_environment", lambda: None)
+    monkeypatch.setattr(driver, "prepare_models", lambda args: None)
+    monkeypatch.setattr(driver, "code_sha256", lambda *roots: "deadbeef")
+    ran: list[str] = []
+    monkeypatch.setattr(driver, "run_cli", lambda stage, argv: ran.append(stage))
+
+    common = ["--weights", "/w", "--models", "qwen3-0.6b", "--stages", "mask",
+              "--out-prefix", str(prefix)]
+    assert driver.main([*common, "--resume"]) == 0
+    assert ran == [], "a finished stage was paid for a second time"
+    assert "skipping mask" in capsys.readouterr().out
+
+    # Same prefix, no flag: it runs.  The skip is the flag's doing, not a side effect of
+    # the state file merely existing.
+    assert driver.main(common) == 0
+    assert ran == ["mask"]

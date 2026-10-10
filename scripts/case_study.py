@@ -37,6 +37,20 @@ def top_heads(credits, info, k=5):
     return ranked[:k]
 
 
+def row_numpy(row: torch.Tensor):
+    """One captured attention row as a numpy array.
+
+    The capture returns the softmax in the *query* dtype, so on a bf16 GPU run the
+    rows are bfloat16 -- and numpy has no bfloat16, so `.cpu().numpy()` raises
+    `TypeError: Got unsupported ScalarType BFloat16`.  That is exactly how the first
+    A100 `mask` job died (job `bt1u3ja8cb0it4klqehl`, `case_study.py:203`), three
+    seconds into the figure stage and *after* 75 minutes of masking.  The stage had
+    only ever run on CPU fp32, so nothing had exercised it.  Upcast before handing the
+    row to matplotlib.
+    """
+    return row.detach().to(torch.float32).cpu().numpy()
+
+
 def find_copy_step(trace, sample, head: HeadRef, pairing: str, domain: str = "prompt"):
     """First decoding step at which ``head`` pastes a needle token.
 
@@ -200,14 +214,14 @@ def main() -> int:
     )
     distributions = {
         f"{strong} copying token {token_s!r} (input position {pos_s})":
-            (step_s.attn[strong.layer][strong.head].cpu().numpy(), sample.needle_span),
+            (row_numpy(step_s.attn[strong.layer][strong.head]), sample.needle_span),
     }
     if weak is None:
         print("no non-retrieval head has an attention row at this step; "
               "plotting the strong head only")
     else:
         distributions[f"{weak} (score {len(credits[weak]) / denom:.2f}) at the same step"] = (
-            step_s.attn[weak.layer][weak.head].cpu().numpy(), sample.needle_span,
+            row_numpy(step_s.attn[weak.layer][weak.head]), sample.needle_span,
         )
     fig_dir = Path(args.out) / "figures"
     save_fig(plot_attention_distribution(distributions), fig_dir / "retrieval_attention_dist.pdf")

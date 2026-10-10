@@ -317,6 +317,28 @@ def test_the_a100_split_halves_do_not_overlap_and_share_one_prefix(configs):
         assert args.no_chat_template == full.no_chat_template, name
 
 
+def test_only_the_continuation_configs_ask_to_resume(configs):
+    """`--resume` is opt-in, and only where re-launching is the point.
+
+    A *fresh* full run must never skip a stage because a stale artifact happens to sit
+    in the prefix, so the monolithic configs and the preflights leave it off.  The
+    continuation configs pass it: the first split A100 launch (job
+    `bt1u3ja8cb0it4klqehl`) lost the hybrid's 75-minute `mask` to a crash in the stage
+    after it, and the relaunch must not buy it twice.
+    """
+    driver = load_job_driver()
+    continuation = {"a100-detect.yaml", "a100-mask.yaml", "a100-resume.yaml"}
+    for name, config in configs.items():
+        tokens = [token.replace("${WEIGHTS}", "/w").replace("${DS_PROJECT_HOME}", "/disk")
+                  for token in config["cmd"].split()]
+        args = driver.parse_args(tokens[2:])
+        assert args.resume == (name in continuation), (
+            f"{name}: --resume should be {name in continuation}"
+        )
+    # And the list is real, not an empty expectation.
+    assert continuation <= set(configs)
+
+
 def test_a100_profile_keeps_a_memory_bound_and_the_paper_grid():
     """The A100 profile trades chunk *count* for safety, not safety for speed.
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.util
+import itertools
 import json
 import os
 import subprocess
@@ -149,6 +150,61 @@ MODEL_STAGES = ("describe", "detect", "mask", "qa", "cot", "case-study")
 #: Stages that read every model's artifacts and need no model at all.
 MODEL_FREE_STAGES = ("compare", "figures")
 
+#: The artifact(s) each stage leaves behind, as globs relative to the stage's own
+#: output directory (``<prefix>/<model>`` for a model stage, ``<prefix>`` for a
+#: model-free one).  ``--resume`` requires *both* the ``ok`` status in
+#: ``run_state.json`` and a present artifact before skipping a stage: the state file
+#: can say ``ok`` for a stage whose file was lost, and a file can be present from a run
+#: whose state file was overwritten.  ``detect``'s name depends on the pairing, so it
+#: is a glob.
+STAGE_ARTIFACTS: dict[str, tuple[str, ...]] = {
+    "describe": ("model_info.json",),
+    "detect": ("scores_*.json",),
+    "mask": ("masking_curve.json",),
+    "qa": ("task_qa.json",),
+    "cot": ("task_cot.json",),
+    "compare": ("correlation.json",),
+    "figures": ("figures/*.pdf",),
+    "case-study": ("case_study.json",),
+}
+
+
+def completed_stages(prefix: Path) -> set[tuple[str, str | None]]:
+    """The ``(stage, model)`` pairs that already finished *and* left their artifact.
+
+    This is what ``--resume`` skips.  The first split A100 launch
+    (`bt1u3ja8cb0it4klqehl`) proved why it is needed: the hybrid's ``mask`` ran for 75
+    minutes and completed, then ``case-study`` died on a bf16 bug, so re-running the
+    config re-paid for the mask -- the expensive stage -- because a stage's granularity
+    is per model and the plan is model-major.  ``run_state.json`` already recorded the
+    ``ok``; nothing read it back.
+
+    Only the *last* status per pair counts (the file is an append-only log), and a pair
+    counts only when every glob in :data:`STAGE_ARTIFACTS` matches something.  An
+    unreadable state file means "skip nothing", never "skip everything".
+    """
+    path = prefix / "run_state.json"
+    if not path.exists():
+        return set()
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        print(f"[entry] --resume: cannot read {path}; running every stage", flush=True)
+        return set()
+    last: dict[tuple[str, str | None], str] = {}
+    for entry in state.get("stages", []):
+        key = (entry.get("stage"), entry.get("model"))
+        if key[0] in STAGE_ARTIFACTS and entry.get("status"):
+            last[key] = entry["status"]
+    done: set[tuple[str, str | None]] = set()
+    for (stage, model), status in last.items():
+        if status != "ok":
+            continue
+        directory = prefix / model if model else prefix
+        if all(any(directory.glob(pattern)) for pattern in STAGE_ARTIFACTS[stage]):
+            done.add((stage, model))
+    return done
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -212,6 +268,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--verify-hashes", action="store_true",
                         help="recompute the registry SHA-256 of every checkpoint file "
                              "(~3.3 GB, a few seconds) instead of only checking presence")
+    # Resume is opt-in, and the monolithic configs leave it off: a *fresh* full run must
+    # never skip a stage because a stale artifact happens to sit in the prefix.  The
+    # continuation configs (a100-detect, a100-mask, a100-resume) pass it, which is where
+    # it matters.
+    parser.add_argument("--resume", action="store_true",
+                        help="skip every (stage, model) that run_state.json records as ok "
+                             "and whose artifact is present in --out-prefix (for "
+                             "re-launching the tail of a run whose earlier stages paid "
+                             "for themselves)")
     args = parser.parse_args(argv)
     if not args.bootstrap_venv and not args.inspect_dir and not (args.weights or args.download_weights):
         parser.error("one of --weights / --download-weights is required "
@@ -781,20 +846,30 @@ def record_stage_state(prefix: Path, stage: str, model: str | None, status: str,
 
 
 def stage_plan(stages: list[str], models: list[str]) -> list[tuple[str, str | None]]:
-    """Order ``(stage, model)`` pairs so that each model is loaded once.
+    """Order ``(stage, model)`` pairs so that each model is loaded once per segment.
 
-    Model-needing stages are grouped per model (model-major): everything for model A
-    runs while A is resident, then the next load evicts it.  The model-free stages
-    (``compare``, ``figures``) read every model's artifacts, so they come last.
+    The config's stage order *is* the run order.  Within every run of consecutive
+    model-needing stages the models are grouped (model-major), so one checkpoint is
+    loaded once and the next load evicts it; a model-free stage (``compare``,
+    ``figures``) ends the current segment, and anything listed after it runs after the
+    model-free stages have.
+
+    That last part is not cosmetic.  The A100 configs list ``case-study`` *after*
+    ``compare,figures`` on purpose: the figure stage is the one that runs a standalone
+    script, and it is the one that crashed on bf16 (job `bt1u3ja8cb0it4klqehl`, three
+    seconds in, after 75 minutes of masking).  A cheap unproven stage must not be able
+    to take an expensive one down with it -- and with ``--resume`` it must not block the
+    stage behind it on every relaunch either.  The price is two extra weight loads
+    (tens of seconds on the A100), paid once.
     """
     plan: list[tuple[str, str | None]] = []
-    for model in models:
-        for stage in stages:
-            if stage in MODEL_STAGES:
-                plan.append((stage, model))
-    for stage in stages:
-        if stage in MODEL_FREE_STAGES:
-            plan.append((stage, None))
+    for kind, group in itertools.groupby(stages, key=lambda stage: stage in MODEL_STAGES):
+        stages_here = list(group)
+        if kind:
+            for model in models:
+                plan.extend((stage, model) for stage in stages_here)
+        else:
+            plan.extend((stage, None) for stage in stages_here)
     return plan
 
 
@@ -947,7 +1022,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[entry] grid override: lengths={args.lengths} limit={args.limit} "
               f"no_chat_template={args.no_chat_template} "
               f"(the scale's own values are replaced, not extended)", flush=True)
+    done = completed_stages(prefix) if args.resume else set()
+    if args.resume:
+        skipped = sorted((stage, model or "*") for stage, model in done)
+        print(f"[entry] --resume: {len(skipped)} finished stage(s) will be skipped: "
+              f"{skipped or 'none'}", flush=True)
     for stage, model in stage_plan(stages, args.models):
+        if (stage, model) in done:
+            print(f"[entry] --resume: skipping {stage} ({model or 'all models'}) -- "
+                  f"run_state.json says ok and its artifact is present", flush=True)
+            continue
         targets = [model] if model else args.models
         for cli_argv in stage_argv(stage, profile=args.profile, models=targets,
                                    prefix=prefix, seed=args.seed,

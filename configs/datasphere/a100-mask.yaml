@@ -15,6 +15,21 @@ desc: second half of the split A100 launch -- mask,compare,figures,case-study on
 # staging copy is what `local-paths` picks up, exactly as `a100-resume.yaml` does with
 # `ds-a100-resume/`.)
 #
+# `--resume` is why this file is safe to re-launch.  It skips every (stage, model) that
+# `run_state.json` records as `ok` *and* whose artifact is present, so a crash in a
+# cheap later stage cannot make the expensive earlier ones be paid for twice.  That is
+# not hypothetical: the first launch of this config (job `bt1u3ja8cb0it4klqehl`) finished
+# the hybrid's `mask` (75 min) and then died three seconds into `case-study` on a bf16
+# bug, and without `--resume` the re-launch would have bought the same 75 minutes again.
+# The flag is opt-in and deliberately absent from `a100.yaml`/`a100-notemplate.yaml`: a
+# *fresh* full run must never skip a stage because a stale artifact happens to be there.
+#
+# `case-study` is listed *after* `compare,figures` on purpose.  The plan groups a model's
+# stages together, so the naive order would run the hybrid's `mask`, then its
+# `case-study`, then the dense model's `mask` -- i.e. the figure stage would sit between
+# the two expensive stages and could abort the run before the second one starts.  Listed
+# last, it runs after every mask; the cost is two extra weight loads (tens of seconds).
+#
 # `mask` needs only `scores_<pairing>.*` and the `meta` inside them -- the conditions it
 # reuses (`chat_template`, `system_prompt`, `enable_thinking`, `threshold`, the corpus
 # path, `capture_method`, the pairing) all travel with the detect artifacts, which is
@@ -29,7 +44,7 @@ desc: second half of the split A100 launch -- mask,compare,figures,case-study on
 # x-axis is a measurement definition and has to stay comparable across runs (see the
 # pool note in `a100.yaml`).
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --stages mask,compare,figures,case-study --out-prefix ds-results-a100
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --resume --stages mask,compare,figures,case-study --out-prefix ds-results-a100
 
 flags:
   - attach-project-disk

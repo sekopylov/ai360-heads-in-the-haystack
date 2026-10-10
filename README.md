@@ -141,7 +141,13 @@ together they are `a100.yaml`'s stage list, so nothing runs twice), `laptop.yaml
 `paper.yaml` and `smoke.yaml`.  Every A100 config also passes `--bootstrap-venv` beside
 `--use-venv` (the cached venv's lock stamp is verified before it is used, and the job log
 prints whether `fla`/`causal_conv1d` are importable) and `--verify-hashes` (the
-checkpoint digests are recomputed).  Everything non-obvious about this path — the pip
+checkpoint digests are recomputed).  The three continuation configs
+(`a100-detect`, `a100-mask`, `a100-resume`) additionally pass `--resume`, which skips
+every `(stage, model)` that `run_state.json` records as `ok` with its artifact present —
+the first split launch lost the hybrid's 75-minute `mask` to a crash in the stage after
+it, and a relaunch must not buy it twice.  The monolithic configs and the preflights
+deliberately leave the flag off: a fresh full run must never skip a stage on the
+strength of a stale file.  Everything non-obvious about this path — the pip
 crash that shapes the requirements file, the `cmd` grammar, why the cached venv
 cannot be the entry point, what the "T4" slot actually hands out — is written up
 in [`docs/datasphere-findings.md`](docs/datasphere-findings.md).
@@ -811,9 +817,15 @@ meaningful within a family.
   well as a speed one (different arithmetic), so every artifact records
   `provenance.optional_kernels`; the committed `ds-results/` predates the install and
   has both flags `false`.  On a job the driver also runs a model's stages back to back
-  in one process (`stage_plan`), so each checkpoint is loaded once rather than once
-  per stage -- ~50 s saved per skipped load, and the resident-memory cost stays at one
-  model.
+  in one process (`stage_plan`), so each checkpoint is loaded once per *segment* rather
+  than once per stage -- ~50 s saved per skipped load, and the resident-memory cost
+  stays at one model.  A segment ends at a stage that needs no model (`compare`,
+  `figures`), so a stage listed after those in the config's `--stages` runs after them
+  for every model: the A100 configs list `case-study` last on purpose, so a crash in
+  the one stage that runs a standalone script cannot abort the run between two
+  expensive `mask` stages (it did exactly that once, on bf16).  A relaunch of a
+  continuation config passes `--resume`, which skips every `(stage, model)` that
+  `run_state.json` records as `ok` *and* whose artifact is present.
 * **Flash attention is used for the prefill, `eager` for the capture.**  `detect` and
   the ablations prefill through SDPA (`--prefill-impl sdpa`, the default, never
   overridden by a config), which picks the FlashAttention-2 kernel in bf16; the steps
