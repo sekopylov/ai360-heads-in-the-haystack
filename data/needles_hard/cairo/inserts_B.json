@@ -1,0 +1,15 @@
+{
+  "_roles": "distractor: a competing record, its facts in the answer mean confusion; lure: text on the topic or with the words of the question but without an answer; noise: a striking fact unrelated to the question; value: a part of the right answer, its facts are in answer_key; evidence: a second step the answer needs, it holds the answer",
+  "inserts": {
+    "alexandria": {"role": "distractor", "text": "The famous soup of the Nour Cafe in Alexandria is cooked with dried fig leaves and served in a cup of blue glass.", "facts": [["fig leaves"], ["blue glass"]]},
+    "tunis": {"role": "distractor", "text": "The famous stew of the Marsa Cafe in Tunis is cooked with roasted date seeds and served on a plate of white stone.", "facts": [["date seeds"], ["white stone"]]},
+    "amman": {"role": "distractor", "text": "The famous tea of the Qamar Cafe in Amman is brewed with crushed pine bark and served in a jar of green copper.", "facts": [["pine bark"], ["green copper"]]},
+    "cairo_bread": {"role": "distractor", "text": "The famous bread of the Zahira Cafe in Cairo is baked with salted melon rind and served on a tray of red tin.", "facts": [["melon rind"], ["red tin"]]}
+  },
+  "levels": {
+    "B1": {"placement": "far", "use": ["alexandria"]},
+    "B2": {"placement": "random", "use": ["alexandria", "tunis", "amman"]},
+    "B3": {"placement": "near", "use": ["alexandria", "tunis", "amman"]},
+    "B4": {"placement": "near", "use": ["cairo_bread"]}
+  }
+}

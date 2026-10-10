@@ -1,0 +1,19 @@
+{
+  "_roles": "distractor: a competing record, its facts in the answer mean confusion; lure: text on the topic or with the words of the question but without an answer; noise: a striking fact unrelated to the question; value: a part of the right answer, its facts are in answer_key; evidence: a second step the answer needs, it holds the answer",
+  "inserts": {
+    "topic_hills": {"role": "lure", "text": "Trams have climbed the steep hills of the Portuguese capital for more than a century.", "facts": [["steep hills"]]},
+    "topic_route": {"role": "lure", "text": "Tourists in Portugal often wait an hour to ride the yellow carriage of route 28.", "facts": [["yellow carriage"], ["route 28"]]},
+    "topic_sights": {"role": "lure", "text": "Old public transport is among the most photographed sights on the Iberian coast.", "facts": [["Iberian"]]},
+    "words_cafe": {"role": "lure", "text": "Every visitor to the cafe opposite the Lisbon Tram Museum is offered a salted almond tart.", "facts": [["almond tart"]]},
+    "words_closed": {"role": "lure", "text": "The Lisbon Tram Museum is closed on Mondays and on the first day of every month.", "facts": [["Mondays", "Monday"]]},
+    "words_shoes": {"role": "lure", "text": "Every visitor to Lisbon is asked by the guides to wear flat shoes on the cobbled streets.", "facts": [["flat shoes"], ["cobbled"]]},
+    "close_chime": {"role": "lure", "text": "A small chime is sounded in many old museums to announce the closing hour.", "facts": [["closing hour"], ["chime"]]},
+    "close_album": {"role": "lure", "text": "Guests of famous galleries often leave long notes for the staff in a thick album.", "facts": [["thick album", "album"]]},
+    "close_shop": {"role": "lure", "text": "Museum shops in Lisbon sell pencils, postcards and tiny models of the trams.", "facts": [["postcards"], ["tiny models"]]}
+  },
+  "levels": {
+    "C1": {"placement": "near", "use": ["topic_hills", "topic_route", "topic_sights"]},
+    "C2": {"placement": "near", "use": ["words_cafe", "words_closed", "words_shoes"]},
+    "C3": {"placement": "near", "use": ["close_chime", "close_album", "close_shop"]}
+  }
+}
