@@ -105,6 +105,39 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 # `a100-notemplate.yaml` is the paper-comparable one.  Launching both is the honest
 # option; whichever is run, say which and why in the results doc.
 #
+# What the A100 actually measured (the two preflight jobs, 2026-10-10: 60 instances per
+# model at 1024/4096, 96-token budget, bf16, `haystack` domain unless stated; job
+# `bt180mlar9motvcajo20` with the template, `bt125u1vdc6s4ntj3v6a` without):
+#
+#   model          geometry    haystack  prompt   full   pool  recited  recall  trunc
+#   Qwen3-0.6B     template      29.7%    5.6%    5.4%   315   60/60   0.955    0
+#   Qwen3-0.6B     no template    5.4%    4.2%    3.8%   424   56/60   0.694   60/60
+#   Qwen3.5-0.8B   template      72.9%   68.8%   64.6%    13   60/60   0.933    0
+#   Qwen3.5-0.8B   no template   70.8%   66.7%   60.4%    14   60/60   0.853   48/60
+#
+# The CPU probe's story holds on the real grid: the dense model's share is a *template
+# artifact* (29.7% -> 5.4%, inside the paper's 3-6% band) and the hybrid is
+# template-insensitive (72.9% -> 70.8%).  `sink_in_haystack` is False with the template
+# and True without, exactly as the geometry predicts, and the dense model's domain shift
+# falls from 89.6% to 9.0% once the sink sits inside `x`.  Note that each run scores all
+# three domains, so the template run *also* carries the paper-like 5.6% reading under
+# `prompt` -- what needs both runs is the sink geometry, which is a prompt property.
+#
+# The caveat that decides the *masking* arm: in the template-free geometry the dense
+# model never emits EOS -- 60/60 instances hit the 96-token budget, recitation recall
+# falls to 0.694 from 0.955, and the score is budget-limited (a longer generation can
+# only add needle copies, so 5.4% is a lower bound).  Its baseline therefore has much
+# less headroom, and this repo's own rule is not to trust a causal measurement on a
+# failing baseline.  The hybrid's pool is 13 (template) / 14 (no template), so its
+# K=16 point caps to the pool either way -- `control_exhausted` records it.
+#
+# Wall clock, measured: 60 detect instances at 1K-4K took 118 s (dense, template) / 165 s
+# (hybrid) and 332 s / 286 s without the template (the dense model does not stop, so it
+# always decodes the full 96 tokens).  Extrapolating that decode-dominated cost to the
+# 1K-49K grid and the 4-16K ablations puts one geometry at roughly 6 h (template) to
+# 10 h (no template) on this card, i.e. ~3.4k-5.4k RUB -- a crude estimate (it is fitted
+# at 1K-4K, and the long lengths dominate), so check the first hour of the real run.
+#
 # Note the *domain* axis is no longer part of this decision: since round seven every
 # captured domain is scored in the same pass and written as its own matrix
 # (`scores_<pairing>_<domain>`), and the summary reports `sparsity_by_domain`,

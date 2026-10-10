@@ -29,6 +29,26 @@ desc: paper-scale grid on one A100 without the chat template -- the paper's geom
 # template-insensitive (75-77%, recall 1.00 either way), so its non-sparsity is
 # architectural and this run should reproduce it.
 #
+# Measured on the A100 (the two preflight jobs, 2026-10-10, 60 instances at 1024/4096,
+# 96-token budget, `haystack` domain; `bt125u1vdc6s4ntj3v6a` is this geometry):
+#
+#   model          geometry    haystack  prompt   full   pool  recited  recall  trunc
+#   Qwen3-0.6B     no template    5.4%    4.2%    3.8%   424   56/60   0.694   60/60
+#   Qwen3.5-0.8B   no template   70.8%   66.7%   60.4%    14   60/60   0.853   48/60
+#   (the template run, for the pair: dense 29.7% / 5.6% / 5.4%, pool 315, recall 0.955;
+#    hybrid 72.9% / 68.8% / 64.6%, pool 13, recall 0.933)
+#
+# So the probe's direction reproduces on the real grid, with two numbers that matter for
+# the launch: `sink_in_haystack` is True here (False with the template), the dense
+# model's domain shift drops from 89.6% to 9.0% because the sink is now inside `x`, and
+# **the dense model never emits EOS in this geometry** -- 60/60 instances hit the
+# 96-token budget and its recitation recall is 0.694 against 0.955 with the template.
+# Its retrieval score is therefore budget-limited (a longer generation can only add
+# needle copies, so 5.4% is a lower bound) and its baseline has little headroom, which
+# is a poor place to measure a masking effect.  Both facts belong in the results doc.
+# The full grid is the same cost as `a100.yaml`'s; see that config's comment for the
+# measured per-instance timings and the rough 6-10 h / 3.4k-5.4k RUB estimate.
+#
 # Which to launch: both is the honest answer, and they answer different questions
 # (paper comparability vs task success).  If only one, this is the paper's geometry
 # and `a100.yaml` is the one comparable with the committed tree -- say which was run

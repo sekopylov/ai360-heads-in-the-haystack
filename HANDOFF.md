@@ -152,6 +152,43 @@ tied to a job id) → this file (where things stand and what is left).
   * Cost of the lesson: ~4 minutes of A100 (~36 RUB) instead of a killed full grid.  This
     is the argument for the documented launch order, and it is now evidence rather than
     reasoning.
+* **Both A100 preflights are in (2026-10-10) and they are the launch decision's
+  evidence.**  `bt180mlar9motvcajo20` (chat template) and `bt125u1vdc6s4ntj3v6a` (paper
+  geometry), ~10 min each, 60 instances per model at 1024/4096, 96-token budget, bf16,
+  `haystack` domain unless stated.  Both jobs also re-proved the plumbing: venv stamp
+  matches, `fla` importable, `causal_conv1d` absent by design, A100-SXM4-80GB sm_80,
+  SDPA flash ok, 3.29 GB of checkpoint digests verified, the overrides applied.
+
+  | model | geometry | `haystack` | `prompt` | `full` | pool | recited | recall | trunc |
+  |---|---|---|---|---|---|---|---|---|
+  | Qwen3-0.6B | template | **29.7%** | 5.6% | 5.4% | 315 | 60/60 | 0.955 | 0 |
+  | Qwen3-0.6B | no template | **5.4%** | 4.2% | 3.8% | 424 | 56/60 | 0.694 | **60/60** |
+  | Qwen3.5-0.8B | template | **72.9%** | 68.8% | 64.6% | 13 | 60/60 | 0.933 | 0 |
+  | Qwen3.5-0.8B | no template | **70.8%** | 66.7% | 60.4% | 14 | 60/60 | 0.853 | 48/60 |
+
+  * The CPU probe's story holds on the real grid: the dense model's share is a *template
+    artifact* (29.7% -> 5.4%, inside the paper's 3-6% band) and the hybrid is
+    template-insensitive (72.9% -> 70.8%, pool 13 -> 14).  `sink_in_haystack` is False
+    with the template and True without; the dense domain shift falls from 89.6% to 9.0%
+    once the sink sits inside `x`.  Since every run scores all three domains, the
+    template run *also* carries a paper-like 5.6% reading under `prompt` -- what needs
+    both runs is the sink geometry, which is a prompt property.
+  * **The caveat that decides the masking arm:** without the template the dense model
+    never emits EOS (60/60 hit the 96-token budget, recall 0.694 against 0.955), so its
+    score is budget-limited (5.4% is a lower bound) and its baseline has little
+    headroom -- a poor place to measure a masking effect, per this repo's own "do not
+    trust a baseline without headroom" rule.  The hybrid is fine in both geometries.
+  * Measured cost: 60 detect instances at 1K-4K took 118 s / 165 s (template) and
+    332 s / 286 s (no template; the dense model always decodes the full budget).
+    Extrapolated with a decode-dominated model to the 1K-49K grid plus the 4-16K
+    ablations: **~6 h (template) to ~10 h (no template) per geometry**, i.e. ~3.4k-5.4k
+    RUB.  Crude -- fitted at 1K-4K, and the long lengths dominate -- so check the first
+    hour of the real run before trusting it.
+  * Recommendation carried to the launcher: the template geometry is the one whose
+    baseline has headroom (and the one comparable with the committed tree); the
+    no-template geometry is the paper-comparable sparsity number, and its dense half is
+    budget-limited.  Both is the honest option; `a100.yaml` and `a100-notemplate.yaml`
+    carry the table and the caveat in their comments.
 * **Review round (the twelfth report, pre-A100): two real defects, one documentation
   defect, and two declines.**  Revision `2752a1d`, so the reviewer read a clean tree.
   * **The cached venv was used without being verified -- fixed, and it was the most
