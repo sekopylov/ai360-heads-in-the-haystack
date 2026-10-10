@@ -75,6 +75,10 @@ class HaystackBuilder:
     ) -> None:
         self.words = list(words)
         self.corpus = list(corpus) if corpus else None
+        # Kept so an artifact can say which seed produced its filler (the `rng` alone
+        # cannot be read back, and a figure that does not record its seed cannot be
+        # rebuilt from the artifact).
+        self.seed = seed
         self.rng = random.Random(seed)
 
     def sentence(self) -> str:

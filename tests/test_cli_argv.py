@@ -71,6 +71,11 @@ def test_every_stage_and_profile_builds_parseable_argv(driver):
     `case-study` is the one stage that is a standalone script rather than a
     `retrieval_heads.cli` subcommand (it needs the real attention rows), so it is
     checked by its own test below instead of against this parser.
+
+    The preflight overrides are part of the contract, not a separate path: they are
+    built here as well, because appending `--lengths` to a stage whose CLI has no such
+    flag (`qa`/`cot`) makes argparse exit 2 and fails the stage -- and the plain build
+    never noticed, since no shipped config combines them.
     """
     parser = build_parser()
     models = ["qwen3.5-0.8b", "qwen3-0.6b"]
@@ -80,14 +85,20 @@ def test_every_stage_and_profile_builds_parseable_argv(driver):
         for stage in driver.STAGES:
             if stage == "case-study":
                 continue
-            for argv in driver.stage_argv(stage, profile=profile, models=models,
-                                          prefix=prefix, seed=7):
-                parsed = parser.parse_args(argv)
-                assert parsed.command == stage
-                # `describe` carries no seed; compare/figures do not run sampling.
-                if stage in ("detect", "mask", "qa", "cot"):
-                    assert parsed.seed == 7, f"{profile}/{stage} lost --seed"
-                checked += 1
+            for overrides in ({}, {"lengths": [1024], "limit": 60}):
+                for argv in driver.stage_argv(stage, profile=profile, models=models,
+                                              prefix=prefix, seed=7, **overrides):
+                    parsed = parser.parse_args(argv)
+                    assert parsed.command == stage
+                    # `describe` carries no seed; compare/figures do not run sampling.
+                    if stage in ("detect", "mask", "qa", "cot"):
+                        assert parsed.seed == 7, f"{profile}/{stage} lost --seed"
+                    # The override may only reach a stage that defines the flag.
+                    if overrides and stage in driver.LENGTH_STAGES:
+                        assert parsed.lengths == [1024], (profile, stage)
+                    elif overrides:
+                        assert "--lengths" not in argv, (profile, stage, argv)
+                    checked += 1
     assert checked > 0
 
 

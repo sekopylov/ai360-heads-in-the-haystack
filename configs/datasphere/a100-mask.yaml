@@ -1,0 +1,61 @@
+name: rh-a100-mask
+desc: second half of the split A100 launch -- mask,compare,figures,case-study on the detect tree
+
+# Why this config exists
+# ----------------------
+# The other half of `a100-detect.yaml`: it runs everything after `detect` on the tree
+# that job produced.  `local-paths` uploads the staged `ds-results-a100/` (detect's
+# `scores_*.npz`, the per-domain sidecars and `summary_*.json`) into the job, and
+# `--out-prefix ds-results-a100` makes every stage read and write that same tree, so the
+# downloaded result is one complete run rather than two halves to merge by hand.
+#
+# Before launching:
+#   cp -r <downloaded>/ds-results-a100/. ds-results-a100/
+# (`ds-results-a100/` is gitignored until it is committed as the deliverable; the
+# staging copy is what `local-paths` picks up, exactly as `a100-resume.yaml` does with
+# `ds-a100-resume/`.)
+#
+# `mask` needs only `scores_<pairing>.*` and the `meta` inside them -- the conditions it
+# reuses (`chat_template`, `system_prompt`, `enable_thinking`, `threshold`, the corpus
+# path, `capture_method`, the pairing) all travel with the detect artifacts, which is
+# why a second job is a legitimate split and not a different experiment.  It also means
+# the two geometries stay separated: `a100-notemplate.yaml`'s detect tree must be masked
+# by a notemplate mask job, not by this one.
+#
+# If job 1's `retrieval_pool_by_domain` came back small (under ~12 for the hybrid), the
+# last K point is a whole-pool intervention; `control_exhausted` and `random_distinct`
+# in `masking_curve.json` record it and the report should say so.  Narrowing the K grid
+# is a `SCALES['a100']['mask']` edit plus a test, not a launch flag -- the curve's
+# x-axis is a measurement definition and has to stay comparable across runs (see the
+# pool note in `a100.yaml`).
+
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --stages mask,compare,figures,case-study --out-prefix ds-results-a100
+
+flags:
+  - attach-project-disk
+
+inputs:
+  - models:
+      var: WEIGHTS
+
+outputs:
+  - ds-results-a100
+
+env:
+  vars:
+    PYTORCH_ALLOC_CONF: expandable_segments:True
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+      - ds-results-a100
+
+cloud-instance-types:
+  - g2.1               # 28 vCPU, 1x A100 80 GB
+  # No V100 fallback: the chunks are sized for 80 GB and bf16 needs sm_80+.

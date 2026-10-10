@@ -60,15 +60,32 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 # passes, ~23% of the whole run, because the random arm is five sixths of each point);
 # cutting the mixer ablation saves 810 at most and is the *second* choice.
 #
-# The hybrid's last point is degenerate by construction: the random arm is drawn from
-# heads at or below the threshold, and the CPU probe puts that pool at 11-12 heads under
-# `haystack` (13 under `prompt`).  `--k-frac 0.33` resolves to K=16 on 48 heads, so
-# `matched_k` caps both arms at the pool size: the point is one deterministic
-# intervention on the whole pool, not a curve point.  Read
-# `retrieval_pool_by_domain` in the preflight summary first: if the pool is under 12,
-# either drop `0.33` for this model or mark the `control_exhausted` points as one
-# intervention in the report.  The artifact already records `k_effective`,
+# The hybrid's last point can be degenerate: the random arm is drawn from heads at or
+# below the threshold, and the CPU probe puts that pool at 11-12 heads under `haystack`
+# (13 under `prompt`).  `--k-frac 0.33` resolves to K=16 on 48 heads, so `matched_k`
+# caps both arms at the pool size: that point is one deterministic intervention on the
+# whole pool, not a curve point.  The artifact records `k_effective`,
 # `control_exhausted` and `random_distinct` for exactly this reading.
+#
+# The pool is a property of *this* run's detect grid, so the preflight cannot measure
+# it: `a100-preflight.yaml` scores 2 lengths x 10 depths x 3 needles, while `mask` here
+# draws its control from the pool of the full 9-length grid -- and a head's score is an
+# average over all instances, so 60 instances and 270 instances give different pools.
+# The CPU probe's 11-12 is a prediction, not the number.  If the launcher wants it
+# before paying for `mask`, split the grid in two jobs, which is what `a100-detect.yaml`
+# and `a100-mask.yaml` are for:
+#   job 1  a100-detect.yaml   describe,detect on the full grid -> ds-results-a100/
+#   read   ds-results-a100/<model>/summary_next_step.json -> retrieval_pool_by_domain,
+#          sparsity_by_domain, sink_in_haystack, n_instances_recited
+#   job 2  a100-mask.yaml     mask,compare,figures,case-study on that staged tree
+# The two jobs together cost exactly what this one does (no stage runs twice); the
+# difference is that the pool is known before the expensive stage starts.
+#
+# If the pool turns out to be under 12, the honest options are to report the last point
+# as one intervention (`control_exhausted` says so) or to change the K grid in
+# `SCALES['a100']['mask']` -- deliberately *not* a launch flag: the curve's x-axis is a
+# measurement definition and must stay comparable across runs and models, which is why
+# `--lengths`/`--limit` exist as preflight knobs but `--k-frac` does not.
 #
 # Stage list: no `qa`/`cot`.  Their built-in sets are 8+8 hand-written items -- a
 # pipeline check worth a minute on the L4, not A100 time, and one item is 12.5 points
@@ -112,7 +129,15 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 #
 # Prerequisites, both already done:
 #   * the project-disk venv has flash-linear-attention (configs/datasphere/t4-venv.yaml)
-#     -- without it the hybrid's 18 linear layers run the reference PyTorch path;
+#     -- without it the hybrid's 18 linear layers run the reference PyTorch path, which
+#     is a *numerical* difference as well as a speed one, so the two geometries' runs
+#     are only comparable if both used it.  The cmd passes `--bootstrap-venv` beside
+#     `--use-venv`: `--use-venv` alone hops into whatever is on the disk, while the
+#     bootstrap path first checks the stamp (`requirements-datasphere.txt`'s digest)
+#     and re-installs only if it moved, then verifies the imports -- seconds when
+#     nothing changed, and it makes a stale venv impossible to run silently.  The log
+#     of every job also prints whether `fla`/`causal_conv1d` are importable, in the
+#     interpreter that actually runs the stages;
 #   * `torch arch list` includes sm_80.  The SDPA flash-backend probe in the venv job
 #     ran on an L4 (sm_89), so "flash works on sm_80" is still an inference from the
 #     wheel's arch list, not a measurement on an A100 -- run
@@ -124,7 +149,7 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 # a finished tree, because `mask` is the stage that costs real money (45 samples per
 # point, ~3.9k prefill+decode passes in the ablations).
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100
 
 flags:
   - attach-project-disk

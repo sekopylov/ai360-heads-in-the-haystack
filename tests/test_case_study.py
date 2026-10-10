@@ -71,7 +71,8 @@ def _stub(case_study, monkeypatch, info, seen: dict):
                         lambda payload, path: seen.update(json=payload))
     monkeypatch.setattr(case_study, "plot_attention_distribution", lambda d: None)
     monkeypatch.setattr(case_study, "save_fig", lambda fig, path: None)
-    monkeypatch.setattr(case_study, "add_provenance", lambda payload, **k: payload)
+    monkeypatch.setattr(case_study, "add_provenance",
+                        lambda payload, **k: (seen.update(provenance_kwargs=k), payload)[1])
     monkeypatch.setattr(case_study, "_load", lambda name, **k: (None, FakeTokenizer(), info))
 
 
@@ -133,3 +134,25 @@ def test_scores_directory_supplies_the_recorded_conditions(case_study, monkeypat
     payload = seen["json"]
     assert payload["capture_method"] == "output_attentions"
     assert payload["chat_template"] is False and payload["enable_thinking"] is True
+
+
+def test_the_case_study_records_its_dtype_and_filler_seed(case_study, monkeypatch, tmp_path):
+    """Without these the figure cannot be rebuilt from its own artifact.
+
+    `--dtype` defaulted to `None`, and `add_provenance(dtype=None)` omits the key
+    entirely, so a run without the flag recorded no precision at all; the filler was
+    hard-coded to `HaystackBuilder(seed=0)` and the seed was not written down.
+    """
+    from tests._helpers import attention_info
+
+    info = attention_info(2, 2)
+    info.dtype = "bfloat16"        # what `_load` records for a real checkpoint
+    seen = _run(case_study, monkeypatch, tmp_path, ["--seed", "7"], info)
+    payload = seen["json"]
+    assert payload["filler_seed"] == 7
+    assert seen["sample"]["builder"].seed == 7, "the seed did not reach the builder"
+    assert seen["provenance_kwargs"]["dtype"] == "bfloat16", (
+        "a run without --dtype must fall back to the checkpoint's own precision"
+    )
+    # The other conditions that used to be missing from the artifact.
+    assert payload["length_requested"] == 8 and payload["max_new_tokens"] == 32

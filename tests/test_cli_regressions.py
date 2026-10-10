@@ -330,11 +330,16 @@ def test_ablation_reuses_every_condition_detect_recorded(caplog):
 
     `detect --no-chat-template` followed by a default `mask` used to measure a
     different task, and a custom corpus was silently replaced by synthetic filler.
+
+    The argmax domain is *not* part of this set: `mask` has no flag for it, and the
+    ablations read it from `scores.meta["argmax_domain"]` (the matrix carries its own
+    domain, one per captured domain).  Resolving it here as well produced a
+    `DetectionSettings` field nothing consumed -- tested, but dead.
     """
     import logging
     from types import SimpleNamespace
 
-    from retrieval_heads.cli import DEFAULT_ARGMAX_DOMAIN, resolve_detection_settings
+    from retrieval_heads.cli import resolve_detection_settings
 
     scores = SimpleNamespace(meta={
         "config": {"system_prompt": "recorded", "chat_template": False,
@@ -342,24 +347,22 @@ def test_ablation_reuses_every_condition_detect_recorded(caplog):
         "corpus_path": "essays.txt",
         "argmax_domain": "full",
     })
-    # `DEFAULT_ARGMAX_DOMAIN`, not a literal: this test is about "the flag was left at
-    # its default", and a literal silently becomes an *explicit* request when the
-    # default moves (which is exactly what happened when `haystack` became the default).
     defaults = SimpleNamespace(system_prompt=None, no_chat_template=False, thinking=False,
-                               argmax_domain=DEFAULT_ARGMAX_DOMAIN, threshold=0.1,
-                               corpus=None)
+                               threshold=0.1, corpus=None)
 
     settings = resolve_detection_settings(defaults, scores)
     assert settings.system_prompt == "recorded"
     assert settings.chat_template is False          # detect ran without a template
     assert settings.enable_thinking is None
     assert settings.threshold == 0.2
-    assert settings.argmax_domain == "full"
     assert settings.corpus_path == "essays.txt"
+    assert not hasattr(settings, "argmax_domain"), (
+        "the domain belongs to the score matrix, not to this resolver"
+    )
 
     # An explicit disagreement is loud and wins.
     explicit = SimpleNamespace(system_prompt=None, no_chat_template=True, thinking=True,
-                               argmax_domain="prompt", threshold=0.1, corpus="other.txt")
+                               threshold=0.1, corpus="other.txt")
     with caplog.at_level(logging.WARNING):
         other = resolve_detection_settings(explicit, scores)
     assert other.chat_template is False and other.corpus_path == "other.txt"

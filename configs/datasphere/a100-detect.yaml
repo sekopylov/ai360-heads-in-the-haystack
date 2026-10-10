@@ -1,0 +1,68 @@
+name: rh-a100-detect
+desc: first half of the split A100 launch -- describe,detect on the full grid only
+
+# Why this config exists
+# ----------------------
+# `mask` draws its random arm from the heads at or below the score threshold, so the
+# size of that pool decides whether the curve's top point is a curve point at all.  The
+# pool is an average over *this* run's detection grid, and neither the preflight
+# (`a100-preflight.yaml`: 2 lengths x 10 depths x 3 needles = 60 instances) nor the CPU
+# probe (3 instances at 512 tokens) can produce it -- a head's score is a mean over the
+# instances that ran, so a different grid gives a different pool.
+#
+# So the honest way to know it before paying for `mask` is to run the grid in two jobs.
+# This is the first: `describe,detect` on the full 1K-49K grid, writing `ds-results-a100/`
+# exactly as the monolithic `a100.yaml` would (same scale, same geometry, same flags),
+# so nothing about the measurement differs -- only the stage list.
+#
+#   job 1  a100-detect.yaml   (this file)      -> ds-results-a100/
+#   read   ds-results-a100/<model>/summary_next_step.json:
+#            retrieval_pool_by_domain   the random arm's pool per domain (the number
+#                                       that decides the top K point)
+#            sparsity_by_domain         the >0.1 share under each captured domain
+#            sink_in_haystack           whether position 0 is inside the context
+#            n_instances_recited / mean_needle_recall
+#   stage  the downloaded tree where job 2 expects it:
+#            cp -r <downloaded>/ds-results-a100/. ds-results-a100/   (in the repo root)
+#   job 2  a100-mask.yaml                      -> the rest of the tree
+#
+# Together the two jobs cost what `a100.yaml` costs -- no stage runs twice -- and the
+# launcher sees the pool, the sparsity and the sink geometry before the expensive stage.
+# The monolithic `a100.yaml` stays the default for a launch that is happy to read those
+# numbers afterwards; this pair is for the launch that wants to act on them.
+#
+# Geometry: the pair to this file is `a100-notemplate.yaml`'s split (same flags plus
+# `--no-chat-template`); the two axes are independent, and both should be run or the
+# results doc must say which was.  If only one geometry is run, this one is comparable
+# with the committed `ds-results/` tree (same template, task solved); see the geometry
+# note in `a100.yaml`.
+
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --stages describe,detect --out-prefix ds-results-a100
+
+flags:
+  - attach-project-disk
+
+inputs:
+  - models:
+      var: WEIGHTS
+
+outputs:
+  - ds-results-a100
+
+env:
+  vars:
+    PYTORCH_ALLOC_CONF: expandable_segments:True
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+
+cloud-instance-types:
+  - g2.1               # 28 vCPU, 1x A100 80 GB
+  # No V100 fallback: the chunks are sized for 80 GB and bf16 needs sm_80+.

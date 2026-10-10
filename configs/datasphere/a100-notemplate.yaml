@@ -37,11 +37,23 @@ desc: paper-scale grid on one A100 without the chat template -- the paper's geom
 # 1024/4096 for minutes and should be launched first.
 #
 # The grid, the budget (~4.35k prefill+decode passes, `mask` dominant) and the hybrid's
-# degenerate last point are the same as in `a100.yaml` -- read that config's comments
-# and the preflight's `retrieval_pool_by_domain` before deciding whether to keep
-# `--k-frac 0.33` for a model whose control pool is 11-12 heads.
+# degenerate last point are the same as in `a100.yaml` -- read that config's comments for
+# the split launch (`a100-detect.yaml` + `a100-mask.yaml`), which measures the control
+# pool on the *real* grid before the expensive stage.  The preflight cannot answer that
+# question: it scores two lengths, while the pool `mask` draws from is an average over
+# the whole grid, so a 60-instance tree and a 270-instance tree give different pools.
+#
+# Read the causal stage on `retrieval_recall`/`random_recall_mean`, not on
+# `exact_match`.  EM requires the *whole* needle while the question asks for a sub-span,
+# so the hybrid's EM is 0 by construction (committed tree: baseline 0.0, every arm 0.0);
+# in this geometry the dense model recovers only ~0.55 of the needle, so its EM is
+# expected to collapse as well -- i.e. here the EM series is uninformative for both
+# models, and `masking_recall.pdf` (written by the `figures` stage) is the one to quote.
+# Redefining EM over the question's answer span would need an answer span per needle,
+# which `DETECTION_NEEDLES`/`EVAL_NEEDLES` do not carry: a data change, not a metric
+# tweak, so it is recorded here rather than done.
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --no-chat-template --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100-notemplate
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --no-chat-template --stages describe,detect,mask,compare,figures,case-study --out-prefix ds-results-a100-notemplate
 
 flags:
   - attach-project-disk

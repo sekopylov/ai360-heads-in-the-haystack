@@ -134,8 +134,14 @@ the hardware and of the argmax-domain/sink geometry the full run would otherwise
 gamble on), `a100-preflight-notemplate.yaml` (the same grid with the driver's
 `--no-chat-template`, i.e. the paper's sink geometry; the two are meant to be compared),
 `a100-resume.yaml` (the A100 counterpart of `t4-resume.yaml`, so a failure
-in a late stage does not re-pay for `mask`), `laptop.yaml`,
-`paper.yaml` and `smoke.yaml`.  Everything non-obvious about this path — the pip
+in a late stage does not re-pay for `mask`), `a100-detect.yaml` + `a100-mask.yaml` (the
+same grid split into two jobs — `describe,detect` first, so the control pool that decides
+the masking curve's top point is read from the *real* grid before the expensive stage;
+together they are `a100.yaml`'s stage list, so nothing runs twice), `laptop.yaml`,
+`paper.yaml` and `smoke.yaml`.  Every A100 config also passes `--bootstrap-venv` beside
+`--use-venv` (the cached venv's lock stamp is verified before it is used, and the job log
+prints whether `fla`/`causal_conv1d` are importable) and `--verify-hashes` (the
+checkpoint digests are recomputed).  Everything non-obvious about this path — the pip
 crash that shapes the requirements file, the `cmd` grammar, why the cached venv
 cannot be the entry point, what the "T4" slot actually hands out — is written up
 in [`docs/datasphere-findings.md`](docs/datasphere-findings.md).

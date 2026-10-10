@@ -149,7 +149,6 @@ class DetectionSettings:
     system_prompt: str | None = None
     chat_template: bool = True
     enable_thinking: bool | None = False
-    argmax_domain: str = DEFAULT_ARGMAX_DOMAIN
     threshold: float = DEFAULT_THRESHOLD
     corpus_path: str | None = None
     #: How `detect` captured the attention rows.  `mask` has no flag for it, so
@@ -208,12 +207,12 @@ def resolve_detection_settings(args: argparse.Namespace, scores: Any) -> Detecti
     settings.enable_thinking = pick("enable-thinking",
                                     config.get("enable_thinking", _MISSING),
                                     requested_thinking, not args.thinking)
-    recorded_domain = meta.get("argmax_domain", config.get("argmax_domain", _MISSING))
-    # Only `detect` has the flag; the ablations still record the domain the heads
-    # were selected under (it is not re-derived from the scores).
-    requested_domain = getattr(args, "argmax_domain", DEFAULT_ARGMAX_DOMAIN)
-    settings.argmax_domain = pick("argmax-domain", recorded_domain, requested_domain,
-                                  requested_domain == DEFAULT_ARGMAX_DOMAIN)
+    # The argmax domain is deliberately *not* a field here.  `mask` has no flag for it
+    # (only `detect` does), and the ablations record the domain the heads were selected
+    # under straight from `scores.meta["argmax_domain"]` in `masking`/`downstream` --
+    # which is the authoritative source, since the sidecars carry one matrix per
+    # domain.  Resolving it here as well produced a field nothing read: a trap in a
+    # structure whose whole purpose is "the conditions that were reused".
     requested_threshold = getattr(args, "threshold", DEFAULT_THRESHOLD)
     settings.threshold = pick("threshold", config.get("threshold", _MISSING),
                               requested_threshold,

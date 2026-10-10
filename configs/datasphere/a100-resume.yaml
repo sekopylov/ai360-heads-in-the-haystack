@@ -28,7 +28,7 @@ desc: remaining stages (compare,figures,case-study) on the A100, reusing a finis
 #   cp -r <downloaded>/ds-results-a100/. ds-a100-resume/
 # (`ds-a100-resume/` is gitignored.)
 
-cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --stages compare,figures,case-study --out-prefix ds-a100-resume
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${WEIGHTS} --models qwen3.5-0.8b qwen3-0.6b --profile a100 --dtype bfloat16 --verify-hashes --stages compare,figures,case-study --out-prefix ds-a100-resume
 
 flags:
   - attach-project-disk

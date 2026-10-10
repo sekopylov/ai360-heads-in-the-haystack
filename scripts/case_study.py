@@ -96,6 +96,9 @@ def main() -> int:
                              "(default: the paper's haystack domain)")
     parser.add_argument("--max-new-tokens", type=int, default=32)
     parser.add_argument("--needle-index", type=int, default=0)
+    # The filler is generated from this seed, so without recording it the figure's
+    # prompt cannot be rebuilt from the artifact (the driver passes the run's seed).
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--scores", default=None,
                         help="a detect run directory (scores_<pairing>.json); its recorded "
                              "conditions are reused so the figure explains that run")
@@ -144,7 +147,7 @@ def main() -> int:
             apply(value)
     sample = build_needle_sample(
         tokenizer, needle=needle, question=question, target_tokens=args.length,
-        depth=args.depth, builder=HaystackBuilder(seed=0),
+        depth=args.depth, builder=HaystackBuilder(seed=args.seed),
         chat_template=not args.no_chat_template,
         system_prompt=args.system_prompt,
         enable_thinking=True if args.thinking else False,
@@ -210,7 +213,7 @@ def main() -> int:
     save_fig(plot_attention_distribution(distributions), fig_dir / "retrieval_attention_dist.pdf")
 
     save_json(
-        add_provenance(dtype=args.dtype, payload={
+        add_provenance(dtype=args.dtype or info.dtype, payload={
             "model": info.name,
             "pairing": args.pairing,
             "argmax_domain": args.argmax_domain,
@@ -219,6 +222,14 @@ def main() -> int:
             "system_prompt": args.system_prompt,
             "enable_thinking": True if args.thinking else False,
             "prompt_tokens": sample.length,
+            # The filler is seeded, so the exact prompt is rebuildable from the
+            # artifact; `--dtype` falls back to the checkpoint's own precision rather
+            # than leaving the provenance without a dtype at all.
+            "filler_seed": args.seed,
+            "length_requested": args.length,
+            "depth": args.depth,
+            "max_new_tokens": args.max_new_tokens,
+            "needle_index": args.needle_index,
             "needle_span": list(sample.needle_span),
             "haystack_span": (list(sample.haystack_span)
                               if sample.haystack_span is not None else None),

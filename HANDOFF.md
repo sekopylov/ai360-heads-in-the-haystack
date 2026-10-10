@@ -16,7 +16,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 281 tests: 263 fast (`pytest -m "not integration"`, ~20 s), 18 integration against
+* 284 tests: 266 fast (`pytest -m "not integration"`, ~20 s), 18 integration against
   the real checkpoints. All green.
 * **The committed artifacts now match the code.** The GPU run was refreshed in two
   jobs on an NVIDIA L4, 75 instances per model:
@@ -119,6 +119,92 @@ tied to a job id) → this file (where things stand and what is left).
     domains as a reporting decision, the held-out eval needles, matched arms, the
     bias-free-`o_proj` caveat, the grid arithmetic (270/210, 45/point, 1665/1395/810),
     the driver's override wiring, dtype isolation, and artifact atomicity.
+* **Review round (the twelfth report, pre-A100): two real defects, one documentation
+  defect, and two declines.**  Revision `2752a1d`, so the reviewer read a clean tree.
+  * **The cached venv was used without being verified -- fixed, and it was the most
+    expensive risk in the report.**  `--use-venv` hops into whatever sits on the project
+    disk; the stamp check (the lock's digest + an import verify) lived only inside
+    `bootstrap_venv()`, which `main` called only under `--bootstrap-venv`.  So a lock
+    edit after the venv was built (the `flash-linear-attention` addition was one) would
+    have run silently on the old environment, and `fla` is a *numerical* difference, not
+    just a speed one -- exactly what makes the two geometries comparable or not.  All
+    five A100 configs now pass `--bootstrap-venv` beside `--use-venv`: the bootstrap path
+    checks the stamp, re-installs only if it moved, verifies the imports and falls
+    through to the re-exec (`strip_flag` removes both flags).  Measured today: the
+    current lock's digest **is** `1ae8818bae664fb2`, i.e. the venv job
+    `bt1130t5lg7audlevlin` built, so the run would have been correct -- the risk was
+    structural, not live.  `report_environment()` also prints `fla`/`causal_conv1d`
+    importability now, in the interpreter that actually runs the stages, so the log says
+    it before the grid instead of the artifacts saying it after.
+  * **The driver's `--lengths` override crashed `qa`/`cot` -- fixed, and reproduced.**
+    `stage_argv` applied it to every stage, and `qa`/`cot` have no `--lengths` flag, so
+    `--lengths 1024 --stages ...,qa` gave `argparse exit 2` and failed the stage.  No
+    shipped config combined them (the preflights run `describe,detect`), which is why it
+    survived; `a100-resume.yaml` invites adding `qa`/`cot`.  Verified the old argv
+    (`--lengths 1024` appended) exits 2 and the new one does not; `LENGTH_STAGES =
+    ("detect", "mask")` gates it, and the argv test now builds every stage *with* the
+    overrides instead of only without them.
+  * **The pool cannot be read from the preflight, and four places said it could --
+    fixed, plus the split launch is now executable.**  `mask` draws its control from
+    heads at or below the threshold, and that pool is an average over the *run's own*
+    detection grid: the preflight scores 2 lengths x 10 depths x 3 needles, the run
+    scores 9 x 10 x 3, so the two pools differ by construction.  `a100.yaml` (twice),
+    `a100-notemplate.yaml` and both preflight configs told the launcher to read
+    `retrieval_pool_by_domain` from the preflight and act on it; all four now say the
+    number is an indicator and point at the real measurement.  Two new configs make that
+    measurement executable: `a100-detect.yaml` (`describe,detect` on the full grid, same
+    prefix) and `a100-mask.yaml` (`mask,compare,figures,case-study` on the staged tree,
+    `local-paths: ds-results-a100`) -- together exactly `a100.yaml`'s stage list, so no
+    stage runs twice, and a test asserts the two halves are disjoint, ordered and share
+    one `--out-prefix`.  The reviewer's own note that "for this there is already
+    `a100-resume.yaml`" was wrong (that one is the tail only), which is why the pair had
+    to be written.
+  * **`mask`'s `exact_match` column is structurally uninformative -- acknowledged, not
+    redefined.**  EM requires the *whole* needle while the question asks for a sub-span,
+    so the hybrid's is 0 by construction (baseline 0.0, every arm 0.0 in the committed
+    tree), and in the template-free geometry the dense model's will collapse too (it
+    recovers ~0.55 of the needle).  `a100-notemplate.yaml` now says to quote
+    `retrieval_recall`/`random_recall_mean` (and `masking_recall.pdf`) instead.  The
+    reviewer's suggested fix -- define EM over the question's answer span -- needs an
+    answer span per needle, which `DETECTION_NEEDLES`/`EVAL_NEEDLES` do not carry: a data
+    change, recorded rather than done.
+  * **`DetectionSettings.argmax_domain` was dead -- deleted.**  It was resolved and never
+    read (the ablations record the domain from `scores.meta["argmax_domain"]`, one matrix
+    per captured domain, which is the authoritative source), and a test asserted the dead
+    value.  The field, its `pick(...)` and that assertion are gone; the test now asserts
+    the opposite (the resolver must *not* carry a domain).
+  * **`case_study.py` recorded neither its dtype nor its filler seed -- fixed.**
+    `add_provenance(dtype=args.dtype, ...)` with the flag's default `None` omits the key
+    entirely, so a run without `--dtype` recorded no precision at all; the filler was
+    hard-coded to `HaystackBuilder(seed=0)` and the seed was never written down.  Now
+    `dtype=args.dtype or info.dtype`, the script takes `--seed` (the driver passes the
+    run's seed, which it previously ignored for this stage), and the artifact records
+    `filler_seed`/`length_requested`/`depth`/`max_new_tokens`/`needle_index`.
+    `HaystackBuilder` keeps its `seed` so the value is checkable.
+  * **REFUTED: "`--scores` + `--pairing same_step` crashes `case-study`".**  `detect`
+    always writes *both* pairings (`self.secondary.save(...)`), so `scores_next_step.json`
+    exists in any detect tree and the sidecar lookup cannot miss; the conditions it
+    reuses are run-level anyway.  No change made.
+  * **DECLINED: a salvage script to rebuild `scores_*.npz` from `instances_*.jsonl`.**
+    The JSONL is complete per instance (`scores`, `scores_raw`, `scores_by_domain`,
+    `copied_tokens`, `sample`, per-instance meta) but carries **no `DetectionConfig`** --
+    and the aggregation needs the run's conditions (threshold, pairing, domain, budget,
+    chat template), while `mask`'s `resolve_detection_settings` reads them from
+    `scores.meta["config"]` and would silently fall back to defaults on a salvaged tree.
+    A *correct* salvage therefore has to take those as flags, i.e. re-state detect's
+    configuration; re-running `detect` with the driver's `--lengths` override is both
+    cheaper and impossible to get wrong.  Recorded here as a deliberate non-change, with
+    the reason, rather than shipped as a 20-line script that quietly measures different
+    conditions.
+  * **`.gitignore` now covers the preflight trees and states the A100 decision.**
+    `ds-preflight/`, `ds-preflight-notemplate/` and `ds-preflight-detect/` are ignored
+    (decision aids, not deliverables); `ds-results-a100/` and
+    `ds-results-a100-notemplate/` are deliberately *not* ignored, because they are the
+    A100 deliverable and get committed like `ds-results/` -- so they show in
+    `git status` until they are.
+  * Also from this round: the `GPU_CONFIGS` tripwire now lists every A100 config (it
+    checked only `a100.yaml`, so the other eight were unverified for their instance
+    type), and `tests/test_datasphere_configs.py` asserts the split halves' properties.
 * **Review round (the eleventh report, pre-A100): one finding survived checking, four did
   not -- including its headline blocker.**  Recorded in this order because the refutations
   are the part that is easy to lose.
@@ -951,32 +1037,43 @@ Ordered by how expensive they were to rediscover.
 1. **Preflight, both geometries** (minutes each, `describe,detect` at 1024/4096 with
    `--limit 60`): `configs/datasphere/a100-preflight.yaml` (chat template) and
    `a100-preflight-notemplate.yaml` (paper geometry).  Launch them as two jobs.  Both
-   pass `--verify-hashes`, so a corrupt checkpoint on the project disk fails here in
-   minutes instead of in the full grid.
+   pass `--verify-hashes` (a corrupt checkpoint fails here in minutes, not in the full
+   grid) and `--bootstrap-venv` (the cached venv's stamp is checked before it is used,
+   so a lock change cannot leave the run on an older environment -- `fla` is a
+   *numerical* difference, and the job log now states whether it is importable).
 2. **Read four numbers per model** from each `summary_next_step.json`:
    `sparsity_by_domain`, `retrieval_pool_by_domain`, `sink_in_haystack`,
    `n_instances_recited`/`mean_needle_recall`.  The CPU probe already predicts them
    (README's sink-geometry bullet: dense 38% with the template vs 6% without, hybrid
    75-77% either way, pool 11-12 for the hybrid) -- the preflight's job is to confirm
    them at 1024/4096 tokens, where the context is longer than the probe's 512.  Its log
-   now also prints the SDPA flash-backend probe for the card it actually got.
+   also prints the SDPA flash-backend probe and the optional-kernel probe for the card
+   and interpreter it actually got.  **Caveat on the pool:** the preflight's
+   `retrieval_pool_by_domain` is the pool of *its own* 2-length/60-instance tree, while
+   the full run's `mask` draws from the pool of the 9-length grid (a head's score is a
+   mean over the instances that ran), so it is an indicator, not the number that decides
+   K.  The number that decides K comes from step 4's split launch.
 3. **Decide the geometry.**  Both are defensible and they answer different questions:
    with the template the models solve the task (recall 1.00) and the dense model's
    share is inflated by the sink; without it the dense share lands in the paper's
    3-6% band but the dense model recovers only ~0.55 of the needle.  Reporting both
    is the honest option; if only one is run, say which and why in the results doc.
-4. **Launch the full grid**: `a100.yaml` (chat template, comparable with the committed
-   `ds-results/` tree) or `a100-notemplate.yaml` (the paper's geometry) -- identical
-   grids, so they are a controlled pair.  Both pin `--argmax-domain haystack`,
-   `--max-new-tokens 96` for detect *and* mask, `--preflight`, `--verify-hashes`, and run
-   `describe,detect,mask,compare,figures,case-study`; `qa`/`cot` are deliberately
-   *not* in the A100 list (8+8 hand-written items are a pipeline check, not A100
-   time -- a real measurement needs `--data file.jsonl`, and the cheap grid already
-   exercises the stage).
+4. **Launch the grid.**  Either the monolithic `a100.yaml` / `a100-notemplate.yaml`
+   (chat template / paper geometry; identical grids, a controlled pair; both pin
+   `--argmax-domain haystack`, `--max-new-tokens 96` for detect *and* mask,
+   `--preflight`, `--verify-hashes`, `--bootstrap-venv`, and run
+   `describe,detect,mask,compare,figures,case-study`), or the split pair
+   `a100-detect.yaml` -> read the pool -> stage the tree -> `a100-mask.yaml`, which
+   costs the same but lets the pool be read *before* the expensive stage.  `qa`/`cot`
+   are deliberately *not* in the A100 list (8+8 hand-written items are a pipeline check,
+   not A100 time -- a real measurement needs `--data file.jsonl`, and the cheap grid
+   already exercises the stage).
 5. **If a late stage fails**, stage the downloaded tree as `ds-a100-resume/` and launch
    `a100-resume.yaml` -- it re-runs only `compare,figures,case-study`, because `mask`
    is the stage that costs real money (45 samples per point x 6 K x 6 arms ~ 1.4-1.7k
-   generations per model, plus the hybrid's 810 mixer generations).
+   generations per model, plus the hybrid's 810 mixer generations).  A failure *inside*
+   `mask` is the case `a100-mask.yaml` covers (it re-runs the whole tail from a staged
+   detect tree).
 
 Each item below says what to do, not just what is missing.  Everything that could be
 finished offline is done, including round six (the `haystack` argmax domain and its
@@ -991,11 +1088,13 @@ artifacts, the driver's `--lengths`/`--limit` preflight overrides plus the
 generation budget, `logits_to_keep`, the `--no-chat-template` driver flag and the
 template-free preflight, the recomputed truncation numbers, the subset-domain
 aggregation, the K-collapse warning, `prompt_tokens`, the pie threshold label, and
-the domain-ordering theorem with its property test).  Rounds nine through eleven are
+the domain-ordering theorem with its property test).  Rounds nine through twelve are
 summarised as their own entries above: the controlled geometry pair and the flash
 probe, the A100 budget arithmetic and the degenerate-pool rule, the
-`detection_pairing` provenance fix, `--verify-hashes`, and the README/artifact
-tripwire.  What is left needs a GPU run, external data, or a judgement call.
+`detection_pairing` provenance fix, `--verify-hashes`, the README/artifact tripwire,
+the venv stamp check, the `qa`/`cot` `--lengths` fix, the split A100 launch, and the
+`case_study` provenance fields.  What is left needs a GPU run, external data, or a
+judgement call.
 
 Known measurement limits, in the artifacts themselves rather than hidden:
 `mask` now keeps per-sample F1 and reports the retrieval arm's spread, and its
@@ -1148,7 +1247,7 @@ matrix.
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 281 passed (263 fast + 18 integration)
+.venv/bin/python -m pytest -q                     # 284 passed (266 fast + 18 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

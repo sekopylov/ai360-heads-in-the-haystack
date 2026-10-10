@@ -35,6 +35,15 @@ ds-*-logs*/
 ds-download/
 ds-smoke-results/
 
+# Preflight trees: a 2-length/60-instance decision aid, not a deliverable.  The full
+# A100 trees (`ds-results-a100/`, `ds-results-a100-notemplate/`) are deliberately *not*
+# ignored -- they are the A100 deliverable and are committed like `ds-results/`, so they
+# show up in `git status` until they are (the reviewer asked for that decision to be
+# explicit rather than accidental).
+ds-preflight/
+ds-preflight-notemplate/
+ds-preflight-detect/
+
 # Staging tree for a resumed job: the previous run's artifacts are uploaded via
 # `local-paths` so the remaining stages can reuse them (a copy, never the tracked
 # ds-results/).  `ds-a100-resume/` is the A100 counterpart, staged from a finished

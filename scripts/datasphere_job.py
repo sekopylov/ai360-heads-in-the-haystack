@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -126,6 +127,11 @@ SCALES: dict[str, dict[str, list[str]]] = {
 
 STAGES = ("describe", "detect", "mask", "qa", "cot", "compare", "figures",
           "case-study")
+#: Stages whose CLI defines ``--lengths``.  The driver's ``--lengths`` override must
+#: reach only these: ``qa``/``cot`` have no grid flag at all, so appending it made
+#: argparse exit 2 and failed the stage (no shipped config hit the combination, which
+#: is why it survived -- ``a100-resume.yaml`` invites adding ``qa``/``cot``).
+LENGTH_STAGES = ("detect", "mask")
 #: Stages that need a loaded model (and therefore benefit from the one-model cache).
 MODEL_STAGES = ("describe", "detect", "mask", "qa", "cot", "case-study")
 #: Stages that read every model's artifacts and need no model at all.
@@ -491,6 +497,23 @@ def report_environment() -> None:
               "environment is reported again afterwards.")
         return
     print(f"[entry] torch {torch.__version__}")
+    # The optional kernels are part of the *measurement*, not just of the speed: the
+    # hybrid's 18 linear layers take a different (fused) path when
+    # `flash-linear-attention` is importable, so two runs that differ here are not the
+    # same experiment.  Every artifact records `provenance.optional_kernels`, but that
+    # is only readable after the grid; this prints it for the interpreter that will
+    # actually run the stages -- i.e. again after the `--use-venv` re-exec.  Printed
+    # after the torch check on purpose: in the platform venv (pre-re-exec) everything
+    # is missing, and a wall of "NOT importable" there would be noise, not a signal.
+    for label, module in (("flash-linear-attention", "fla"),
+                          ("causal-conv1d", "causal_conv1d")):
+        try:
+            found = importlib.util.find_spec(module) is not None
+            print(f"[entry] optional kernel {label}: "
+                  f"{'importable' if found else 'NOT importable (module not found)'}")
+        except Exception as exc:  # noqa: BLE001 - report it, never fail the job here
+            print(f"[entry] optional kernel {label}: NOT available "
+                  f"({type(exc).__name__}: {exc})")
     if torch.cuda.is_available():
         props = torch.cuda.get_device_properties(0)
         print(f"[entry] GPU: {props.name} sm_{props.major}{props.minor} "
@@ -827,9 +850,13 @@ def stage_argv(
             for key in models
         ]
     if stage in ("mask", "qa", "cot"):
-        # `--limit` is a `detect` flag only (it caps the instance grid); passing it to
-        # a stage without one would make argparse exit.
-        flags = apply_grid_overrides(list(scales[stage]), lengths=lengths)
+        # `--limit` is a `detect` flag only (it caps the instance grid), and `--lengths`
+        # exists on `detect`/`mask` only -- `qa`/`cot` build their items from `--data`
+        # or the built-ins and have no grid at all, so appending the override to them
+        # made argparse exit 2 and failed the stage.  Both are gated here rather than
+        # in `apply_grid_overrides`, which cannot know the stage.
+        flags = apply_grid_overrides(list(scales[stage]),
+                                     lengths=lengths if stage in LENGTH_STAGES else None)
         return [
             [stage, "--model", key, "--out", str(runs[key]),
              "--seed", str(seed), *flags, *prompt_flags]
@@ -849,7 +876,8 @@ def stage_argv(
         # match a 1K-49K grid, and `store_rows` keeps every step's row, so a longer one
         # would be the figure's whole cost.
         return [["--model", key, "--scores", str(runs[key]), "--out", str(runs[key]),
-                 "--length", "4096", "--max-new-tokens", "96", *prompt_flags]
+                 "--length", "4096", "--max-new-tokens", "96", "--seed", str(seed),
+                 *prompt_flags]
                 for key in models]
     if stage == "figures":
         return [["figures", "--runs", *[str(p) for p in runs.values()],

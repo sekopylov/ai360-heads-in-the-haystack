@@ -155,7 +155,9 @@ def test_outputs_are_declared_where_results_are_written(configs):
 #: Configs that must run on a GPU.  Listed explicitly: the previous condition
 #: tested the file *name* for "gt4", so `t4.yaml` was skipped by its own check.
 GPU_CONFIGS = {"t4.yaml", "t4-smoke.yaml", "t4-cached.yaml", "t4-bootstrap.yaml",
-               "t4-venv.yaml", "paper.yaml", "a100.yaml"}
+               "t4-venv.yaml", "paper.yaml", "a100.yaml", "a100-notemplate.yaml",
+               "a100-preflight.yaml", "a100-preflight-notemplate.yaml",
+               "a100-resume.yaml", "a100-detect.yaml", "a100-mask.yaml"}
 
 
 def test_gpu_configs_request_a_gpu_shape(configs):
@@ -242,15 +244,77 @@ def test_a100_configs_recheck_the_checkpoint_hashes(configs):
         assert args.verify_hashes, (
             f"{name}: an A100 job must recompute the registry SHA-256 before the grid"
         )
+        # `--use-venv` alone hops into whatever is on the project disk; the bootstrap
+        # path is what checks the lock's stamp and re-installs only if it moved, so
+        # without it a venv built before a lock change (the `flash-linear-attention`
+        # addition was one) runs silently -- and `fla` is a *numerical* difference.
+        assert args.bootstrap_venv, (
+            f"{name}: an A100 job must verify the cached venv's stamp, not just use it"
+        )
+        assert args.bootstrap_venv == args.use_venv, (
+            f"{name}: the bootstrap must verify the same venv the job re-execs into"
+        )
 
     for name in ("t4-cached.yaml", "paper.yaml"):
         if name not in configs:
             continue
         tokens = [token.replace("${WEIGHTS}", "/w").replace("${DS_PROJECT_HOME}", "/disk")
                   for token in configs[name]["cmd"].split()]
-        assert not driver.parse_args(tokens[2:]).verify_hashes, (
+        parsed = driver.parse_args(tokens[2:])
+        assert not parsed.verify_hashes, (
             f"{name}: the cheap scales keep the presence-only check"
         )
+        assert not parsed.bootstrap_venv, (
+            f"{name}: the cheap scales must not pay for a venv check on every job"
+        )
+
+
+def test_the_job_log_reports_the_optional_kernels(capsys):
+    """`fla` is a numerical difference, so every job log must state whether it is there.
+
+    It used to be probed only inside the bootstrap job, i.e. only when the venv was
+    built -- which is precisely when it is *not* informative about the run.
+    """
+    driver = load_job_driver()
+    driver.report_environment()
+    out = capsys.readouterr().out
+    assert "optional kernel flash-linear-attention:" in out, out
+    assert "optional kernel causal-conv1d:" in out, out
+    assert "torch " in out, "the probe must come after the interpreter is identified"
+
+
+def test_the_a100_split_halves_do_not_overlap_and_share_one_prefix(configs):
+    """`a100-detect` + `a100-mask` must together be the monolithic `a100` stage list.
+
+    A split that repeated a stage would pay for it twice, and one that dropped a stage
+    would silently produce an incomplete tree; a different `--out-prefix` would make the
+    two halves impossible to merge into one run.
+    """
+    driver = load_job_driver()
+    if not {"a100.yaml", "a100-detect.yaml", "a100-mask.yaml"} <= set(configs):
+        pytest.skip("split A100 configs not present")
+
+    def parsed(name: str):
+        tokens = [token.replace("${WEIGHTS}", "/w").replace("${DS_PROJECT_HOME}", "/disk")
+                  for token in configs[name]["cmd"].split()]
+        return driver.parse_args(tokens[2:])
+
+    full, detect, mask = parsed("a100.yaml"), parsed("a100-detect.yaml"), parsed("a100-mask.yaml")
+    first = [s.strip() for s in detect.stages.split(",") if s.strip()]
+    second = [s.strip() for s in mask.stages.split(",") if s.strip()]
+    whole = [s.strip() for s in full.stages.split(",") if s.strip()]
+    assert first + second == whole, (first, second, whole)
+    assert set(first).isdisjoint(second), (first, second)
+    assert detect.out_prefix == mask.out_prefix == full.out_prefix
+    # The detect half must build the tree the mask half reads: without the staged copy
+    # in `local-paths` the second job would have no scores to mask.
+    assert "ds-results-a100" in (configs["a100-mask.yaml"].get("env", {})
+                                 .get("python", {}).get("local-paths", []))
+    for name, args in (("a100-detect.yaml", detect), ("a100-mask.yaml", mask)):
+        assert args.profile == full.profile, name
+        assert args.dtype == full.dtype, name
+        assert args.models == full.models, name
+        assert args.no_chat_template == full.no_chat_template, name
 
 
 def test_a100_profile_keeps_a_memory_bound_and_the_paper_grid():
