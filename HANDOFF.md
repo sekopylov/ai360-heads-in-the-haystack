@@ -189,6 +189,34 @@ tied to a job id) → this file (where things stand and what is left).
     no-template geometry is the paper-comparable sparsity number, and its dense half is
     budget-limited.  Both is the honest option; `a100.yaml` and `a100-notemplate.yaml`
     carry the table and the caveat in their comments.
+* **The detect half of the template grid has run (job `bt1bilu85qa2q8j3r2nn`, 2026-10-10,
+  25 min wall).**  `a100-detect.yaml`: 270 hybrid instances in 610 s + 210 dense in 563 s,
+  both 96-token budget, `haystack` domain, `ds-results-a100/` downloaded (36 MB, schema 8).
+  The full-grid numbers match the 60-instance preflight almost exactly, which is worth
+  knowing in itself: the pool is not an artifact of the shorter tree.
+
+  | model | domain | >0.1 | pool | top head | recited | recall | trunc |
+  |---|---|---|---|---|---|---|---|
+  | Qwen3-0.6B | `haystack` | 28.1% (126/448) | 322 | L21H9 (0.93) | 209/210 | 0.969 | 0 |
+  | Qwen3-0.6B | `prompt` | 5.1% (23/448) | 425 | L16H14 (0.90) | | | |
+  | Qwen3-0.6B | `full` | 4.7% (21/448) | 427 | L16H14 (0.90) | | | |
+  | Qwen3.5-0.8B | `haystack` | 72.9% (35/48) | **13** | L15H7 (0.89) | 269/270 | 0.942 | 0 |
+  | Qwen3.5-0.8B | `prompt` | 68.8% (33/48) | 15 | L15H7 (0.72) | | | |
+  | Qwen3.5-0.8B | `full` | 62.5% (30/48) | 18 | L15H7 (0.72) | | | |
+
+  Dense drops 40960/49152 to its 40960 window (recorded in `dropped_lengths`); the
+  hybrid keeps all nine lengths and reaches 49K with 8192-token chunks without trouble.
+  Sink geometry as predicted (`sink_in_haystack` False, dense sink rate 0.761, domain
+  shift 90.3%; hybrid 0.036 / 38.3%).
+  * **The cost estimate in `a100.yaml` was wrong and is now measured.**  The "6-10 h"
+    extrapolated the prefill quadratically; the per-instance cost is dominated by the
+    *capture* (~50 ms per decode step: eager attention over the whole KV plus the row
+    argmax per layer per domain) and is nearly flat in length (a 32K dense instance is
+    ~4 s against ~2 s at 8K).  Detect = 25 min measured; mask, upper-bounded by detect's
+    per-instance cost at its 4-16K lengths (a mask pass generates without capturing, but
+    the masking hooks at large K add back), is ~2 h for 1665+1395+810 passes -- so the
+    whole template run is ~2.5-3 h and ~1.4k-1.6k RUB, and the split launch cost nothing
+    extra (detect is 17% of the run either way).
 * **Review round (the twelfth report, pre-A100): two real defects, one documentation
   defect, and two declines.**  Revision `2752a1d`, so the reviewer read a clean tree.
   * **The cached venv was used without being verified -- fixed, and it was the most

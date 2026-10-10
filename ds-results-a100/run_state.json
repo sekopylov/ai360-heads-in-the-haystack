@@ -1,0 +1,52 @@
+{
+  "stages": [
+    {
+      "stage": "describe",
+      "model": "qwen3.5-0.8b",
+      "status": "running",
+      "at": "2026-10-10T09:16:35"
+    },
+    {
+      "stage": "describe",
+      "model": "qwen3.5-0.8b",
+      "status": "ok",
+      "at": "2026-10-10T09:17:26"
+    },
+    {
+      "stage": "detect",
+      "model": "qwen3.5-0.8b",
+      "status": "running",
+      "at": "2026-10-10T09:17:26"
+    },
+    {
+      "stage": "detect",
+      "model": "qwen3.5-0.8b",
+      "status": "ok",
+      "at": "2026-10-10T09:28:06"
+    },
+    {
+      "stage": "describe",
+      "model": "qwen3-0.6b",
+      "status": "running",
+      "at": "2026-10-10T09:28:06"
+    },
+    {
+      "stage": "describe",
+      "model": "qwen3-0.6b",
+      "status": "ok",
+      "at": "2026-10-10T09:28:07"
+    },
+    {
+      "stage": "detect",
+      "model": "qwen3-0.6b",
+      "status": "running",
+      "at": "2026-10-10T09:28:07"
+    },
+    {
+      "stage": "detect",
+      "model": "qwen3-0.6b",
+      "status": "ok",
+      "at": "2026-10-10T09:37:52"
+    }
+  ]
+}

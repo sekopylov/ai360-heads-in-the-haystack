@@ -131,12 +131,22 @@ desc: paper-scale grid on one A100 (g2.1, 80 GB), large prefill chunks
 # failing baseline.  The hybrid's pool is 13 (template) / 14 (no template), so its
 # K=16 point caps to the pool either way -- `control_exhausted` records it.
 #
-# Wall clock, measured: 60 detect instances at 1K-4K took 118 s (dense, template) / 165 s
-# (hybrid) and 332 s / 286 s without the template (the dense model does not stop, so it
-# always decodes the full 96 tokens).  Extrapolating that decode-dominated cost to the
-# 1K-49K grid and the 4-16K ablations puts one geometry at roughly 6 h (template) to
-# 10 h (no template) on this card, i.e. ~3.4k-5.4k RUB -- a crude estimate (it is fitted
-# at 1K-4K, and the long lengths dominate), so check the first hour of the real run.
+# Wall clock, measured -- the first estimate here was wrong and the measurement says so.
+# `a100-detect.yaml` (this grid's detect half, job `bt1bilu85qa2q8j3r2nn`) ran both
+# models end to end in **25 min wall** (hybrid 270 instances in 610 s, dense 210 in
+# 563 s; the dense model drops 40960/49152 to its window, as the artifact records), and
+# the per-instance cost is dominated by the *capture*, not by the prefill: ~50 ms per
+# decode step (eager attention over the whole KV, the row argmax per layer per domain),
+# with 25-96 steps per instance.  The earlier "6-10 h" here extrapolated the prefill
+# quadratically, which is the wrong shape -- at 32K a dense instance costs ~4 s against
+# ~2 s at 8K, not 60x.
+#
+# So the mask stage, bounded above by detect's per-instance cost at its own 4-16K
+# lengths (a mask pass generates without capturing attention, so it is cheaper per pass,
+# while the masking hooks at large K add some back): 1665 dense passes + 1395 hybrid +
+# 810 mixer at ~2-2.7 s is **~2 h**, and the whole template run is ~2.5-3 h, i.e.
+# ~1.4k-1.6k RUB.  Detect's 25 min is 17% of that, so the split launch costs nothing
+# extra and it is what produced these numbers.
 #
 # Note the *domain* axis is no longer part of this decision: since round seven every
 # captured domain is scored in the same pass and written as its own matrix
