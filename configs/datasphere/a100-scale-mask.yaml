@@ -1,0 +1,74 @@
+name: rh-a100-scale-mask
+desc: scale-up round, second half -- mask,compare,figures,case-study on the detect tree (all ten checkpoints)
+
+# What this is
+# ------------
+# The causal half of the scale-up round: the same `a100` mask grid as the committed
+# `ds-results-a100/` tree (3 lengths 4K/8K/16K x 5 depths x 3 held-out needles = 45
+# samples per point, 6 K points from `--k-frac`, 5 random trials per point, 96-token
+# budget), for every model, reading the tree `a100-scale-detect.yaml` produced.
+#
+# Launch order: `a100-scale-detect.yaml` first.  Its summary carries
+# `retrieval_pool_by_domain` -- the number that decides whether the last K point is a
+# curve point or a whole-pool intervention (`control_exhausted` in the artifact says
+# which).  The Qwen3.5 models have 128 scoreable heads, so at a ~70% >0.1 share the
+# pool is ~40 and `--k-frac 0.33` (K=42) lands on the whole pool: expected, flagged in
+# the artifact, and worth saying in the report rather than discovering in the figures.
+#
+# Time, from `scripts/estimate_stages.py` (which fits two measured anchors and prints
+# its own error against them: detect -0%/-1%, mask -7%/+4%).  Mask hours are for the
+# 45-sample grid with 5 random trials; `--random-trials 3` removes ~40% of the random
+# arms:
+#
+#   model             detect   mask   total   RUB
+#   qwen3-0.6b          0.2h   0.9h    1.1h    600
+#   qwen3.5-0.8b        0.2h   1.3h    1.5h    796
+#   qwen3-4b            0.4h   1.3h    1.7h    947
+#   qwen3-8b            0.5h   1.8h    2.3h   1249
+#   qwen3-30b-a3b       0.5h   1.3h    1.7h    949
+#   qwen3.5-4b          0.7h   2.1h    2.8h   1522
+#   qwen3.5-9b          1.3h   3.0h    4.3h   2346
+#   qwen3.5-35b-a3b     0.5h   1.8h    2.3h   1254
+#   ministral-3-8b      0.7h   1.9h    2.6h   1400
+#   ministral-3-14b     0.9h   2.5h    3.4h   1832
+#   all                                      23.8h  12894
+#
+# The honest caveat is in that script: with two small anchors the split between the
+# per-pass overhead and the per-pass compute is underdetermined (the hybrid's mask pass
+# is *cheaper* than the dense model's despite 1.4x the parameters), so the model is
+# flat in model size and the mask column is really "1.9 s + a little" per pass.  If the
+# big models are compute-bound after all, the mask stage is longer than this table.  The
+# first hour of the real run is what settles it -- and if the per-model cost is wanted
+# before committing 20+ hours, a one-hour preflight (`--stages mask --models qwen3-8b
+# qwen3.5-9b --lengths 4096 --depths 1 --needles 1 --random-trials 0`) measures it.
+#
+# `--resume` + the staged tree: the models that already finished are skipped, so a crash
+# on the eighth model does not re-pay for the first seven.  A config may only pass
+# `--resume` when it stages the tree it reads -- a test enforces that pairing.
+
+cmd: python3 scripts/datasphere_job.py --use-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --bootstrap-venv ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/venv --weights ${DS_PROJECT_HOME}/ai360-heads-in-the-haystack/models --models qwen3-0.6b qwen3.5-0.8b qwen3-4b qwen3.5-4b qwen3-8b qwen3.5-9b qwen3-30b-a3b qwen3.5-35b-a3b ministral-3-8b ministral-3-14b --profile a100 --dtype bfloat16 --verify-hashes --resume --stages mask,compare,figures,case-study --out-prefix ds-results-scale
+
+flags:
+  - attach-project-disk
+
+outputs:
+  - ds-results-scale
+
+env:
+  vars:
+    PYTORCH_ALLOC_CONF: expandable_segments:True
+  python:
+    type: manual
+    version: "3.10"
+    requirements-file: scripts/requirements-platform.txt
+    pip:
+      no-deps: 'true'
+    local-paths:
+      - retrieval_heads
+      - configs
+      - scripts
+      - ds-results-scale
+
+cloud-instance-types:
+  - g2.1               # 28 vCPU, 1x A100 80 GB
+  # No V100 fallback: the chunks are sized for 80 GB and bf16 needs sm_80+.

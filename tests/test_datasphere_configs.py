@@ -167,7 +167,8 @@ GPU_CONFIGS = {"t4.yaml", "t4-smoke.yaml", "t4-cached.yaml", "t4-bootstrap.yaml"
                "t4-venv.yaml", "paper.yaml", "a100.yaml", "a100-notemplate.yaml",
                "a100-preflight.yaml", "a100-preflight-notemplate.yaml",
                "a100-resume.yaml", "a100-detect.yaml", "a100-mask.yaml",
-               "a100-scale-detect.yaml"}
+               "a100-scale-detect.yaml",
+               "a100-scale-mask.yaml"}
 
 
 def test_gpu_configs_request_a_gpu_shape(configs):
@@ -353,7 +354,8 @@ def test_only_the_configs_that_stage_their_tree_ask_to_resume(configs):
     a crash (with the downloaded outputs dropped into it) skips the models that finished.
     """
     driver = load_job_driver()
-    continuation = {"a100-mask.yaml", "a100-resume.yaml", "a100-scale-detect.yaml"}
+    continuation = {"a100-mask.yaml", "a100-resume.yaml", "a100-scale-detect.yaml",
+               "a100-scale-mask.yaml"}
     for name, config in configs.items():
         tokens = [token.replace("${WEIGHTS}", "/w").replace("${DS_PROJECT_HOME}", "/disk")
                   for token in config["cmd"].split()]
