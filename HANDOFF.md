@@ -16,7 +16,7 @@ tied to a job id) → this file (where things stand and what is left).
 **Done and verified end to end.**
 
 * `retrieval_heads/` — the paper's method, architecture-aware. 12 modules.
-* 284 tests: 266 fast (`pytest -m "not integration"`, ~20 s), 18 integration against
+* 285 tests: 267 fast (`pytest -m "not integration"`, ~20 s), 18 integration against
   the real checkpoints. All green.
 * **The committed artifacts now match the code.** The GPU run was refreshed in two
   jobs on an NVIDIA L4, 75 instances per model:
@@ -119,6 +119,39 @@ tied to a job id) → this file (where things stand and what is left).
     domains as a reporting decision, the held-out eval needles, matched arms, the
     bias-free-`o_proj` caveat, the grid arithmetic (270/210, 45/point, 1665/1395/810),
     the driver's override wiring, dtype isolation, and artifact atomicity.
+* **First A100 launch attempt (2026-10-10): the preflight paid for itself immediately.**
+  Job `bt1vcu2st365sq2qrg5d` (`a100-preflight.yaml`, the chat-template geometry) was the
+  first GPU job since `db5c265`, and it found a bug that would have killed the full grid
+  at its *first* stage.  What it proved before dying, all of it new in the last two
+  rounds and all of it working on the real card:
+  * `venv already matches 1ae8818bae664fb2 (7.04 GiB); skipping install` -- the stamp
+    check runs on the A100 path now, and the project-disk venv is current;
+  * `optional kernel flash-linear-attention: importable`, `causal-conv1d: NOT importable`
+    -- so the hybrid runs the fused path, i.e. the two geometries will be comparable
+    (this is the `fla` axis the twelfth review was worried about);
+  * `GPU: NVIDIA A100-SXM4-80GB sm_80 79.3 GiB | cuda 12.8` and `SDPA flash backend: ok`
+    -- flash on sm_80 was an inference from the wheel's arch list until this job; it is
+    now measured;
+  * `checkpoints verified: ... matches its SHA-256 (3.29 GB hashed)` -- `--verify-hashes`
+    works on the real tree;
+  * `grid override: lengths=[1024, 4096] limit=60` -- the preflight overrides work.
+  * **Then: `ModuleNotFoundError: No module named 'retrieval_heads'`** at
+    `run_cli` -> `from retrieval_heads import cli`.  Root cause: `db5c265` replaced the
+    per-stage `subprocess.run([sys.executable, "-m", "retrieval_heads.cli", *argv])`
+    with an in-process `cli.main(argv)`, and `-m` used to put the cwd (`/job`) on
+    `sys.path` for free.  Running the driver as a *script* puts `/job/scripts` on
+    `sys.path[0]` instead, so the uploaded package at `/job/retrieval_heads` was not
+    importable -- and no GPU job had run since that commit, so nothing had exercised it.
+    Fixed in the driver: the module inserts its own repo root (`Path(__file__).parent
+    .parent`) into `sys.path` at import time, exactly as `scripts/case_study.py` already
+    did for the same reason.  `test_the_driver_can_import_the_package_from_a_foreign_cwd`
+    reproduces it (spawns the driver with `cwd` outside the repo and an empty
+    `PYTHONPATH`, then imports the package); it failed with the job's own message before
+    the fix.  Verified end to end locally afterwards: the driver ran a real `describe`
+    stage in-process (Qwen3-0.6B, `--verify-hashes`, `model_info.json` written).
+  * Cost of the lesson: ~4 minutes of A100 (~36 RUB) instead of a killed full grid.  This
+    is the argument for the documented launch order, and it is now evidence rather than
+    reasoning.
 * **Review round (the twelfth report, pre-A100): two real defects, one documentation
   defect, and two declines.**  Revision `2752a1d`, so the reviewer read a clean tree.
   * **The cached venv was used without being verified -- fixed, and it was the most
@@ -1247,7 +1280,7 @@ matrix.
 ## 8. Definition of "still working"
 
 ```bash
-.venv/bin/python -m pytest -q                     # 284 passed (266 fast + 18 integration)
+.venv/bin/python -m pytest -q                     # 285 passed (267 fast + 18 integration)
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3.5-0.8b
 # -> 6 scoreable layers [3,7,11,15,19,23], 48 scoreable heads, hybrid: True
 .venv/bin/python -m retrieval_heads.cli describe --model qwen3-0.6b

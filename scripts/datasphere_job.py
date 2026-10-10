@@ -29,6 +29,18 @@ import time
 from pathlib import Path
 from typing import Any
 
+# Make the uploaded package importable before anything imports it.  A job uploads
+# `retrieval_heads/` and `scripts/` side by side into `/job`, but Python puts the
+# *script's* directory (`/job/scripts`) on `sys.path[0]`, not the repo root -- and the
+# stages run in-process (`run_cli` -> `from retrieval_heads import cli`) since the
+# model-resident change.  The per-stage `python -m retrieval_heads.cli` subprocess it
+# replaced got `/job` on the path for free, because `-m` adds the cwd.  Without this the
+# first stage of every job dies with `ModuleNotFoundError` after the venv, hash and GPU
+# checks have already passed (the first A100 preflight did exactly that).
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 #: Per-stage flags for each scale, kept in step with the two reproduce scripts.
 #:
 #: Head counts are given as *fractions* (``--k-frac``) rather than absolute K,

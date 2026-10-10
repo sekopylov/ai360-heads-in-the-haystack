@@ -572,3 +572,32 @@ def test_no_chat_template_is_appended_to_the_prompt_stages_only(driver):
     for argv in driver.stage_argv("detect", profile="a100", models=["m"],
                                   prefix=Path("ds"), seed=0):
         assert "--no-chat-template" not in argv, argv
+
+
+def test_the_driver_can_import_the_package_from_a_foreign_cwd(tmp_path):
+    """The in-process stage runner must make `retrieval_heads` importable itself.
+
+    Running a script puts the *script's* directory on `sys.path[0]` -- in a job that
+    is `/job/scripts`, while the package `local-paths` uploads sits at `/job/retrieval_heads`.
+    The old per-stage `python -m retrieval_heads.cli` subprocess got the cwd on the path
+    for free (`-m` adds it); `run_cli` imports in-process instead, so the driver has to
+    add its own repo root.  The first A100 preflight died on exactly this, at the first
+    stage, after the venv/hash/GPU checks had all passed.
+    """
+    import os
+    import subprocess
+
+    driver_path = REPO_ROOT / "scripts" / "datasphere_job.py"
+    snippet = (
+        "import runpy\n"
+        f"runpy.run_path({str(driver_path)!r}, run_name='driver_under_test')\n"
+        "import retrieval_heads.cli\n"
+        "print('importable')\n"
+    )
+    # cwd outside the repo and an empty PYTHONPATH: the only way the import can work is
+    # the driver inserting its own parent, which is what a job relies on.
+    done = subprocess.run([sys.executable, "-c", snippet], cwd=tmp_path,
+                          capture_output=True, text=True,
+                          env={**os.environ, "PYTHONPATH": ""})
+    assert done.returncode == 0, done.stderr
+    assert "importable" in done.stdout
