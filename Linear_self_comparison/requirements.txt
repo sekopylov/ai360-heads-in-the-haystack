@@ -1,0 +1,7 @@
+torch>=2.4
+transformers>=5.0  # Qwen3.5 support
+accelerate
+rouge_score
+numpy
+scipy
+matplotlib

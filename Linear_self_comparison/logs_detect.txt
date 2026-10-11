@@ -1,0 +1,111 @@
+24 layers [LLLFLLLFLLLFLLLFLLLFLLLF], linear heads=288, full heads=48
+[needle 0] len=1000 depth=0% rouge=80 ok=True (3.94s) -> 'Based on the content of the book provided, a new report from the WMO shows that '
+   top heads: 15-7(f):0.69, 11-1(f):0.62, 19-5(f):0.62, 23-0(f):0.62, 19-6(f):0.50, 23-3(f):0.50, 23-1(f):0.46, 15-3(f):0.42, 19-0(f):0.42, 19-3(f):0.42
+[needle 0] len=1000 depth=11% rouge=80 ok=True (2.74s) -> 'Based on the content of the book provided, a new report from the WMO shows that '
+   top heads: 15-7(f):0.69, 11-1(f):0.62, 19-5(f):0.62, 23-0(f):0.62, 19-6(f):0.50, 23-3(f):0.50, 23-1(f):0.46, 15-3(f):0.42, 19-0(f):0.42, 19-3(f):0.42
+[needle 0] len=1000 depth=22% rouge=100 ok=True (3.25s) -> 'Based on the text provided, a new report from the WMO shows that records were **'
+   top heads: 15-7(f):0.74, 11-1(f):0.67, 19-5(f):0.64, 23-0(f):0.62, 19-6(f):0.53, 23-3(f):0.51, 23-1(f):0.50, 15-3(f):0.42, 23-7(f):0.42, 19-0(f):0.41
+[needle 0] len=1000 depth=33% rouge=100 ok=True (2.81s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.79, 11-1(f):0.69, 19-5(f):0.66, 23-0(f):0.63, 19-6(f):0.56, 23-1(f):0.54, 23-3(f):0.53, 19-7(f):0.44, 23-7(f):0.44, 15-3(f):0.42
+[needle 0] len=1000 depth=44% rouge=100 ok=True (2.83s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.82, 11-1(f):0.71, 19-5(f):0.68, 23-0(f):0.65, 19-6(f):0.58, 23-1(f):0.56, 23-3(f):0.54, 19-7(f):0.46, 23-7(f):0.45, 19-0(f):0.43
+[needle 0] len=1000 depth=56% rouge=100 ok=True (2.97s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.83, 11-1(f):0.71, 19-5(f):0.69, 23-0(f):0.65, 19-6(f):0.59, 23-1(f):0.57, 23-3(f):0.54, 19-7(f):0.47, 23-7(f):0.46, 15-5(f):0.44
+[needle 0] len=1000 depth=67% rouge=100 ok=True (2.77s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.85, 11-1(f):0.71, 19-5(f):0.69, 23-0(f):0.66, 19-6(f):0.59, 23-1(f):0.58, 23-3(f):0.55, 19-7(f):0.48, 23-7(f):0.47, 15-5(f):0.43
+[needle 0] len=1000 depth=78% rouge=100 ok=True (2.71s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.87, 11-1(f):0.73, 19-5(f):0.70, 23-0(f):0.67, 19-6(f):0.60, 23-1(f):0.59, 23-3(f):0.56, 19-7(f):0.50, 23-7(f):0.48, 15-5(f):0.44
+[needle 0] len=1000 depth=89% rouge=100 ok=True (3.0s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.88, 11-1(f):0.74, 19-5(f):0.71, 23-0(f):0.68, 19-6(f):0.60, 23-1(f):0.59, 23-3(f):0.56, 19-7(f):0.51, 23-7(f):0.48, 15-5(f):0.44
+[needle 0] len=1000 depth=100% rouge=100 ok=True (2.73s) -> 'Based on the content of the book, a new report from the WMO shows that **records'
+   top heads: 15-7(f):0.89, 11-1(f):0.75, 19-5(f):0.71, 23-0(f):0.69, 19-6(f):0.60, 23-1(f):0.60, 23-3(f):0.57, 19-7(f):0.52, 23-7(f):0.48, 15-5(f):0.43
+[needle 0] len=1789 depth=0% rouge=80 ok=True (3.43s) -> 'Based on the content of the book provided, a new report from the WMO shows that '
+   top heads: 15-7(f):0.87, 11-1(f):0.73, 19-5(f):0.70, 23-0(f):0.68, 19-6(f):0.59, 23-1(f):0.59, 23-3(f):0.56, 19-7(f):0.50, 23-7(f):0.47, 15-5(f):0.43
+[needle 0] len=1789 depth=11% rouge=100 ok=True (3.23s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.88, 11-1(f):0.74, 19-5(f):0.70, 23-0(f):0.69, 19-6(f):0.60, 23-1(f):0.59, 23-3(f):0.56, 19-7(f):0.50, 23-7(f):0.47, 15-5(f):0.44
+[needle 0] len=1789 depth=22% rouge=100 ok=True (3.22s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.88, 11-1(f):0.75, 19-5(f):0.70, 23-0(f):0.69, 19-6(f):0.60, 23-1(f):0.59, 23-3(f):0.56, 19-7(f):0.51, 23-7(f):0.48, 15-5(f):0.44
+[needle 0] len=1789 depth=33% rouge=100 ok=True (3.25s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.88, 11-1(f):0.74, 19-5(f):0.71, 23-0(f):0.69, 19-6(f):0.60, 23-1(f):0.59, 23-3(f):0.56, 19-7(f):0.51, 23-7(f):0.48, 15-5(f):0.44
+[needle 0] len=1789 depth=44% rouge=100 ok=True (3.13s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.89, 11-1(f):0.75, 19-5(f):0.71, 23-0(f):0.69, 19-6(f):0.60, 23-1(f):0.59, 23-3(f):0.56, 19-7(f):0.51, 23-7(f):0.48, 15-5(f):0.44
+[needle 0] len=1789 depth=56% rouge=100 ok=True (3.71s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.89, 11-1(f):0.75, 19-5(f):0.71, 23-0(f):0.69, 19-6(f):0.60, 23-1(f):0.59, 23-3(f):0.56, 19-7(f):0.52, 23-7(f):0.48, 15-5(f):0.44
+[needle 0] len=1789 depth=67% rouge=100 ok=True (4.89s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.90, 11-1(f):0.75, 19-5(f):0.71, 23-0(f):0.69, 19-6(f):0.60, 23-1(f):0.59, 23-3(f):0.57, 19-7(f):0.52, 23-7(f):0.48, 15-5(f):0.44
+[needle 0] len=1789 depth=78% rouge=100 ok=True (3.16s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.90, 11-1(f):0.76, 19-5(f):0.71, 23-0(f):0.69, 19-6(f):0.60, 23-1(f):0.60, 23-3(f):0.57, 19-7(f):0.52, 23-7(f):0.49, 15-5(f):0.44
+[needle 0] len=1789 depth=89% rouge=100 ok=True (3.15s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.91, 11-1(f):0.76, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.57, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=1789 depth=100% rouge=100 ok=True (4.97s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.91, 11-1(f):0.76, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.57, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=2579 depth=0% rouge=80 ok=True (3.93s) -> 'Based on the content of the book provided, a new report from the WMO shows that '
+   top heads: 15-7(f):0.90, 11-1(f):0.76, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.60, 23-1(f):0.60, 23-3(f):0.57, 19-7(f):0.53, 23-7(f):0.48, 15-5(f):0.45
+[needle 0] len=2579 depth=11% rouge=100 ok=True (4.03s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.90, 11-1(f):0.76, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.60, 23-1(f):0.59, 23-3(f):0.57, 19-7(f):0.52, 23-7(f):0.48, 15-5(f):0.45
+[needle 0] len=2579 depth=22% rouge=100 ok=True (3.93s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.90, 11-1(f):0.76, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.61, 23-1(f):0.59, 23-3(f):0.57, 19-7(f):0.52, 23-7(f):0.48, 15-5(f):0.45
+[needle 0] len=2579 depth=33% rouge=100 ok=True (4.12s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.91, 11-1(f):0.77, 19-5(f):0.71, 23-0(f):0.69, 19-6(f):0.61, 23-1(f):0.59, 23-3(f):0.57, 19-7(f):0.52, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=2579 depth=44% rouge=100 ok=True (5.51s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.91, 11-1(f):0.77, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.60, 23-1(f):0.59, 23-3(f):0.57, 19-7(f):0.52, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=2579 depth=56% rouge=100 ok=True (3.84s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.91, 11-1(f):0.77, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.61, 23-1(f):0.59, 23-3(f):0.57, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=2579 depth=67% rouge=100 ok=True (3.81s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.91, 11-1(f):0.77, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.57, 19-7(f):0.52, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=2579 depth=78% rouge=100 ok=True (3.91s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.91, 11-1(f):0.77, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.57, 19-7(f):0.52, 23-7(f):0.48, 15-5(f):0.45
+[needle 0] len=2579 depth=89% rouge=100 ok=True (3.87s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.92, 11-1(f):0.77, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.60, 23-1(f):0.60, 23-3(f):0.57, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=2579 depth=100% rouge=100 ok=True (4.22s) -> 'Based on the text provided, a new report from the World Meteorological Organizat'
+   top heads: 15-7(f):0.92, 11-1(f):0.77, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.57, 19-7(f):0.53, 23-7(f):0.48, 15-5(f):0.44
+[needle 0] len=3368 depth=0% rouge=100 ok=True (6.1s) -> 'Based on the content of the book, a new report from the WMO shows that records w'
+   top heads: 15-7(f):0.92, 11-1(f):0.78, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.60, 23-1(f):0.60, 23-3(f):0.57, 19-7(f):0.52, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=3368 depth=11% rouge=100 ok=True (7.3s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.92, 11-1(f):0.78, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.57, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=3368 depth=22% rouge=100 ok=True (7.2s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.92, 11-1(f):0.78, 19-5(f):0.72, 23-0(f):0.70, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.57, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=3368 depth=33% rouge=100 ok=True (5.79s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.92, 11-1(f):0.78, 19-5(f):0.72, 23-0(f):0.70, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.57, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=3368 depth=44% rouge=100 ok=True (5.76s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.92, 11-1(f):0.78, 19-5(f):0.72, 23-0(f):0.70, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=3368 depth=56% rouge=100 ok=True (5.78s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.93, 11-1(f):0.78, 19-5(f):0.72, 23-0(f):0.70, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=3368 depth=67% rouge=100 ok=True (5.85s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.93, 11-1(f):0.78, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=3368 depth=78% rouge=100 ok=True (6.64s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.93, 11-1(f):0.78, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=3368 depth=89% rouge=100 ok=True (6.74s) -> 'Based on the text provided, the new report from the WMO shows that **records wer'
+   top heads: 15-7(f):0.93, 11-1(f):0.78, 19-5(f):0.72, 23-0(f):0.69, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.44
+[needle 0] len=3368 depth=100% rouge=100 ok=True (5.86s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.93, 11-1(f):0.78, 19-5(f):0.73, 23-0(f):0.70, 19-6(f):0.60, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.44
+[needle 0] len=4158 depth=0% rouge=100 ok=True (13.82s) -> 'Based on the content of the book provided, the new report from the WMO shows tha'
+   top heads: 15-7(f):0.93, 11-1(f):0.78, 19-5(f):0.72, 23-0(f):0.70, 19-6(f):0.60, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=4158 depth=11% rouge=100 ok=True (12.19s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.93, 11-1(f):0.78, 19-5(f):0.72, 23-0(f):0.70, 19-6(f):0.60, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=4158 depth=22% rouge=100 ok=True (12.98s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.93, 11-1(f):0.79, 19-5(f):0.72, 23-0(f):0.70, 19-6(f):0.60, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=4158 depth=33% rouge=100 ok=True (11.32s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.93, 11-1(f):0.79, 19-5(f):0.73, 23-0(f):0.70, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=4158 depth=44% rouge=100 ok=True (11.35s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.93, 11-1(f):0.79, 19-5(f):0.72, 23-0(f):0.70, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=4158 depth=56% rouge=100 ok=True (12.34s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.93, 11-1(f):0.79, 19-5(f):0.72, 23-0(f):0.70, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=4158 depth=67% rouge=100 ok=True (12.12s) -> 'Based on the text provided, the new report from the WMO shows that **records wer'
+   top heads: 15-7(f):0.93, 11-1(f):0.78, 19-5(f):0.73, 23-0(f):0.70, 19-6(f):0.60, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=4158 depth=78% rouge=100 ok=True (11.96s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.93, 11-1(f):0.78, 19-5(f):0.73, 23-0(f):0.70, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=4158 depth=89% rouge=100 ok=True (11.93s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.93, 11-1(f):0.78, 19-5(f):0.73, 23-0(f):0.70, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=4158 depth=100% rouge=100 ok=True (11.96s) -> 'Based on the text provided, the new report from the WMO shows that **records wer'
+   top heads: 15-7(f):0.93, 11-1(f):0.79, 19-5(f):0.73, 23-0(f):0.70, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=4947 depth=0% rouge=100 ok=True (13.04s) -> 'Based on the content of the book provided, the new report from the WMO shows tha'
+   top heads: 15-7(f):0.94, 11-1(f):0.79, 19-5(f):0.73, 23-0(f):0.70, 19-6(f):0.61, 23-1(f):0.61, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=4947 depth=11% rouge=100 ok=True (11.04s) -> 'Based on the text provided, a new report from the WMO shows that records were on'
+   top heads: 15-7(f):0.93, 11-1(f):0.79, 19-5(f):0.73, 23-0(f):0.70, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=4947 depth=22% rouge=100 ok=True (10.76s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.94, 11-1(f):0.79, 19-5(f):0.73, 23-0(f):0.70, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=4947 depth=33% rouge=100 ok=True (10.89s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 15-7(f):0.94, 11-1(f):0.79, 19-5(f):0.73, 23-0(f):0.70, 19-6(f):0.61, 23-1(f):0.60, 23-3(f):0.58, 19-7(f):0.53, 23-7(f):0.49, 15-5(f):0.45
+[needle 0] len=4947 depth=44% rouge=100 ok=True (11.45s) -> 'Based on the text provided, a new report from the WMO shows that **records were '
+   top heads: 
