@@ -25,16 +25,17 @@ import torch
 
 import rh_core as rc
 
+log = rc.log
+
 SF_NEEDLE = "\nThe best thing to do in San Francisco is eat a sandwich and sit in Dolores Park on a sunny day.\n"
 SF_QUESTION = "What is the best thing to do in San Francisco?"
 SF_ANSWER = "eat a sandwich and sit in Dolores Park on a sunny day"
 
 
-def run_niah(model, tok, args, lengths, depths, haystack, masker, path, run_meta):
-    if os.path.exists(path) and not args.overwrite:
-        print(f"skip {path} (exists)")
-        return
+def run_niah(model, tok, args, lengths, depths, haystack, masker, path, run_meta, prog):
     tmp = path + ".part"
+    scores = []
+    t_run = time.time()
     with open(tmp, "w") as f:
         f.write(json.dumps({"meta": run_meta}) + "\n")
         for L in lengths:
@@ -45,10 +46,16 @@ def run_niah(model, tok, args, lengths, depths, haystack, masker, path, run_meta
                 gen = rc.greedy_generate(model, tok, ids, args.max_new_tokens, masker=masker, scope=args.scope)
                 resp = tok.decode(gen, skip_special_tokens=True).strip()
                 score = rc.rouge_recall(SF_ANSWER, resp)
+                scores.append(score)
                 f.write(json.dumps(dict(context_length=L, depth_percent=depth, score=score, response=resp),
                                    ensure_ascii=False) + "\n")
-                print(f"  {run_meta['run']}: len={L} depth={depth}% score={score:.0f} ({time.time() - t0:.1f}s) {resp[:70]!r}")
+                f.flush()
+                prog.update(L, f"{run_meta['run']}: len={L} depth={depth}% score={score:.0f} "
+                               f"({time.time() - t0:.1f}s, run mean {np.mean(scores):.1f}) {resp[:50]!r}")
     os.replace(tmp, path)
+    log.info(f"=== finished {run_meta['run']}: mean NIAH score {np.mean(scores):.2f} "
+             f"over {len(scores)} samples in {rc.fmt_time(time.time() - t_run)} -> {path}")
+    return float(np.mean(scores))
 
 
 def main():
@@ -75,12 +82,15 @@ def main():
     p.add_argument("--overwrite", action="store_true")
     p.add_argument("--device", default="cuda")
     p.add_argument("--dtype", default="bfloat16")
+    p.add_argument("--allow_cpu", action="store_true", help="do not abort when CUDA is unavailable")
     args = p.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
+    rc.setup_logging("ablate", os.path.basename(args.head_score).split(".json")[0])
+    log.info(f"args: {vars(args)}")
 
-    tok, model = rc.load_model(args.model_path, args.device, args.dtype)
+    tok, model, args.device = rc.load_model(args.model_path, args.device, args.dtype, allow_cpu=args.allow_cpu)
     space = rc.HeadSpace(model)
-    print(space.describe())
+    log.info(space.describe())
     scores = rc.load_head_scores(args.head_score)
     for key in space.keys:  # heads never scored (no successful sample) get 0
         scores.setdefault(key, 0.0)
@@ -99,7 +109,7 @@ def main():
         ranked = rc.rank_heads(scores, space.kind_of, kind)
         for K in ks:
             if K > n_kind:
-                print(f"skip {kind} K={K}: only {n_kind} heads")
+                log.info(f"skip {kind} K={K}: only {n_kind} heads")
                 continue
             if "top" in args.modes:
                 runs.append((f"{kind}_top{K}", ranked[:K]))
@@ -108,17 +118,32 @@ def main():
                     runs.append((f"{kind}_random{K}_s{s}",
                                  rc.random_heads(scores, space.kind_of, kind, K, s, exclude_thresh=args.exclude_thresh)))
 
+    todo = []
     for run, heads in runs:
         path = os.path.join(args.out_dir, f"{run}.jsonl")
+        if os.path.exists(path) and not args.overwrite:
+            log.info(f"skip {run}: {path} exists")
+        else:
+            todo.append((run, heads, path))
+    n_per_run = len(lengths) * len(depths)
+    log.info(f"{len(runs)} runs planned, {len(todo)} to do ({len(runs) - len(todo)} already done); "
+             f"{n_per_run} samples per run, {len(todo) * n_per_run} samples total")
+    prog = rc.Progress(len(todo) * n_per_run, len(todo) * len(depths) * sum(lengths), name="ablate")
+    results = {}
+    for i, (run, heads, path) in enumerate(todo):
         meta = dict(run=run, heads=heads, head_scores=[round(scores[h], 4) for h in heads],
                     kinds=[space.kind_of[h] for h in heads], scope=args.scope, model=args.model_path)
-        print(f"=== {run}: {len(heads)} heads {heads[:16]}{'...' if len(heads) > 16 else ''}")
+        log.info(f"=== run {i + 1}/{len(todo)}: {run} | {len(heads)} heads {heads[:16]}{'...' if len(heads) > 16 else ''}"
+                 + (f" | their scores {meta['head_scores'][:16]}" if heads else ""))
         masker = rc.HeadMasker(space, heads) if heads else None
         try:
-            run_niah(model, tok, args, lengths, depths, haystack, masker, path, meta)
+            results[run] = run_niah(model, tok, args, lengths, depths, haystack, masker, path, meta, prog)
         finally:
             if masker is not None:
                 masker.remove()
+    if results:
+        log.info("summary of this session (mean NIAH score): "
+                 + ", ".join(f"{r}={v:.1f}" for r, v in results.items()))
 
 
 if __name__ == "__main__":

@@ -33,10 +33,12 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import math
 import os
 import random
 import sys
+import time
 from collections import defaultdict
 
 import numpy as np
@@ -44,14 +46,124 @@ import torch
 import torch.nn.functional as F
 
 VARIANTS = ("attn", "contrib")
+log = logging.getLogger("rh")
+
+
+# ----------------------------------------------------------------------------------------
+# Logging & progress
+# ----------------------------------------------------------------------------------------
+def setup_logging(script, name="", log_dir="logs"):
+    """Log to stdout and to logs/<script>_<name>_<timestamp>.log (line-buffered, survives crashes)."""
+    os.makedirs(log_dir, exist_ok=True)
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(log_dir, f"{script}{'_' + name if name else ''}_{stamp}.log")
+    fmt = logging.Formatter("%(asctime)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    log.handlers.clear()
+    log.setLevel(logging.INFO)
+    log.propagate = False
+    for h in (logging.StreamHandler(sys.stdout), logging.FileHandler(path, mode="a", encoding="utf-8")):
+        h.setFormatter(fmt)
+        log.addHandler(h)
+    log.info(f"log file: {os.path.abspath(path)}")
+    log.info("command: " + " ".join(sys.argv))
+    return path
+
+
+def fmt_time(sec):
+    if sec is None or not math.isfinite(sec):
+        return "--:--:--"
+    sec = int(sec)
+    d, rem = divmod(sec, 86400)
+    h, rem = divmod(rem, 3600)
+    m, s = divmod(rem, 60)
+    return (f"{d}d " if d else "") + f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def gpu_mem():
+    if not torch.cuda.is_available():
+        return "cpu"
+    a = torch.cuda.memory_allocated() / 2**30
+    p = torch.cuda.max_memory_allocated() / 2**30
+    return f"gpu {a:.1f}G (peak {p:.1f}G)"
+
+
+class Progress:
+    """Progress with %, elapsed and ETA. Every item has a work weight (here: context length in tokens),
+    so the ETA accounts for long contexts being slower than short ones."""
+
+    def __init__(self, total_items, total_work=None, name=""):
+        self.total_items = max(int(total_items), 1)
+        self.total_work = float(total_work if total_work is not None else total_items)
+        self.name = name
+        self.items = 0
+        self.work = 0.0
+        self.t0 = time.time()
+
+    def update(self, work=1.0, msg=""):
+        self.items += 1
+        self.work += work
+        el = time.time() - self.t0
+        frac = min(self.work / self.total_work, 1.0) if self.total_work > 0 else 1.0
+        eta = el / frac * (1 - frac) if frac > 0 else float("nan")
+        finish = time.strftime("%H:%M", time.localtime(time.time() + eta)) if math.isfinite(eta) else "--:--"
+        log.info(f"[{self.name} {self.items}/{self.total_items} | {100 * frac:5.1f}%] "
+                 f"elapsed {fmt_time(el)} | ETA {fmt_time(eta)} (~{finish}) | {gpu_mem()} | {msg}")
+
+
+# ----------------------------------------------------------------------------------------
+# Device checks
+# ----------------------------------------------------------------------------------------
+def check_device(device, allow_cpu=False):
+    """Fail early (and loudly) if a GPU was requested but is not usable."""
+    import transformers
+
+    log.info(f"python {sys.version.split()[0]} | torch {torch.__version__} (CUDA build {torch.version.cuda}) | "
+             f"transformers {transformers.__version__}")
+    if str(device).startswith("cuda"):
+        if not torch.cuda.is_available():
+            msg = ("CUDA is NOT available: torch.cuda.is_available() == False. "
+                   "Check `nvidia-smi`, CUDA_VISIBLE_DEVICES and that torch is a CUDA build "
+                   f"(torch.version.cuda = {torch.version.cuda}).")
+            if allow_cpu:
+                log.warning(msg + " --allow_cpu given -> continuing on CPU (VERY slow).")
+                return "cpu"
+            log.error(msg + " Use --allow_cpu to run on CPU anyway.")
+            raise SystemExit(msg + " Use --allow_cpu to run on CPU anyway.")
+        idx = torch.device(device).index or 0
+        prop = torch.cuda.get_device_properties(idx)
+        log.info(f"GPU OK: cuda:{idx} = {prop.name}, {prop.total_memory / 2**30:.1f} GiB, "
+                 f"capability {prop.major}.{prop.minor}, visible GPUs = {torch.cuda.device_count()}, "
+                 f"CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES', '<unset>')}, "
+                 f"bf16 supported = {torch.cuda.is_bf16_supported()}")
+        # tiny kernel to make sure the device really executes work
+        x = torch.randn(256, 256, device=device)
+        torch.cuda.synchronize()
+        assert torch.isfinite(x @ x).all()
+    else:
+        log.warning(f"Running on {device} (no GPU requested).")
+    return device
+
+
+def check_model_device(model, device):
+    devs = {str(p.device) for p in model.parameters()} | {str(b.device) for b in model.buffers()}
+    log.info(f"model parameter devices: {sorted(devs)} | dtype: {next(model.parameters()).dtype} | "
+             f"attn_implementation: {getattr(model.config, '_attn_implementation', '?')} | "
+             f"params: {sum(p.numel() for p in model.parameters()) / 1e6:.0f}M | {gpu_mem()}")
+    if str(device).startswith("cuda") and any(not d.startswith("cuda") for d in devs):
+        log.error(f"Some model tensors are not on the GPU: {sorted(devs)}")
+        raise SystemExit(f"Some model tensors are not on the GPU: {sorted(devs)}")
 
 
 # ----------------------------------------------------------------------------------------
 # Model
 # ----------------------------------------------------------------------------------------
-def load_model(model_path, device="cuda", dtype="bfloat16", attn_implementation="sdpa"):
+def load_model(model_path, device="cuda", dtype="bfloat16", attn_implementation="sdpa", allow_cpu=False):
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
+    device = check_device(device, allow_cpu)
+    if device == "cpu" and dtype == "bfloat16":
+        dtype = "float32"
+    t0 = time.time()
     tok = AutoTokenizer.from_pretrained(model_path)
     torch_dtype = getattr(torch, dtype)
     try:
@@ -63,7 +175,9 @@ def load_model(model_path, device="cuda", dtype="bfloat16", attn_implementation=
             model_path, torch_dtype=torch_dtype, attn_implementation=attn_implementation
         )
     model.to(device).eval()
-    return tok, model
+    log.info(f"loaded {model_path} in {time.time() - t0:.1f}s")
+    check_model_device(model, device)
+    return tok, model, device
 
 
 def get_decoder_layers(model):
