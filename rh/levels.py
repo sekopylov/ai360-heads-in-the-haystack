@@ -33,10 +33,14 @@ if __name__ == "__main__":
     parser.add_argument("out", help="--out folder of rh.run with the task hard_niah")
     parser.add_argument("--mask_file", default=None, help="head_score json that ranks the heads")
     parser.add_argument("--top", type=int, default=20, help="number of the best heads of --mask_file")
+    parser.add_argument("--lengths", type=lambda s: {int(x) for x in s.split(",")}, default=None, help="only the samples of these context lengths, comma separated")
+    parser.add_argument("--depths", type=lambda s: {int(x) for x in s.split(",")}, default=None, help="only the samples of these needle depths, comma separated")
     args = parser.parse_args()
 
     with open(f"{args.out}/samples.jsonl", encoding="utf-8") as f:
         samples = [json.loads(l) for l in f if l.strip()]
+    samples = [s for s in samples if (args.lengths is None or s.get("context_length") in args.lengths)
+               and (args.depths is None or s.get("depth_percent") in args.depths)]
     run_json = f"{args.out}/spool/run.json"
     run = spool.load_json(run_json) if os.path.exists(run_json) else {}
     groups = {}

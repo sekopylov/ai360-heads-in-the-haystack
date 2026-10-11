@@ -59,6 +59,41 @@ def answer_metrics(reference, response):
             "rougeL_recall": score['rougeL'].recall * 100, "success": bool(recall > 50), "exact": exact_phrase(reference, response)}
 
 
+CLASSES = ("correct", "mixed", "partial", "confusion", "noise", "other")
+
+
+def has_fact(text, fact):
+    """One of the spellings of the fact stands in the text as whole words; case and punctuation do not count."""
+    text = f" {plain(text)} "
+    return any(f" {plain(spelling)} " in text for spelling in fact)
+
+
+def fact_class(response, meta):
+    """
+    The answer by the facts it names, for the samples whose meta has answer_key (the task hard_niah): every fact is a
+    list of spellings. Unlike ROUGE and the exact phrase it accepts an answer in other words and tells an answer taken
+    from a competing insert from a right one.
+        correct    every fact of the answer, nothing of the competing inserts
+        mixed      every fact of the answer and also facts of competing inserts or of the noise
+        partial    some facts of the answer, not all; nothing of the competing inserts
+        confusion  not every fact of the answer, and facts of competing inserts (or of the wrong option of the needle)
+        noise      not every fact of the answer, and facts of the noise
+        other      none of these facts
+    facts_found is the share of the facts of the answer that the response names.
+    """
+    if "answer_key" not in meta:
+        return {}
+    found = sum(has_fact(response, fact) for fact in meta["answer_key"])
+    complete = found == len(meta["answer_key"])
+    confused = any(has_fact(response, fact) for fact in meta.get("confusion_facts", []))
+    noisy = any(has_fact(response, fact) for fact in meta.get("noise_facts", []))
+    if complete:
+        name = "mixed" if confused or noisy else "correct"
+    else:
+        name = "confusion" if confused else "noise" if noisy else "partial" if found else "other"
+    return {"answer_class": name, "facts_found": found / len(meta["answer_key"])}
+
+
 class HeadMetric:
     """One value per head and sample. start() once per sample, step() per generated token, end() returns [layer, head]."""
     name = None
@@ -224,7 +259,7 @@ def sample_result(record):
     """The line of samples.jsonl for one saved answer (a file of outputs/): meta, response and the answer metrics."""
     result = {"id": record["id"], **record["meta"], "reference": record["reference"], "response": record["response"],
               "n_tokens": record["n_tokens"], "seconds": record["seconds"],
-              **answer_metrics(record["reference"], record["response"])}
+              **answer_metrics(record["reference"], record["response"]), **fact_class(record["response"], record["meta"])}
     if record.get("stopped") is not None:
         # stopped: the answer ended by itself; at a limit it is truncated when it had not ended by that token
         result["stopped"] = record["stopped"]
@@ -369,7 +404,9 @@ def rescore(out):
     with open(path, encoding="utf-8") as f:
         rows = [json.loads(l) for l in f if l.strip()]
     records = [spool.load_output(out, row["id"]) for row in rows]
-    rows = [sample_result(record) if record else {**row, **answer_metrics(row["reference"], row["response"])} for row, record in zip(rows, records)]
+    # the meta of a sample is spread over its line, so the line itself serves as the meta
+    rows = [sample_result(record) if record else {**row, **answer_metrics(row["reference"], row["response"]), **fact_class(row["response"], row)}
+            for row, record in zip(rows, records)]
 
     def write(tmp):
         with open(tmp, "w", encoding="utf-8") as f:
@@ -402,6 +439,8 @@ def aggregate(spool_dir, out):
     for key in ("rouge2_recall", "rouge3_recall"):
         if all(key in s for s in samples):
             summary[f"mean_{key}"] = float(np.mean([s[key] for s in samples]))
+    if all("answer_class" in s for s in samples):
+        summary["answer_classes"] = {name: sum(s["answer_class"] == name for s in samples) for name in CLASSES}
     if all("stopped" in s for s in samples):
         summary["truncated_at_cap"] = sum(not s["stopped"] for s in samples)
     for key in ("context_length", "depth_percent", "needle_idx"):

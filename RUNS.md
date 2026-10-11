@@ -1254,105 +1254,76 @@ results/new/qwen3_mask/groups20/   20 случайных целыми групп
     results/new/qwen3_mask_attention_mass_2/top20
 ```
 
-### 8.11. Усложнённые задачи: полный цикл
+### 8.11. Усложнённые задачи: быстрый цикл
 
-Цель — проверить, сохраняют ли роль головы, найденные на простой задаче. Рейтинг голов — скор копирования из нашей детекции (`results/new/qwen3_detect/head_score_copy_count.json`), маски на 40, 50 и 60 голов: на простой задаче между 40 и 60 доля точных ответов падает с 92,5% до 39%. Данные и уровни описаны в `data/needles_hard/README.md`.
+Цель — проверить, сохраняют ли роль головы, найденные на простой задаче. Рейтинг голов — скор копирования из нашей детекции (`results/new/qwen3_detect/head_score_copy_count.json`), маски на 40 и 60 голов: на простой задаче между ними доля точных ответов падает с 92,5% до 39%. Данные и уровни описаны в `data/needles_hard/README.md`.
 
-**Сетка.** Перебор масок на простой задаче, прореженный вдвое по обеим осям с сохранением последней точки: 11 длин и 6 глубин, 66 примеров на уровень и семейство, 198 на уровень при трёх семействах. Все точки есть в старой сетке.
+**Сетка.** Урезана, чтобы быстро получить результат по всем осям: 4 длины (`1000,10158,19316,30000`) × 6 глубин (`0,22,44,67,89,100`) × 3 семейства = 72 примера на уровень, 24 на семейство. Диапазон длин тот же, что на простой задаче, и все точки есть в её сетке. При таком объёме надёжно видны эффекты от 20 процентных пунктов; различия между соседними уровнями в пределах 10–15 пунктов — нет.
 
-**Что считается на каждой оси.** Пять прогонов на одних и тех же промптах:
+**Что считается на каждой оси.** Четыре прогона на одних и тех же промптах:
 
 | Прогон | Папка | Что даёт |
 |---|---|---|
 | без маски, с сохранением внимания | `none` | базовое качество уровня; куда смотрят головы: на иглу или на вставки |
-| маска 40, 50, 60 лучших голов | `top40`, `top50`, `top60` | насколько уровень зависит от этих голов |
+| маска 40 и 60 лучших голов | `top40`, `top60` | насколько уровень зависит от этих голов |
 | маска 60 случайных голов | `random60` | контроль: падение не от самого факта отключения |
 
-**Раскладка папок.** `results/new/qwen3_hard/<ось>/<прогон>`. Каждая ячейка ниже пишет только в свои папки и свой лог, поэтому любые ячейки можно запускать одновременно: разные оси в разных ноутбуках, а также три ячейки одной оси. Прерванная ячейка продолжается той же командой.
+**Модель.** Во всех ячейках `--model_path .hf_models/Qwen3-8B` — папка в корне проекта, куда модель скачана заранее. Путь считается от корня проекта, ячейки переходят туда через `cd ..`. Он должен быть одним и тем же во всех запусках в одну папку результатов: прогон, начатый с другим `--model_path`, код не продолжит.
 
-**Сколько помещается на одну видеокарту.** По оценке, один процесс на 30000 токенов занимает 25–30 ГБ (веса около 16 ГБ плюс кэш и промежуточные данные), то есть на A100 с 80 ГБ — два процесса с запасом, три на пределе. Это оценка, а не замер: запустите первую ячейку, посмотрите `nvidia-smi` на длинных примерах и только потом добавляйте следующую.
+**Раскладка папок.** `results/new/qwen3_hard_fast/<ось>/<прогон>`. Каждая ячейка пишет только в свои папки и свой лог, поэтому любые ячейки можно запускать одновременно: разные оси в разных ноутбуках, а также три ячейки одной оси. Прерванная ячейка продолжается той же командой.
 
-**Объём.** На ось: число уровней × 198 примеров × 5 прогонов; всего по семи осям 34650 генераций. Оси идут ниже в порядке важности: A, B, N — три пункта исходной задачи, остальные — по возможности.
+**Уже посчитанное на прежней сетке.** В `results/new/qwen3_hard/` лежат прогоны на 11 длинах: базовый уровень `A0`, оси `A` и `B`, с масками 40, 50, 60. Они остаются на месте, быстрый цикл пишет в другую папку и с ними не пересекается. Четыре длины быстрого цикла входят в прежние одиннадцать, поэтому оси A и B можно не считать заново: таблица по старым прогонам на тех же точках строится командой из шага 2. Базовый уровень уже проверен: на A0 все три семейства дают 100% точных ответов.
 
-#### Шаг 0. Подготовка
-
-Маска на 50 голов на простой задаче ещё не считалась. Она нужна как точка отсчёта: с ней сравнивается падение на усложнённых уровнях. Заодно считается контроль на 50 случайных головах.
+Чтобы старые прогоны и быстрый цикл лежали в одном виде, старые переводятся на новую сетку без модели:
 
 ```python
-!mkdir -p logs
-!cd .. && .venv_new/bin/python -u -m rh.mask_sweep \
-    --model_path Qwen/Qwen3-8B \
-    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
-    --out results/new/qwen3_mask \
-    --kinds top,random \
-    --counts 50 \
-    --task niah \
-    --needles data/needles_eval.jsonl \
-    --s_len 1000 \
-    --e_len 30000 \
-    --context_intervals 20 \
-    2>&1 | tee source/logs/mask_sweep_50.log
+!cd .. && .venv_new/bin/python -m rh.regrid results/new/qwen3_hard results/new/qwen3_hard_fast \
+    --lengths 1000,10158,19316,30000 --groups A,B --runs none,top40,top60,random60 \
+    --model_path .hf_models/Qwen3-8B
 ```
 
-#### Шаг 1. Базовый уровень
+Команда копирует в `results/new/qwen3_hard_fast/<ось>/<прогон>` только примеры четырёх длин вместе с их ответами и метриками голов и записывает настройки так, будто прогон шёл на малой сетке. Исходные папки не меняются. Если старый прогон не был закончен, в выводе будет пометка `NOT EVEN`; ячейка этого прогона из шага 1 досчитает недостающие примеры. `--model_path` — путь, с которым прогоны будут продолжаться: код продолжает папку только с тем же путём к модели.
 
-A0 всех трёх семейств без маски, 198 примеров. Это проверка данных: модель должна отвечать на A0 почти без ошибок и называть оба факта ответа. Пока это не так, остальные прогоны запускать нет смысла.
+**Сколько помещается на одну видеокарту.** По оценке, один процесс на 30000 токенов занимает 25–30 ГБ, то есть на A100 с 80 ГБ — два процесса с запасом, три на пределе. Это оценка, а не замер: запустите первую ячейку, посмотрите `nvidia-smi` на длинных примерах и только потом добавляйте следующую.
 
-```python
-!mkdir -p logs
-!cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
-    --task hard_niah \
-    --levels A0 \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
-    --depths 0,22,44,67,89,100 \
-    --out results/new/qwen3_hard/A0/none \
-    --with_metrics \
-    2>&1 | tee source/logs/hard_A0_none.log
-```
+**Объём.** На ось: число уровней × 72 примера × 4 прогона; всего по семи осям 10080 генераций против 34650 в полном цикле. Оси идут в порядке важности: A, B, N — три пункта исходной задачи, остальные — по возможности.
 
-```python
-!cd .. && .venv_new/bin/python -m rh.sweep results/new/qwen3_hard/A0/none --by family
-```
+#### Шаг 1. Прогоны по осям
 
-Ожидается `exact` около 100% у каждого семейства. Если у какого-то семейства заметно ниже — посмотрите ответы в `results/new/qwen3_hard/A0/none/samples.jsonl`: либо модель пересказывает ответ своими словами, либо называет один факт из двух. Тогда правится вопрос или ключ ответа в `data/needles_hard/<семейство>/`.
+На каждую ось три независимые ячейки. Ячейка масок загружает модель один раз на оба числа голов.
 
-#### Шаг 2. Прогоны по осям
-
-На каждую ось три независимые ячейки. Ячейка масок загружает модель один раз на все три числа голов.
-
-**Ось A** — вопрос: от дословного до перефраза без общих слов. Уровней: 4, примеров на прогон: 792.
+**Ось A** — вопрос: от дословного до перефраза без общих слов. Уровней: 4, примеров на прогон: 288. На прежней сетке уже посчитана, см. `results/new/qwen3_hard/A/`.
 
 Без маски:
 
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --task hard_niah \
     --levels A \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
-    --out results/new/qwen3_hard/A/none \
+    --out results/new/qwen3_hard_fast/A/none \
     --with_metrics \
-    2>&1 | tee source/logs/hard_A_none.log
+    2>&1 | tee source/logs/fast_A_none.log
 ```
 
-Маски 40, 50, 60:
+Маски 40 и 60:
 
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.mask_sweep \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
-    --out results/new/qwen3_hard/A \
+    --out results/new/qwen3_hard_fast/A \
     --kinds top \
-    --counts 40,50,60 \
+    --counts 40,60 \
     --task hard_niah \
     --levels A \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
-    2>&1 | tee source/logs/hard_A_top.log
+    2>&1 | tee source/logs/fast_A_top.log
 ```
 
 Контроль, 60 случайных голов:
@@ -1360,51 +1331,51 @@ A0 всех трёх семейств без маски, 198 примеров. �
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --task hard_niah \
     --levels A \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random 60 \
-    --out results/new/qwen3_hard/A/random60 \
+    --out results/new/qwen3_hard_fast/A/random60 \
     --with_metrics \
-    2>&1 | tee source/logs/hard_A_random60.log
+    2>&1 | tee source/logs/fast_A_random60.log
 ```
 
-**Ось B** — записи-близнецы про другие города. Уровней: 4, примеров на прогон: 792.
+**Ось B** — записи-близнецы про другие города. Уровней: 4, примеров на прогон: 288. На прежней сетке уже посчитана, см. `results/new/qwen3_hard/B/`.
 
 Без маски:
 
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --task hard_niah \
     --levels B \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
-    --out results/new/qwen3_hard/B/none \
+    --out results/new/qwen3_hard_fast/B/none \
     --with_metrics \
-    2>&1 | tee source/logs/hard_B_none.log
+    2>&1 | tee source/logs/fast_B_none.log
 ```
 
-Маски 40, 50, 60:
+Маски 40 и 60:
 
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.mask_sweep \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
-    --out results/new/qwen3_hard/B \
+    --out results/new/qwen3_hard_fast/B \
     --kinds top \
-    --counts 40,50,60 \
+    --counts 40,60 \
     --task hard_niah \
     --levels B \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
-    2>&1 | tee source/logs/hard_B_top.log
+    2>&1 | tee source/logs/fast_B_top.log
 ```
 
 Контроль, 60 случайных голов:
@@ -1412,51 +1383,51 @@ A0 всех трёх семейств без маски, 198 примеров. �
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --task hard_niah \
     --levels B \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random 60 \
-    --out results/new/qwen3_hard/B/random60 \
+    --out results/new/qwen3_hard_fast/B/random60 \
     --with_metrics \
-    2>&1 | tee source/logs/hard_B_random60.log
+    2>&1 | tee source/logs/fast_B_random60.log
 ```
 
-**Ось N** — яркий посторонний факт. Уровней: 4, примеров на прогон: 792.
+**Ось N** — яркий посторонний факт. Уровней: 4, примеров на прогон: 288.
 
 Без маски:
 
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --task hard_niah \
     --levels N \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
-    --out results/new/qwen3_hard/N/none \
+    --out results/new/qwen3_hard_fast/N/none \
     --with_metrics \
-    2>&1 | tee source/logs/hard_N_none.log
+    2>&1 | tee source/logs/fast_N_none.log
 ```
 
-Маски 40, 50, 60:
+Маски 40 и 60:
 
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.mask_sweep \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
-    --out results/new/qwen3_hard/N \
+    --out results/new/qwen3_hard_fast/N \
     --kinds top \
-    --counts 40,50,60 \
+    --counts 40,60 \
     --task hard_niah \
     --levels N \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
-    2>&1 | tee source/logs/hard_N_top.log
+    2>&1 | tee source/logs/fast_N_top.log
 ```
 
 Контроль, 60 случайных голов:
@@ -1464,51 +1435,51 @@ A0 всех трёх семейств без маски, 198 примеров. �
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --task hard_niah \
     --levels N \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random 60 \
-    --out results/new/qwen3_hard/N/random60 \
+    --out results/new/qwen3_hard_fast/N/random60 \
     --with_metrics \
-    2>&1 | tee source/logs/hard_N_random60.log
+    2>&1 | tee source/logs/fast_N_random60.log
 ```
 
-**Ось C** — текст по теме без ответа. Уровней: 3, примеров на прогон: 594.
+**Ось C** — текст по теме без ответа. Уровней: 3, примеров на прогон: 216.
 
 Без маски:
 
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --task hard_niah \
     --levels C \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
-    --out results/new/qwen3_hard/C/none \
+    --out results/new/qwen3_hard_fast/C/none \
     --with_metrics \
-    2>&1 | tee source/logs/hard_C_none.log
+    2>&1 | tee source/logs/fast_C_none.log
 ```
 
-Маски 40, 50, 60:
+Маски 40 и 60:
 
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.mask_sweep \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
-    --out results/new/qwen3_hard/C \
+    --out results/new/qwen3_hard_fast/C \
     --kinds top \
-    --counts 40,50,60 \
+    --counts 40,60 \
     --task hard_niah \
     --levels C \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
-    2>&1 | tee source/logs/hard_C_top.log
+    2>&1 | tee source/logs/fast_C_top.log
 ```
 
 Контроль, 60 случайных голов:
@@ -1516,51 +1487,51 @@ A0 всех трёх семейств без маски, 198 примеров. �
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --task hard_niah \
     --levels C \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random 60 \
-    --out results/new/qwen3_hard/C/random60 \
+    --out results/new/qwen3_hard_fast/C/random60 \
     --with_metrics \
-    2>&1 | tee source/logs/hard_C_random60.log
+    2>&1 | tee source/logs/fast_C_random60.log
 ```
 
-**Ось D** — похожие ключи и несколько значений. Уровней: 4, примеров на прогон: 792.
+**Ось D** — похожие ключи и несколько значений. Уровней: 4, примеров на прогон: 288.
 
 Без маски:
 
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --task hard_niah \
     --levels D \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
-    --out results/new/qwen3_hard/D/none \
+    --out results/new/qwen3_hard_fast/D/none \
     --with_metrics \
-    2>&1 | tee source/logs/hard_D_none.log
+    2>&1 | tee source/logs/fast_D_none.log
 ```
 
-Маски 40, 50, 60:
+Маски 40 и 60:
 
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.mask_sweep \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
-    --out results/new/qwen3_hard/D \
+    --out results/new/qwen3_hard_fast/D \
     --kinds top \
-    --counts 40,50,60 \
+    --counts 40,60 \
     --task hard_niah \
     --levels D \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
-    2>&1 | tee source/logs/hard_D_top.log
+    2>&1 | tee source/logs/fast_D_top.log
 ```
 
 Контроль, 60 случайных голов:
@@ -1568,51 +1539,51 @@ A0 всех трёх семейств без маски, 198 примеров. �
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --task hard_niah \
     --levels D \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random 60 \
-    --out results/new/qwen3_hard/D/random60 \
+    --out results/new/qwen3_hard_fast/D/random60 \
     --with_metrics \
-    2>&1 | tee source/logs/hard_D_random60.log
+    2>&1 | tee source/logs/fast_D_random60.log
 ```
 
-**Ось E** — ответ не списывается дословно. Уровней: 4, примеров на прогон: 792.
+**Ось E** — ответ не списывается дословно. Уровней: 4, примеров на прогон: 288.
 
 Без маски:
 
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --task hard_niah \
     --levels E \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
-    --out results/new/qwen3_hard/E/none \
+    --out results/new/qwen3_hard_fast/E/none \
     --with_metrics \
-    2>&1 | tee source/logs/hard_E_none.log
+    2>&1 | tee source/logs/fast_E_none.log
 ```
 
-Маски 40, 50, 60:
+Маски 40 и 60:
 
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.mask_sweep \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
-    --out results/new/qwen3_hard/E \
+    --out results/new/qwen3_hard_fast/E \
     --kinds top \
-    --counts 40,50,60 \
+    --counts 40,60 \
     --task hard_niah \
     --levels E \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
-    2>&1 | tee source/logs/hard_E_top.log
+    2>&1 | tee source/logs/fast_E_top.log
 ```
 
 Контроль, 60 случайных голов:
@@ -1620,51 +1591,51 @@ A0 всех трёх семейств без маски, 198 примеров. �
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --task hard_niah \
     --levels E \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random 60 \
-    --out results/new/qwen3_hard/E/random60 \
+    --out results/new/qwen3_hard_fast/E/random60 \
     --with_metrics \
-    2>&1 | tee source/logs/hard_E_random60.log
+    2>&1 | tee source/logs/fast_E_random60.log
 ```
 
-**Ось F** — положение иглы и близнеца. Уровней: 12, примеров на прогон: 2376 (на уровнях F1 часть примеров пропускается: вставка не помещается).
+**Ось F** — положение иглы и близнеца. Уровней: 12, примеров на прогон: 864 (на уровнях F1 часть примеров пропускается: вставка не помещается).
 
 Без маски:
 
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --task hard_niah \
     --levels F \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
-    --out results/new/qwen3_hard/F/none \
+    --out results/new/qwen3_hard_fast/F/none \
     --with_metrics \
-    2>&1 | tee source/logs/hard_F_none.log
+    2>&1 | tee source/logs/fast_F_none.log
 ```
 
-Маски 40, 50, 60:
+Маски 40 и 60:
 
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.mask_sweep \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
-    --out results/new/qwen3_hard/F \
+    --out results/new/qwen3_hard_fast/F \
     --kinds top \
-    --counts 40,50,60 \
+    --counts 40,60 \
     --task hard_niah \
     --levels F \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
-    2>&1 | tee source/logs/hard_F_top.log
+    2>&1 | tee source/logs/fast_F_top.log
 ```
 
 Контроль, 60 случайных голов:
@@ -1672,53 +1643,82 @@ A0 всех трёх семейств без маски, 198 примеров. �
 ```python
 !mkdir -p logs
 !cd .. && .venv_new/bin/python -u -m rh.run \
-    --model_path Qwen/Qwen3-8B \
+    --model_path .hf_models/Qwen3-8B \
     --task hard_niah \
     --levels F \
-    --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000 \
+    --lengths 1000,10158,19316,30000 \
     --depths 0,22,44,67,89,100 \
     --save none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json \
     --mask_random 60 \
-    --out results/new/qwen3_hard/F/random60 \
+    --out results/new/qwen3_hard_fast/F/random60 \
     --with_metrics \
-    2>&1 | tee source/logs/hard_F_random60.log
+    2>&1 | tee source/logs/fast_F_random60.log
 ```
 
-Ось можно разбить на части, чтобы считать их параллельно: в `--levels` перечисляются уровни через запятую, а папка берётся своя — например, `--levels F1_before_0,F1_before_50,F1_before_500,F1_before_5000` и `results/new/qwen3_hard/F1_before/...`. Правило одно: в одной папке — один набор уровней. Запуск в папку с другим набором уровней будет отклонён.
+Ось можно разбить на части, чтобы считать их параллельно: в `--levels` перечисляются уровни через запятую, а папка берётся своя — например, `--levels F1_before_0,F1_before_50,F1_before_500,F1_before_5000` и `results/new/qwen3_hard_fast/F1_before/...`. Правило одно: в одной папке — один набор уровней и одна сетка. Запуск в папку с другими настройками будет отклонён.
 
-#### Шаг 3. Сводка по ответам
+#### Шаг 2. Сводка по ответам
 
-Одна таблица по всем осям и прогонам, строка на уровень и прогон; модель не нужна:
+Основная таблица — классы ответов по фактам, строка на уровень и прогон; модель не нужна:
 
 ```python
-!cd .. && .venv_new/bin/python -m rh.sweep "results/new/qwen3_hard/*/*" --by level
+!cd .. && .venv_new/bin/python -m rh.sweep "results/new/qwen3_hard_fast/*/*" --by level --facts
 ```
 
-С разбивкой по семействам — `--by family,level`. Столбцы: `exact` — эталон стоит в ответе дословно, `rouge`, `rouge2`, `rouge3` — доля слов, пар и троек слов эталона в ответе, `success` — ROUGE-1 выше 50.
+| Класс | Условие |
+|---|---|
+| `correct` | названы все факты ответа, фактов вставок нет |
+| `mixed` | все факты ответа и вдобавок факты вставок |
+| `partial` | часть фактов ответа, фактов вставок нет |
+| `confusion` | не все факты ответа, есть факты близнеца или приманки |
+| `noise` | не все факты ответа, есть факты шума |
+| `other` | ни одного из этих фактов |
+
+С разбивкой по семействам — эффект оси должен повторяться на трёх разных фразах:
+
+```python
+!cd .. && .venv_new/bin/python -m rh.sweep "results/new/qwen3_hard_fast/B/*" --by family,level --facts
+```
+
+То же по прогонам прежней сетки, на тех же четырёх длинах (оси A и B):
+
+```python
+!cd .. && .venv_new/bin/python -m rh.sweep "results/new/qwen3_hard/*/*" --by level --facts --lengths 1000,10158,19316,30000
+```
+
+Таблица с ROUGE, точной фразой и долей обрезанных ответов:
+
+```python
+!cd .. && .venv_new/bin/python -m rh.sweep "results/new/qwen3_hard_fast/*/*" --by level
+```
+
+Столбцы: `exact` — эталон стоит в ответе дословно, `rouge`, `rouge2`, `rouge3` — доля слов, пар и троек слов эталона в ответе, `success` — ROUGE-1 выше 50, `truncated` — ответ не закончился к лимиту, `correct` — доля верных по фактам.
 
 Как читать:
 
-- **Строка `none`** — насколько уровень труден сам по себе. Если на уровне без маски `exact` уже низкий, маске падать некуда, и такой уровень про головы ничего не скажет.
-- **`top40`, `top50`, `top60` против `none`** — падение от маски. Сравнивается с падением на простой задаче и на A0 того же семейства.
+- **Строка `none`** — насколько уровень труден сам по себе. Если на уровне без маски `correct` уже низкий, маске падать некуда, и такой уровень про головы ничего не скажет.
+- **`top40` и `top60` против `none`** — падение от маски. Сравнивается с падением на A0 того же семейства.
 - **`random60`** должен оставаться рядом с `none`. Если и он падает, уровень хрупок к любому отключению, и падение от лучших голов нельзя приписать их роли.
 
 Ограничения метрик:
 
-- На осях B и D ответ, списанный с близнеца, получает высокие `rouge`, `rouge2` и `rouge3`: шаблон фразы у него общий с иглой. Там смотреть нужно на `exact`.
-- На уровнях D2, D3, E1, E2, E3 ответ не совпадает с эталоном дословно по построению; `exact` и ROUGE на них не показывают правильность. Для них нужен класс ответа по фактам (`answer_key` в данных), он ещё не написан. Ответы сохранены в `outputs/`, посчитать его можно после прогонов.
-- Глубины 0 и 100 особые: игла в самом начале контекста и прямо перед вопросом ищется иначе, чем в середине. Выводы стоит проверять и без этих двух глубин.
+- **Точная фраза измеряет дословность, а не правильность.** Под маской модель часто отвечает верно, но не дословно: на оси B при маске 40 точных ответов 19–36%, а «успех» 97–100%.
+- **ROUGE на осях B и D завышает ответ, списанный с близнеца:** шаблон фразы у него общий с иглой.
+- **Класс по фактам требует написания факта из ключа:** «ring the bell» вместо «ring the brass bell» — это `partial`. Если `partial` много, стоит посмотреть ответы и, возможно, добавить написание в `answer_key`.
+- **Глубины 0 и 100 особые:** игла в самом начале контекста и прямо перед вопросом ищется иначе, чем в середине; на глубине 100 она к тому же стоит после оборванного предложения. Выводы стоит проверять и без этих двух глубин: `--depths 22,44,67,89`.
+- **Контроль на случайных головах на оси A** дал длинные ответы (на A1 и A3 почти половина не закончилась к лимиту). Перед выводами по оси A нужно посмотреть его `correct`.
 
-#### Шаг 4. Внимание голов
+#### Шаг 3. Внимание голов
 
 По прогону без маски: что делают 60 лучших голов на каждом уровне.
 
 ```python
-!cd .. && .venv_new/bin/python -m rh.levels results/new/qwen3_hard/B/none \
+!cd .. && .venv_new/bin/python -m rh.levels results/new/qwen3_hard_fast/B/none \
     --mask_file results/new/qwen3_detect/head_score_copy_count.json --top 60
 ```
 
-Для другой оси меняется папка. Столбцы: `copy` — копирование ответа из иглы, `needle` и `compet` — доля внимания на иглу и на конкурирующие вставки, `max` — на самую сильную из них, `share` = `needle / (needle + compet)`, `copy_c` — копирование из вставок, `all` — внимание на иглу в среднем по всем головам.
+Для другой оси меняется папка. Столбцы: `copy` — копирование ответа из иглы, `needle` и `compet` — доля внимания на иглу и на конкурирующие вставки, `max` — на самую сильную из них, `share` = `needle / (needle + compet)`, `copy_c` — копирование из вставок, `all` — внимание на иглу в среднем по всем головам. `--lengths` и `--depths` оставляют только указанные точки сетки.
 
 Какие метрики голов считаются в прогоне без маски:
 
@@ -1730,7 +1730,7 @@ A0 всех трёх семейств без маски, 198 примеров. �
 | `supporting_mass` | на вставки с частью ответа (D2, D3, E3) |
 | `copy_sentence`, `copy_competing` | копирование из иглы целиком и из конкурирующих вставок |
 
-#### Шаг 5. Вывод по уровню
+#### Шаг 4. Вывод по уровню
 
 Два измерения вместе:
 
@@ -1747,6 +1747,239 @@ A0 всех трёх семейств без маски, 198 примеров. �
 - `--families` — семейства через запятую; по умолчанию все три;
 - `--lengths`, `--depths` — длины контекста и глубины иглы через запятую;
 - `--insert_seed` — seed расположения вставок; `--seed` остаётся за случайными головами маски.
+
+Проверка того, что подаётся на вход модели, без самой модели: `python -m rh.verify.hard_prompts --model_path .hf_models/Qwen3-8B --levels A,B,N --lengths 1000,10158,19316,30000 --depths 0,22,44,67,89,100`.
+
+### 8.12. Быстрый цикл в Google Colab
+
+Те же прогоны, что в 8.11, для осей A, B и N, но в виде, пригодном для Colab. Нужна видеокарта A100 (40 ГБ): на T4 с 15 ГБ модель не помещается.
+
+Отличия от ячеек для DataSphere:
+
+- **Python системный**, без `.venv_new`: в Colab уже стоят `torch`, `transformers` и `accelerate`, доустанавливается только `rouge_score`. Окружение на Google Drive держать нельзя — библиотеки читаются оттуда по одному мелкому файлу, и запуск висит десятки минут.
+- **Модель на локальном диске** `/content/models/Qwen3-8B`, скачивается в начале каждого сеанса. Локальный диск Colab стирается при отключении среды; Drive для модели не подходит по объёму и скорости.
+- **Проект и результаты на Drive**: `/content/drive/MyDrive/ai360-heads-in-the-haystack`. Ячейки запускаются из корня проекта, без `cd ..`.
+- **Один процесс на видеокарту**: на 40 ГБ два прогона одновременно не помещаются.
+
+#### Подготовка — одна ячейка в начале каждого сеанса
+
+```python
+from google.colab import drive
+drive.mount('/content/drive')
+
+!pip install -q rouge_score
+!python -c "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-8B', local_dir='/content/models/Qwen3-8B')"
+
+%cd /content/drive/MyDrive/ai360-heads-in-the-haystack
+!python -c "import torch, transformers; print(torch.__version__, transformers.__version__, torch.cuda.get_device_name(0))"
+!ls results/new/qwen3_detect/head_score_copy_count.json
+```
+
+Что должно получиться: напечатаны версии библиотек и имя видеокарты (`transformers` нужен не ниже 4.50, видеокарта — A100), последняя строка показывает путь к файлу рейтинга голов. Если файла рейтинга нет — он не в git, его нужно один раз скопировать с DataSphere в `/content/drive/MyDrive/ai360-heads-in-the-haystack/results/new/qwen3_detect/head_score_copy_count.json`. Без него не запустятся прогоны с масками; прогоны без маски от него не зависят.
+
+Путь к модели должен быть одним и тем же во всех запусках в одну папку результатов. Если папка осталась от прерванного запуска с другим путём (например, `.hf_models/Qwen3-8B`), удалите её: `!rm -r results/new/qwen3_hard_fast/A/none`.
+
+#### Прогоны
+
+Три ячейки на ось, запускать по очереди. Каждая продолжается той же командой, если сеанс оборвался: готовые примеры лежат на Drive и пропускаются. На ось — 288 примеров на прогон, четыре прогона.
+
+**Ось A** — вопрос: от дословного до перефраза без общих слов.
+
+Без маски:
+
+```python
+!mkdir -p source/logs
+!python -u -m rh.run \
+    --model_path /content/models/Qwen3-8B \
+    --task hard_niah \
+    --levels A \
+    --lengths 1000,10158,19316,30000 \
+    --depths 0,22,44,67,89,100 \
+    --out results/new/qwen3_hard_fast/A/none \
+    --with_metrics \
+    2>&1 | tee source/logs/fast_A_none.log
+```
+
+Маски 40 и 60:
+
+```python
+!mkdir -p source/logs
+!python -u -m rh.mask_sweep \
+    --model_path /content/models/Qwen3-8B \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --out results/new/qwen3_hard_fast/A \
+    --kinds top \
+    --counts 40,60 \
+    --task hard_niah \
+    --levels A \
+    --lengths 1000,10158,19316,30000 \
+    --depths 0,22,44,67,89,100 \
+    2>&1 | tee source/logs/fast_A_top.log
+```
+
+Контроль, 60 случайных голов:
+
+```python
+!mkdir -p source/logs
+!python -u -m rh.run \
+    --model_path /content/models/Qwen3-8B \
+    --task hard_niah \
+    --levels A \
+    --lengths 1000,10158,19316,30000 \
+    --depths 0,22,44,67,89,100 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random 60 \
+    --out results/new/qwen3_hard_fast/A/random60 \
+    --with_metrics \
+    2>&1 | tee source/logs/fast_A_random60.log
+```
+
+**Ось B** — записи-близнецы про другие города.
+
+Без маски:
+
+```python
+!mkdir -p source/logs
+!python -u -m rh.run \
+    --model_path /content/models/Qwen3-8B \
+    --task hard_niah \
+    --levels B \
+    --lengths 1000,10158,19316,30000 \
+    --depths 0,22,44,67,89,100 \
+    --out results/new/qwen3_hard_fast/B/none \
+    --with_metrics \
+    2>&1 | tee source/logs/fast_B_none.log
+```
+
+Маски 40 и 60:
+
+```python
+!mkdir -p source/logs
+!python -u -m rh.mask_sweep \
+    --model_path /content/models/Qwen3-8B \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --out results/new/qwen3_hard_fast/B \
+    --kinds top \
+    --counts 40,60 \
+    --task hard_niah \
+    --levels B \
+    --lengths 1000,10158,19316,30000 \
+    --depths 0,22,44,67,89,100 \
+    2>&1 | tee source/logs/fast_B_top.log
+```
+
+Контроль, 60 случайных голов:
+
+```python
+!mkdir -p source/logs
+!python -u -m rh.run \
+    --model_path /content/models/Qwen3-8B \
+    --task hard_niah \
+    --levels B \
+    --lengths 1000,10158,19316,30000 \
+    --depths 0,22,44,67,89,100 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random 60 \
+    --out results/new/qwen3_hard_fast/B/random60 \
+    --with_metrics \
+    2>&1 | tee source/logs/fast_B_random60.log
+```
+
+**Ось N** — яркий посторонний факт.
+
+Без маски:
+
+```python
+!mkdir -p source/logs
+!python -u -m rh.run \
+    --model_path /content/models/Qwen3-8B \
+    --task hard_niah \
+    --levels N \
+    --lengths 1000,10158,19316,30000 \
+    --depths 0,22,44,67,89,100 \
+    --out results/new/qwen3_hard_fast/N/none \
+    --with_metrics \
+    2>&1 | tee source/logs/fast_N_none.log
+```
+
+Маски 40 и 60:
+
+```python
+!mkdir -p source/logs
+!python -u -m rh.mask_sweep \
+    --model_path /content/models/Qwen3-8B \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --out results/new/qwen3_hard_fast/N \
+    --kinds top \
+    --counts 40,60 \
+    --task hard_niah \
+    --levels N \
+    --lengths 1000,10158,19316,30000 \
+    --depths 0,22,44,67,89,100 \
+    2>&1 | tee source/logs/fast_N_top.log
+```
+
+Контроль, 60 случайных голов:
+
+```python
+!mkdir -p source/logs
+!python -u -m rh.run \
+    --model_path /content/models/Qwen3-8B \
+    --task hard_niah \
+    --levels N \
+    --lengths 1000,10158,19316,30000 \
+    --depths 0,22,44,67,89,100 \
+    --save none \
+    --mask_file results/new/qwen3_detect/head_score_copy_count.json \
+    --mask_random 60 \
+    --out results/new/qwen3_hard_fast/N/random60 \
+    --with_metrics \
+    2>&1 | tee source/logs/fast_N_random60.log
+```
+
+#### Наблюдение за прогоном
+
+Лог и число готовых примеров (в соседней ячейке другого ноутбука или после остановки):
+
+```python
+!tail -n 5 source/logs/fast_A_none.log; wc -l results/new/qwen3_hard_fast/A/none/samples.jsonl
+```
+
+```python
+!nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu --format=csv
+```
+
+После загрузки модели занято около 16 ГБ видеопамяти; первая строка с примером появляется в логе через 1–3 минуты после старта ячейки.
+
+#### Таблицы
+
+Классы ответов по фактам, строка на уровень и прогон:
+
+```python
+!python -m rh.sweep "results/new/qwen3_hard_fast/*/*" --by level --facts
+```
+
+С разбивкой по семействам:
+
+```python
+!python -m rh.sweep "results/new/qwen3_hard_fast/*/*" --by family,level --facts
+```
+
+ROUGE, точная фраза, доля обрезанных ответов:
+
+```python
+!python -m rh.sweep "results/new/qwen3_hard_fast/*/*" --by level
+```
+
+Внимание 60 лучших голов по уровням (для другой оси меняется папка):
+
+```python
+!python -m rh.levels results/new/qwen3_hard_fast/B/none --mask_file results/new/qwen3_detect/head_score_copy_count.json --top 60
+```
+
+Как читать таблицы — в 8.11, шаги 2–4.
 
 ## 9. Известные особенности
 
