@@ -1,14 +1,18 @@
 """
-Makes run folders on a smaller grid out of finished runs on a larger one, without the model: keeps the samples of
-the chosen context lengths and needle depths and everything that belongs to them. The new folders look as if the runs
-had been started on the small grid, so rh.sweep, rh.levels and the notebooks read them as usual, and rh.run with the
-small grid continues them: it generates only the samples that are missing.
+Brings finished runs of rh.run to another grid of context lengths and needle depths, without the model. The new
+folders look as if the runs had been started on that grid, so rh.sweep, rh.levels and the notebooks read them as
+usual, and rh.run with that grid continues them: it generates only the samples that are missing.
 
+A smaller grid out of a larger one: only the samples of the chosen lengths are kept
 python -m rh.regrid results/new/qwen3_hard results/new/qwen3_hard_fast --lengths 1000,10158,19316,30000
 
-The source is <src>/<group>/<run>/ (e.g. qwen3_hard/B/top60); the same layout is written under <dst>. The source is
-not changed. A sample of a grid point is the same prompt on both grids when the longest context is the same: the
-haystack is read up to the longest context, and the places of the inserts depend only on the name of the sample.
+A larger grid out of parts: the same runs computed on different lengths are joined
+python -m rh.regrid results/new/qwen3_hard_fast results/new/qwen3_hard_rest results/new/qwen3_hard_full
+
+The sources are <src>/<group>/<run>/ (e.g. qwen3_hard/B/top60); the same layout is written under the last folder.
+The sources are not changed. A sample of a grid point is the same prompt on every grid: the haystack does not depend
+on the lengths of the run, and the places of the inserts depend only on the name of the sample. Runs are joined only
+when everything but the grid is the same in their settings: the model, the task, the levels, the masked heads.
 """
 import argparse
 import collections
@@ -19,39 +23,58 @@ import shutil
 
 from . import metrics, spool
 
+GRID = {"lengths", "depths", "s_len", "e_len", "context_intervals"}   # what regrid changes
+PLACE = {"out", "spool", "buffer_gb", "chunk_mb", "with_metrics", "limit", "every", "model_path"}   # where and how, not what
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("src", help="folder with <group>/<run> subfolders of rh.run")
-    parser.add_argument("dst", help="folder for the reduced copies, the same layout")
-    parser.add_argument("--lengths", type=lambda s: [int(x) for x in s.split(",")], required=True, help="context lengths to keep, comma separated")
+    parser.add_argument("src", nargs="+", help="one or several folders with <group>/<run> subfolders of rh.run")
+    parser.add_argument("dst", help="folder for the result, the same layout")
+    parser.add_argument("--lengths", type=lambda s: [int(x) for x in s.split(",")], default=None, help="context lengths to keep, comma separated; default: all that the sources have")
     parser.add_argument("--depths", type=lambda s: [int(x) for x in s.split(",")], default=None, help="needle depths to keep; default: all")
     parser.add_argument("--groups", type=lambda s: s.split(","), default=None, help="only these <group> subfolders, e.g. A,B; default: all")
     parser.add_argument("--runs", type=lambda s: s.split(","), default=None, help="only these runs, e.g. none,top40,top60,random60; default: all")
-    parser.add_argument("--model_path", default=None, help="write this model path into the settings of the copies: rh.run continues "
+    parser.add_argument("--model_path", default=None, help="write this model path into the settings of the result: rh.run continues "
                         "a folder only with the same --model_path, set it when the model now lies elsewhere")
     args = parser.parse_args()
 
-    for folder in sorted(glob.glob(f"{args.src}/*/*/")):
-        group, name = os.path.normpath(folder).split(os.sep)[-2:]
-        if (args.groups and group not in args.groups) or (args.runs and name not in args.runs) or not os.path.exists(f"{folder}/samples.jsonl"):
-            continue
+    found = collections.defaultdict(list)   # (group, run) -> source folders that have it
+    for src in args.src:
+        for folder in sorted(glob.glob(f"{src}/*/*/")):
+            group, name = os.path.normpath(folder).split(os.sep)[-2:]
+            if (not args.groups or group in args.groups) and (not args.runs or name in args.runs) and os.path.exists(f"{folder}/samples.jsonl"):
+                found[(group, name)].append(os.path.normpath(folder))
+
+    for (group, name), folders in sorted(found.items()):
         out = f"{args.dst}/{group}/{name}"
         if os.path.exists(f"{out}/samples.jsonl"):
             print(f"{group}/{name}: {out} already has results, left as it is")
             continue
-        run_json = f"{folder}/spool/run.json"
-        if not os.path.exists(run_json):
-            print(f"{group}/{name}: no spool/run.json, skipped")
+        runs = {f: spool.load_json(f"{f}/spool/run.json") for f in folders if os.path.exists(f"{f}/spool/run.json")}
+        if len(runs) < len(folders):
+            print(f"{group}/{name}: no spool/run.json in {[f for f in folders if f not in runs]}, skipped")
             continue
-        run = spool.load_json(run_json)
-        old = run.get("args", {})
-        if max(old.get("lengths") or [0]) != max(args.lengths):
-            # with another longest context the haystack is read to another length: the prompts may differ
-            print(f"{group}/{name}: its longest context is {max(old.get('lengths') or [0])}, the new one {max(args.lengths)}: skipped")
+        first = runs[folders[0]]
+        same = lambda r: ({k: v for k, v in r.get("args", {}).items() if k not in GRID | PLACE}, r.get("block_list"))
+        other = [f for f in folders[1:] if same(runs[f]) != same(first)]
+        if other:
+            a, b = same(first)[0], same(runs[other[0]])[0]
+            print(f"{group}/{name}: {other[0]} is another experiment than {folders[0]}, not joined: "
+                  + ("; ".join(f"{k}: {a.get(k)!r} / {b.get(k)!r}" for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)) or "other masked heads"))
             continue
-        with open(f"{folder}/samples.jsonl", encoding="utf-8") as f:
-            rows = [json.loads(l) for l in f if l.strip()]
-        kept = [r for r in rows if r["context_length"] in args.lengths and (args.depths is None or r["depth_percent"] in args.depths)]
+
+        kept, origin, there = [], {}, 0
+        for folder in folders:
+            with open(f"{folder}/samples.jsonl", encoding="utf-8") as f:
+                rows = [json.loads(l) for l in f if l.strip()]
+            there += len(rows)
+            for r in rows:
+                if r["id"] not in origin and (args.lengths is None or r["context_length"] in args.lengths) and (args.depths is None or r["depth_percent"] in args.depths):
+                    origin[r["id"]] = folder
+                    kept.append(r)
+        if not kept:
+            print(f"{group}/{name}: no samples of this grid, skipped")
+            continue
 
         os.makedirs(f"{out}/spool", exist_ok=True)
 
@@ -63,20 +86,23 @@ if __name__ == "__main__":
         copied = collections.Counter()
         for sub, ext in (("heads", "npz"), ("outputs", "json")):
             for r in kept:
-                path = f"{folder}/{sub}/{r['id']}.{ext}"
+                path = f"{origin[r['id']]}/{sub}/{r['id']}.{ext}"
                 if os.path.exists(path):
                     os.makedirs(f"{out}/{sub}", exist_ok=True)
                     shutil.copyfile(path, f"{out}/{sub}/{r['id']}.{ext}")
                     copied[sub] += 1
-        # the settings as rh.run would have written them for the small grid
-        new = dict(old, lengths=args.lengths, out=out, spool=None)
-        if args.depths is not None:
-            new["depths"] = args.depths
+        # the settings as rh.run would have written them for this grid
+        lengths = args.lengths or sorted({r["context_length"] for r in kept})
+        depths = args.depths or sorted({d for run in runs.values() for d in (run.get("args", {}).get("depths") or [])}) or None
+        new = dict(first.get("args", {}), lengths=lengths, depths=depths, out=out, spool=None)
         if args.model_path:
             new["model_path"] = args.model_path
-        spool.save_json(f"{out}/spool/run.json", dict(run, args=new, regrid={"from": os.path.normpath(folder), "samples_there": len(rows)}))
+        spool.save_json(f"{out}/spool/run.json", dict(first, args=new, regrid={"from": folders, "samples_there": there}))
         metrics.aggregate(f"{out}/spool", out)
 
+        cells = collections.Counter((str(r.get("level", "-")), r["context_length"]) for r in kept)
         levels = collections.Counter(str(r.get("level", "-")) for r in kept)
-        uneven = "" if len(set(levels.values())) <= 1 else "  NOT EVEN, the source run was not finished: " + ", ".join(f"{k} {v}" for k, v in sorted(levels.items()))
-        print(f"{group}/{name}: {len(kept)} of {len(rows)} samples kept, heads {copied['heads']}, outputs {copied['outputs']} -> {out}{uneven}")
+        gaps = sorted({f"{level} len {length}" for level in levels for length in lengths if cells[(level, length)] < max(cells.values())})
+        note = "" if not gaps else f"  NOT COMPLETE, fewer samples at: {', '.join(gaps[:8])}{' ...' if len(gaps) > 8 else ''}"
+        print(f"{group}/{name}: {len(kept)} samples from {len(folders)} source(s) ({there} there), lengths {len(lengths)}, "
+              f"heads {copied['heads']}, outputs {copied['outputs']} -> {out}{note}")
