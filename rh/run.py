@@ -34,7 +34,11 @@ def from_masked_run(path):
 
 
 # arguments that may differ between two starts of the same run
-RESUME_FREE = {"out", "spool", "buffer_gb", "chunk_mb", "with_metrics", "limit", "every"}
+RESUME_FREE = {"out", "spool", "buffer_gb", "chunk_mb", "with_metrics", "limit", "every",
+               # the grid: the name of a sample holds its context length and needle depth, and its prompt does not depend
+               # on the other points of the grid, so a folder may be continued on a wider grid (only the new points are
+               # generated) or on a part of it
+               "lengths", "depths", "s_len", "e_len", "context_intervals"}
 
 
 def settings_conflict(old, new, defaults):
