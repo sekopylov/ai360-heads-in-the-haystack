@@ -1,0 +1,7 @@
+numpy
+pandas
+matplotlib
+rouge_score
+ipykernel
+nbformat
+nbclient

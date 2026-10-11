@@ -5,3 +5,5 @@ results/
 contexts/
 __pycache__
 *.ipynb
+# the notebooks of vizual/ are kept
+!vizual/*.ipynb
