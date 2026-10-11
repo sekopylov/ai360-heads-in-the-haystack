@@ -1,0 +1,49 @@
+name: glm4-6v-flash-no-thinking-context-only-retrieval-survey
+desc: 27 GLM-4.6V-Flash no-thinking detection generations with context-only instructions, all three metrics, 256-token cap and default CPU aggregation; no masking
+
+# Same data, grid, metrics, scope, seed, aggregation and hardware as
+# ministral3-8b-survey.yaml. Only adapter, checkpoint and output name differ.
+# Official enable_thinking=False in the GLM-4.6V-Flash chat template.
+# Text-only input; native GLM4V decoder; observed decode remains eager.
+flags:
+  - attach-project-disk
+cmd: >
+  bash -c '
+  python3 retrieval_head_detection.py
+  --adapter glm4_6v_flash_no_thinking
+  --model ${DS_PROJECT_HOME}/c0/models/zai-org/GLM-4.6V-Flash
+  --output-root datasphere-results/glm4-6v-flash-no-thinking-context-only-survey
+  --haystack-root ${DETECTION_DATA}
+  --dtype bfloat16
+  --device-map cuda:0
+  --prefill-attention sdpa_flash
+  --attention-scope all_decode_tokens
+  --lengths 8000,16000,30000
+  --depths 15,45,75
+  --max-new-tokens 256
+  --retrieval-metrics legacy,needle_token_multiset_v1,needle_attention_mass_v1
+  --context-seed 42
+  && python3 aggregate_head_scores.py
+  --run datasphere-results/glm4-6v-flash-no-thinking-context-only-survey
+  '
+inputs:
+  - data/haystack_for_detect: DETECTION_DATA
+outputs:
+  - datasphere-results/glm4-6v-flash-no-thinking-context-only-survey
+env:
+  vars:
+    - HF_HUB_OFFLINE: "1"
+    - TRANSFORMERS_OFFLINE: "1"
+  python:
+    type: manual
+    version: "3.12"
+    requirements-file: datasphere/requirements-gpu.txt
+    pip:
+      extra-index-urls:
+        - https://download.pytorch.org/whl/cu118
+    local-paths:
+      - retrieval_head_detection.py
+      - aggregate_head_scores.py
+      - retrieval_heads
+cloud-instance-types:
+  - g2.1

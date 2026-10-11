@@ -4,6 +4,8 @@ from collections.abc import Callable
 
 from .base import ModelAdapter
 from .qwen35 import Qwen35Adapter
+from .ministral3 import Ministral3EightBNoThinkingAdapter
+from .glm4v import Glm46VFlashNoThinkingAdapter
 from .qwen3 import Qwen3Adapter
 from .qwen3_8b import (
     Qwen3EightBAdapter,
@@ -24,6 +26,8 @@ _MODELS: dict[str, ModelFactory] = {
     "qwen3_8b_no_thinking": Qwen3EightBNoThinkingAdapter,
     "qwen3_8b_no_yarn_64k_no_thinking": Qwen3EightBNoYarn64KNoThinkingAdapter,
     "qwen3_8b_yarn_no_thinking": Qwen3EightBYarnNoThinkingAdapter,
+    "ministral3_8b_no_thinking": Ministral3EightBNoThinkingAdapter,
+    "glm4_6v_flash_no_thinking": Glm46VFlashNoThinkingAdapter,
 }
 
 

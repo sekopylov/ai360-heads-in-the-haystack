@@ -1,47 +1,4 @@
-# Keep only code, execution/dependency configuration and source datasets.
-# Traverse directories so exceptions below can expose the allowed files.
-*
-!*/
-!.gitignore
-
-# Source code and executable notebooks.
-!*.py
-!*.ipynb
-!*.sh
-!*.bash
-!*.ps1
-!*.js
-!*.ts
-!*.jsx
-!*.tsx
-!*.html
-!*.css
-!*.c
-!*.cpp
-!*.h
-!*.cu
-!*.rs
-!*.go
-!*.sql
-!*.jinja
-!*.jinja2
-
-# Run configurations and dependency/build specifications.
-!*.yaml
-!*.yml
-!*.toml
-!requirements*.txt
-!uv.lock
-!poetry.lock
-!Makefile
-!Dockerfile
-
-# Dataset contents, including JSON needles and corpus text.
-!/updated/data/**
-!/source/PaulGrahamEssays/**
-!/source/haystack_for_detect/**
-
-# Never expose generated files or copied code from these directories.
+# Local environments, caches and agent state.
 .venv*/
 venv/
 __pycache__/
@@ -53,9 +10,12 @@ __pycache__/
 .agents/
 .codex/
 .aws/
-.idea/
-.vscode/
-models/
+
+# Downloaded checkpoints: dedicated storage directories only.
+/models/
+/updated/models/
+
+# Generated experiment results and plots.
 /updated/report-assets/
 /updated/datasphere-results/
 /updated/outputs/

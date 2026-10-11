@@ -1,5 +1,6 @@
 """Rescore downloaded San Francisco masking results and build a PNG/SVG gallery."""
 from pathlib import Path
+import argparse
 import csv
 import json
 from statistics import mean
@@ -16,6 +17,8 @@ ROOT = Path(__file__).resolve().parent
 SOURCE = ROOT / 'datasphere-results/qwen3-8b-no-thinking-paul-graham-attention-mass-mask-san-francisco'
 OUT = ROOT / 'report-assets/qwen3-8b-no-thinking-paul-graham-mask'
 HEADS = (0, 20, 40, 60, 80, 100, 120)
+JOB_ID = 'bt1k7k78e6t20kj241br'
+RANK_LABEL = 'старый thinking survey attention-mass'
 METRICS = ('rouge1_recall', 'rouge2_recall', 'rouge3_recall', 'rouge123_mean_recall', 'exact_match')
 LABELS = ('ROUGE-1 recall', 'ROUGE-2 recall', 'ROUGE-3 recall', 'Среднее ROUGE-1/2/3 recall', 'Точная фраза иголки')
 COLORS = ('#168577', '#3574b4', '#8a67b0', '#d7a33e', '#df8050', '#cc5265', '#663d68')
@@ -50,7 +53,7 @@ def load():
     lengths = sorted({r['context_length'] for r in rows})
     depths = sorted({r['depth_percent'] for r in rows})
     keys = {(r['blocked_heads'], r['context_length'], r['depth_percent']) for r in rows}
-    assert len(rows) == len(keys) == 1400
+    assert len(rows) == len(keys) == 200 * len(HEADS)
     assert len(lengths) == 20 and len(depths) == 10
     assert keys == {(h, l, d) for h in HEADS for l in lengths for d in depths}
     # All conditions must evaluate identical prepared prompts at each grid position.
@@ -62,7 +65,7 @@ def load():
 
 def save(fig, name):
     fig.set_layout_engine('constrained', rect=(0, .04, 1, .96))
-    fig.text(.02, .012, 'Qwen3-8B · no thinking · Paul Graham / San Francisco · старый mass-рейтинг · legacy_uniform · выход ≤256 токенов', fontsize=8, color='#687587')
+    fig.text(.02, .012, f'Qwen3-8B · no thinking · Paul Graham / San Francisco · {RANK_LABEL} · legacy_uniform · выход ≤256 токенов', fontsize=8, color='#687587')
     for ext in ('png', 'svg'):
         fig.savefig(OUT / 'plots' / f'{name}.{ext}', dpi=170, bbox_inches='tight')
     plt.close(fig)
@@ -114,7 +117,7 @@ def main():
         name = f'comparison_{metric}'; save(fig, name); gallery.append((label + ' — сравнение условий', name))
     with (OUT / 'summary.csv').open('w') as f:
         writer = csv.DictWriter(f, list(summary[0])); writer.writeheader(); writer.writerows(summary)
-    lines = ['# Paul Graham: masking без thinking', '', 'Исходные JSON скачаны из задания bt1k7k78e6t20kj241br. Проверены все 1400 уникальных результатов и совпадение prompt_sha256 между условиями.', '', 'Сетка: 20 длин × 10 глубин × 7 условий. Рейтинг голов: старый thinking survey attention-mass, НЕ новый no-thinking survey. Маска legacy_uniform применялась при decode.', '', 'ROUGE-1/2/3 — overlap словесных n-грамм со stemming, шкала 0–100. Основной композит — арифметическое среднее трёх recall; это предложенная сводная метрика, не стандартный ROUGE. Precision и F1 тоже сохранены в CSV/JSON: recall не штрафует лишний текст. Exact match — наличие полной эталонной фразы подряд после нормализации регистра и пунктуации, без stemming; это не семантическая проверка.', '', 'Оценка идёт по сохранённому model_response. Исходные score и результаты не изменены. Контрольные слова/перефразирование могут влиять на оценки; графики не доказывают функциональную специализацию голов.', '', '| Отключено | ROUGE-1 | ROUGE-2 | ROUGE-3 | Среднее 1/2/3 | Exact match |', '|---:|---:|---:|---:|---:|---:|']
+    lines = ['# Paul Graham: masking без thinking', '', f'Исходные JSON скачаны из задания {JOB_ID}. Проверены все {len(rows)} уникальных результатов и совпадение prompt_sha256 между условиями.', '', f'Сетка: 20 длин × 10 глубин × {len(HEADS)} условий. Рейтинг голов: {RANK_LABEL}. Маска legacy_uniform применялась при decode.', '', 'ROUGE-1/2/3 — overlap словесных n-грамм со stemming, шкала 0–100. Основной композит — арифметическое среднее трёх recall; это предложенная сводная метрика, не стандартный ROUGE. Precision и F1 тоже сохранены в CSV/JSON: recall не штрафует лишний текст. Exact match — наличие полной эталонной фразы подряд после нормализации регистра и пунктуации, без stemming; это не семантическая проверка.', '', 'Оценка идёт по сохранённому model_response. Исходные score и результаты не изменены. Контрольные слова/перефразирование могут влиять на оценки; графики не доказывают функциональную специализацию голов.', '', '| Отключено | ROUGE-1 | ROUGE-2 | ROUGE-3 | Среднее 1/2/3 | Exact match |', '|---:|---:|---:|---:|---:|---:|']
     for row in summary:
         lines.append('| ' + str(row['blocked_heads']) + ' | ' + ' | '.join(f'{row[m]:.2f}' for m in METRICS) + ' |')
     lines += ['', 'Данные: [cases.csv](cases.csv), [summary.csv](summary.csv), [scores.json](scores.json). Все картинки доступны в PNG и SVG.', '']
@@ -125,4 +128,14 @@ def main():
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--new-mass', action='store_true', help='plot the completed 1800-case no-thinking survey ranking run')
+    args = parser.parse_args()
+    if args.new_mass:
+        SOURCE = ROOT / 'datasphere-results/qwen3-8b-no-thinking-paul-graham-new-mass-top5-40-mask-san-francisco'
+        OUT = ROOT / 'report-assets/qwen3-8b-no-thinking-paul-graham-new-mass-top5-40/visualizations'
+        HEADS = (0, 5, 10, 15, 20, 25, 30, 35, 40)
+        JOB_ID = 'bt1fsj89jp523daa3n8g'
+        RANK_LABEL = 'новый no-thinking survey attention-mass'
+        COLORS = ('#168577', '#367cb5', '#5687c0', '#8066af', '#ad73a8', '#d7a33e', '#df8050', '#cc5265', '#663d68')
     main()

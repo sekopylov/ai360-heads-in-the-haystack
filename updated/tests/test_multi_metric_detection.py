@@ -38,7 +38,7 @@ class MultiMetricDetectionTests(unittest.TestCase):
                     controller.record(0, torch.tensor(probs).reshape(1, 1, 1, 3))
                     controller.end_step(token)
                 controller.finish()
-                return RunResult(example, GenerationResult([11, 22], 'answer'), score, .1)
+                return RunResult(example, GenerationResult([11, 22], 'answer', 'answer', 'eos'), score, .1)
             runner = SimpleNamespace(prepare=lambda *a, **kw: prepared, run=run)
             with patch.object(sys, 'argv', argv), patch.object(detection, 'create_model', return_value=model), \
                  patch.object(detection, 'ContextBuilder'), patch.object(detection, 'LegacyOverlapLocator'), \

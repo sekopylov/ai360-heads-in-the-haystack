@@ -57,16 +57,16 @@ def result_payload(
             json.dumps(prepared.prompt.token_ids).encode("utf-8")
         ).hexdigest(),
         "model_response": result.generation.text,
+        "raw_model_response": result.generation.raw_text,
+        "generated_token_ids": result.generation.token_ids,
+        "finish_reason": result.generation.finish_reason,
+        "final_answer_started": result.generation.final_answer_started,
         "score": result.score,
         "test_duration_seconds": result.duration_seconds,
         "test_timestamp_utc": datetime.now(timezone.utc).strftime(
             "%Y-%m-%d %H:%M:%S%z"
         ),
     }
-    if result.generation.raw_text is not None:
-        payload["raw_model_response"] = result.generation.raw_text
-        payload["generated_token_ids"] = result.generation.token_ids
-        payload["finish_reason"] = result.generation.finish_reason
     if experiment is not None:
         payload["experiment"] = experiment
     return payload

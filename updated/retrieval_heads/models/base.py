@@ -2,23 +2,33 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+
+import torch
 
 from ..attention.types import AttentionObserver, AttentionRequest, Head
 
 
 @dataclass
 class Prompt:
-    input_ids: Any
+    input_ids: torch.Tensor
     token_ids: list[int]
 
 
 @dataclass
 class GenerationResult:
+    """Uniform output: full generation plus the answer used for evaluation.
+
+    text retains its existing final-answer meaning. raw_text always contains
+    the full decode, including special tokens and any reasoning markers.
+    final_answer_started identifies the answer phase, not EOS completion:
+    a truncated plain answer can still have final_answer_started=True.
+    """
+
     token_ids: list[int]
     text: str
-    raw_text: str | None = None
-    finish_reason: str | None = None
+    raw_text: str
+    finish_reason: str
+    final_answer_started: bool = True
 
 
 class ModelAdapter(ABC):

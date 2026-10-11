@@ -13,13 +13,22 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
+METRIC_LABELS = {
+    "legacy": "Legacy (historical)",
+    "needle_token_multiset_v1": "Token multiset",
+    "needle_attention_mass_v1": "Needle attention mass",
+}
+
+
 def read(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def plot_detection(run, out, detection, heads, scores, counts):
+def plot_detection(run, out, detection, heads, scores, counts, *, answer_output=None):
     """Detection-only plots, with histories aligned to successful cases."""
-    title = detection.get("model_version", "Model")
+    model_title = detection.get("model_version", "Model")
+    metric_label = METRIC_LABELS.get(detection.get("retrieval_metric"), detection.get("retrieval_metric", "Retrieval"))
+    title = f"{model_title} · {metric_label}"
     scorer = rouge_scorer.RougeScorer(["rouge1"], use_stemmer=True)
     rows = []
     for path in (run / "detection/results").glob("*_results.json"):
@@ -45,6 +54,17 @@ def plot_detection(run, out, detection, heads, scores, counts):
     if len(rows) != detection["completed_cases"]:
         raise ValueError("Detection result count differs from manifest")
     successful = [r for r in rows if r["rouge_recall"] > detection["success_threshold"]]
+    aggregation_path = run / "detection/aggregation/run.json"
+    if aggregation_path.exists():
+        # Histories follow aggregation's selected_cases order (sorted filenames),
+        # not the numeric grid order used for the answer-quality panels above.
+        aggregation = read(aggregation_path)
+        by_key = {(r["case_id"], r["length"], r["depth"]): r for r in successful}
+        selected_keys = [(r["case_id"], r["length"], r["depth"])
+                         for r in aggregation["selected_cases"]]
+        if len(selected_keys) != len(by_key) or set(selected_keys) != set(by_key):
+            raise ValueError("Aggregation selection differs from successful detection cases")
+        successful = [by_key[key] for key in selected_keys]
     if any(len(v) != len(successful) for v in heads.values()):
         raise ValueError("Head histories do not match successful detection cases")
     labels = [f'{r["case_id"]}\n{r["length"]:,} / {r["depth"]:g}%' for r in successful]
@@ -55,11 +75,12 @@ def plot_detection(run, out, detection, heads, scores, counts):
     bars = ax.barh(positions, [scores[h] for h in top], color="#2563eb", alpha=.65,
                    label="Mean across successful cases")
     for i, label in enumerate(labels):
-        ax.scatter([heads[h][i] for h in top], positions, s=30, label=label.replace("\n", " · "), zorder=3)
+        ax.scatter([heads[h][i] for h in top], positions, s=14, color="#334155",
+                   alpha=.35, label="Individual selected cases" if i == 0 else None, zorder=3)
     ax.set_yticks(positions, top)
     ax.invert_yaxis()
     ax.set_xlim(0, max(1, max(scores.values())) * 1.05)
-    ax.set_xlabel(f"Retrieval score ({detection.get('attention_scope', 'decode')}; not ROUGE)")
+    ax.set_xlabel(f"{metric_label} score ({detection.get('attention_scope', 'decode')}; not ROUGE)")
     ax.set_ylabel("Layer–head (zero-based)")
     ax.set_title(f"{title} · top 15 retrieval heads")
     ax.legend(fontsize=8)
@@ -79,7 +100,7 @@ def plot_detection(run, out, detection, heads, scores, counts):
     ax.set_xlabel("Head (zero-based)")
     ax.set_ylabel("Layer (zero-based)")
     ax.set_title(f"{title} · mean retrieval score ({len(successful)} successful cases)")
-    fig.colorbar(heatmap, ax=ax, label="Mean retrieval score")
+    fig.colorbar(heatmap, ax=ax, label=f"Mean {metric_label.lower()} score")
     fig.tight_layout()
     fig.savefig(out / "head_heatmap.png", dpi=180)
     plt.close(fig)
@@ -103,11 +124,11 @@ def plot_detection(run, out, detection, heads, scores, counts):
     for ax in axes:
         ax.set_xticks(x, case_labels, rotation=25)
         ax.spines[["top", "right"]].set_visible(False)
-    fig.suptitle(f"{title} · detection only (no masking experiment)")
+    fig.suptitle(f"{model_title} · answer quality (shared across retrieval metrics)")
     fig.text(.5, .01, "Recall rewards quoting the expected answer; it does not establish semantic correctness.",
              ha="center", fontsize=9)
     fig.tight_layout(rect=(0, .04, 1, .94))
-    fig.savefig(out / "detection_summary.png", dpi=180)
+    fig.savefig(answer_output or out / "detection_summary.png", dpi=180)
     plt.close(fig)
     (out / "plot_data.json").write_text(json.dumps(dict(
         model=title, retrieval_metric=detection.get("retrieval_metric"),
@@ -124,6 +145,8 @@ def main():
     parser.add_argument("--run", type=Path, default=Path("datasphere-results/full"))
     parser.add_argument("--output", type=Path)
     parser.add_argument("--metric", help="select one metric from a multi-metric detection run")
+    parser.add_argument("--answer-output", type=Path,
+                        help="shared answer-quality plot destination instead of per-metric copy")
     parser.add_argument("--threshold", type=float, default=50.0,
                         help="Successful answer means ROUGE-1 recall > threshold")
     args = parser.parse_args()
@@ -174,14 +197,14 @@ def main():
     ax.set_ylim(0, 105)
     ax.set_ylabel("Share of full-attention heads (%)")
     ax.set_xlabel("Mean retrieval score across successful detection cases")
-    ax.set_title(f"{detection.get('model_version', 'Model')} · {len(scores)} full-attention heads")
+    ax.set_title(f"{detection.get('model_version', 'Model')} · {METRIC_LABELS.get(metric, metric)}\n{len(scores)} full-attention heads")
     ax.spines[["top", "right"]].set_visible(False)
     fig.tight_layout()
     fig.savefig(out / "head_distribution.png", dpi=180)
     plt.close(fig)
 
     if not list((args.run / "evaluation").rglob("run.json")):
-        plot_detection(args.run, out, detection, heads, scores, counts)
+        plot_detection(args.run, out, detection, heads, scores, counts, answer_output=args.answer_output)
         return
 
     groups = defaultdict(list)

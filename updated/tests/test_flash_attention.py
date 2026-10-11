@@ -53,7 +53,7 @@ class FlashAttentionTests(unittest.TestCase):
                             num_hidden_layers=2, num_attention_heads=4,
                             num_key_value_heads=2, head_dim=8, max_position_embeddings=128)
         model = Qwen3ForCausalLM(config).eval()
-        with patch('retrieval_heads.models.qwen_common.AutoTokenizer.from_pretrained',
+        with patch('retrieval_heads.models.transformers_common.AutoTokenizer.from_pretrained',
                    return_value=ToyTokenizer()), \
              patch.object(Qwen3ForCausalLM, 'from_pretrained', return_value=model):
             adapter = Qwen3EightBAdapter(device_map='cpu', dtype='float32',

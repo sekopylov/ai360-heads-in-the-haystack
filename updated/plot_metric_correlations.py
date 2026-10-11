@@ -34,6 +34,8 @@ def correlation(x, y):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, required=True)
+    parser.add_argument("--metrics", help="comma-separated metrics to compare; default: all saved metrics")
+    parser.add_argument("--output", type=Path, help="plot destination")
     args = parser.parse_args()
     detection = args.run / "detection"
     manifest = json.loads((detection / "run.json").read_text())
@@ -45,6 +47,11 @@ def main():
             and aggregation.get('source_run_id') != manifest['run_id']):
         raise ValueError('Aggregation belongs to another detection run')
     files = aggregation["head_score_files"]
+    if args.metrics:
+        selected = args.metrics.split(',')
+        if len(selected) != len(set(selected)) or any(name not in files for name in selected):
+            raise ValueError("Metrics must be unique and present in aggregation")
+        files = {name: files[name] for name in selected}
     if len(files) < 2:
         raise ValueError("At least two metrics are required")
     score_dir = aggregation_path.parent if aggregation_path.exists() else detection
@@ -65,7 +72,7 @@ def main():
     spearman = [[correlation(x, y) for y in ranks] for x in ranks]
     labels = [name.replace("needle_", "").replace("_v1", "").replace("_", " ")
               for name in names]
-    output = args.run / "plots" / "metric-correlations"
+    output = args.output or args.run / "plots" / "metric-correlations"
     output.mkdir(parents=True, exist_ok=True)
     fig, axes = plt.subplots(1, 2, figsize=(12, 5), layout="constrained")
     for ax, matrix, title in zip(axes, [pearson, spearman], ["Pearson: values", "Spearman: ranks"]):
@@ -78,7 +85,7 @@ def main():
             ax.text(j, i, "n/a" if matrix[i][j] is None else f"{matrix[i][j]:.3f}",
                     ha="center", va="center", color="white" if abs(numeric[i, j]) > .6 else "black")
     fig.colorbar(im, ax=axes, shrink=.8)
-    fig.suptitle(f"{manifest['model_version']} | {len(heads)} heads | {manifest['attention_scope']}")
+    fig.suptitle(f"{manifest['model_version']} | {' vs '.join(labels)}\n{len(heads)} heads | {manifest['attention_scope']}")
     fig.savefig(output / "correlation_matrices.png", dpi=180)
     plt.close(fig)
     pairs = list(itertools.combinations(range(len(names)), 2))
@@ -91,7 +98,7 @@ def main():
         p, s = pearson[i][j], spearman[i][j]
         ax.set_title(f"Pearson {p:.3f} | Spearman {s:.3f}" if p is not None and s is not None else "Undefined correlation")
         ax.grid(alpha=.2)
-    fig.suptitle("Each point = one head; scores averaged over successful cases")
+    fig.suptitle(f"{manifest['model_version']} · {' vs '.join(labels)}\nEach point = one head; scores averaged over selected cases")
     fig.savefig(output / "pairwise_scatter.png", dpi=180)
     plt.close(fig)
     # Same head identity/colors across panels; label the union of top-5 heads
@@ -116,7 +123,7 @@ def main():
     handles, legend_labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, legend_labels, loc='lower center', ncol=min(len(highlighted), 8),
                title='Layer-head (zero-based); colored = union of top-5 per metric')
-    fig.suptitle(f"{manifest['model_version']}: same labeled heads across metric pairs")
+    fig.suptitle(f"{manifest['model_version']} · {' vs '.join(labels)}\nHighlighted top-5 heads from each metric")
     fig.tight_layout(rect=(0, .15, 1, .94))
     fig.savefig(output / 'pairwise_heads.png', dpi=180)
     plt.close(fig)

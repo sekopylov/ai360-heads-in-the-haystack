@@ -1,0 +1,57 @@
+name: qwen3-8b-no-thinking-paul-graham-multiset-mask
+desc: A100 FP16 Qwen3-8B no-thinking Paul Graham masking, frozen NO-THINKING token-multiset ranking, baseline and top/bottom 5/10/15/20/40/60/80/100
+
+# Same lengths/depths/topks/selections as GLM Paul Graham multiset masking.
+# 11 lengths x 10 depths x (baseline + 8 top + 8 bottom) = 1870 generations.
+# k=0 is automatic; --topks accepts positive counts only. No random heads.
+# Ranking: qwen3-8b-no-thinking-survey, NOT the older thinking survey.
+# Source run_id: 7591dcac-f1ac-468c-8be9-f60cdc0a26fe; 27 cases with ROUGE >50.
+# Both detection ranking and masking use qwen3_8b_no_thinking.
+# Keep the established Qwen FP16 dtype, prompt and native RoPE unchanged.
+# Flash prefill/decode; legacy_uniform Q-head masking only during decode.
+flags:
+  - attach-project-disk
+cmd: >
+  python3 job.py
+  --profile mask
+  --adapter qwen3_8b_no_thinking
+  --model ${DS_PROJECT_HOME}/c0/models/Qwen/Qwen3-8B
+  --output-root datasphere-results/qwen3-8b-no-thinking-paul-graham-multiset-mask-san-francisco
+  --mask-data ${MASK_DATA}
+  --mask-case-id paul-graham-san-francisco
+  --head-scores ${HEAD_SCORES}
+  --dtype float16
+  --device-map cuda:0
+  --prefill-attention sdpa_flash
+  --decode-attention sdpa_flash
+  --attention-scope all_decode_tokens
+  --lengths 1000,4053,7105,10158,13211,16263,19316,22368,25421,28474,30000
+  --depths 0,11,22,33,44,56,67,78,89,100
+  --max-new-tokens 256
+  --topks 5,10,15,20,40,60,80,100
+  --mask-selections top,bottom
+  --context-count 1
+  --context-seed 42
+  --seed 42
+inputs:
+  - data/validation_haystacks: MASK_DATA
+  - datasphere-results/qwen3-8b-no-thinking-survey/detection/aggregation/head_scores_needle_token_multiset_v1.json: HEAD_SCORES
+outputs:
+  - datasphere-results/qwen3-8b-no-thinking-paul-graham-multiset-mask-san-francisco
+env:
+  vars:
+    - HF_HUB_OFFLINE: "1"
+    - TRANSFORMERS_OFFLINE: "1"
+  python:
+    type: manual
+    version: "3.12"
+    requirements-file: datasphere/requirements-gpu.txt
+    pip:
+      extra-index-urls:
+        - https://download.pytorch.org/whl/cu118
+    local-paths:
+      - datasphere/job.py
+      - needle_in_haystack_with_mask.py
+      - retrieval_heads
+cloud-instance-types:
+  - g2.1

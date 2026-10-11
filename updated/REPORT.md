@@ -6,6 +6,14 @@
 
 ## Главное на текущий момент
 
+- Завершены оба **GLM-4.6V-Flash Paul Graham masking**:3740/3740 результатов.
+  [63 фигуры PNG/SVG и анализ](report-assets/glm4-6v-flash-paul-graham-mask/README.md).
+  Mass top10 снижает средний ROUGE-1/2/3 recall до69.09%, multiset —до98.01%.
+  Multiset bottom100 сохраняет100% recall, но все110 ответов обрываются
+  по лимиту256 с повторами; precision4.48%, F1 8.58% по исходному тексту.
+- Завершён **GLM-4.6V-Flash no-thinking detection survey**: 27/27, средний
+  ROUGE-1 recall99.79%, все EOS. Рейтинги1280 голов рассчитаны по всем27 случаям;
+  [анализ и10 графиков двух метрик](report-assets/glm4-6v-flash-no-thinking-survey/README.md).
 - Завершены два thinking masking-прогона на трёх корпусах до 48k: **504 результата**.
   Анализ выявил 116 завершений по лимиту, из них 109 с незакрытым think.
 - Реализован no-thinking адаптер **тех же весов Qwen3-8B**. Thinking выключается
@@ -16,8 +24,170 @@
   **1400/1400 результатов**, все исходные JSON скачаны и проверены.
 - Для этих 1400 ответов отдельно посчитаны ROUGE-1/2/3, их среднее и точное
   совпадение эталонной фразы; построены **12 фигур в PNG и SVG**.
-- Новый masking top5–40 по **новому no-thinking mass-рейтингу** отправлен на запуск
-  на A100. Его результаты пока не включены в отчёт.
+- Завершён masking top5–40 по **новому no-thinking mass-рейтингу** на A100:
+  **1800/1800 результатов**. Итоговые оценки и таблицы добавлены в раздел 4.
+- Завершён Ministral 3 8B BF16 context-only detection survey: **27/27**, средний
+  ROUGE86.81; **23 случая >50** вошли в рейтинги1088 голов. Готовы графики
+  [top-15, карты слоёв/голов, распределения и корреляции](report-assets/ministral3-8b-context-only-survey/README.md).
+- Завершены оба Ministral Paul Graham masking-прогона: **3740/3740 результатов**.
+  [Галереи attention mass и multiset](report-assets/ministral3-8b-paul-graham-mask/README.md):
+  63 фигуры в PNG/SVG, включая карты всех условий и парные изменения против baseline.
+
+## GLM-4.6V-Flash: Paul Graham masking
+
+Оба задания SUCCESS10 октября2026: mass `bt1cskrr10furlk74bdu`17:50:21 МСК,
+multiset `bt1af8nq5baf9a9t6b6f`18:53:49 МСК. Исходные JSON/логи скачаны.
+По1870 уникальных результатов,34 complete manifests; та же сетка и masking
+протокол, что у Ministral:11длин1000–30000 ×10глубин ×17условий.
+Baseline + top/bottom5,10,15,20,40,60,80,100;256токенов,BF16/A100,Flash,
+context-only,штатный no-thinking,seed42. Legacy_uniform —только Q decode.
+Заблокированные головы точно совпадают с frozen GLM survey ranking.
+Все110 prompt-хэшей парные между условиями и рейтингами; baseline token IDs
+совпадают в110/110. Сгенерированных think-блоков нет.
+
+| Условие | Mass: средний ROUGE-1/2/3 recall | Multiset: средний ROUGE-1/2/3 recall |
+|---|---:|---:|
+| Baseline | 100.00 | 100.00 |
+| Top5 | 98.34 | 100.00 |
+| Top10 | 69.09 | 98.01 |
+| Top15 | 56.62 | 89.36 |
+| Top20 | 46.56 | 73.41 |
+| Top40 | 16.78 | 82.32 |
+| Top60 | 17.18 | 60.06 |
+| Top80 | 17.73 | 40.24 |
+| Top100 | 14.61 | 17.72 |
+
+Mass сильнее снижает извлечение уже при top10. При top100 exact0% у обоих,
+типично остаётся только «Eat a sandwich». Зависимость не строго монотонная;
+multiset top40 лучше top20. Все top-ответы EOS, не обрывы по лимиту.
+Mass:1870 EOS. Bottom5–80 recall/exact100%; bottom100 recall91.30%,
+exact68.18% по исходным ответам.
+
+Multiset:1505 EOS +365 max_new_tokens, все обрывы в bottom40/60/80/100:
+56/106/93/110 соответственно. **Bottom100 recall/exact100% скрывает повторы**:
+precision4.48%, F1 8.58%, все110 ответов256токенов. Baseline precision67.20%
+и F1 80.06% сами по себе занижены GLM box-маркерами в102/110 ответах.
+Диагностическая замена маркеров пробелами даёт baseline100% всех метрик;
+multiset bottom100 всё ещё precision5.73%, F1 10.83%.
+Это не только артефакт разметки, а потеря краткости/остановки.
+Нормализованные оценки не заменяют исходные score и основные графики.
+
+Все100 multiset bottom100 голов имеют нулевой detection score и относятся
+к слоям36–39. Это конкретный выбор из924 нулевых голов при стабильном
+tie-order, а не универсальный эффект любых «неретривальных»100голов.
+
+![GLM: сравнение mass и multiset, top и bottom](report-assets/glm4-6v-flash-paul-graham-mask/plots/ranking_comparison.png)
+
+[Полная галерея](report-assets/glm4-6v-flash-paul-graham-mask/README.md),
+[подробный анализ и оговорки](report-assets/glm4-6v-flash-paul-graham-mask/ANALYSIS.md),
+[mass](report-assets/glm4-6v-flash-paul-graham-mask/attention-mass/README.md),
+[multiset](report-assets/glm4-6v-flash-paul-graham-mask/multiset/README.md).
+Как у Ministral:63 PNG +63 SVG, CSV/JSON, heatmaps каждой маски,
+сравнения по длине/глубине/k, парные delta-карты, диагностика обрывов.
+Воспроизведение: `.venv/bin/python plot_ministral_paul_graham_mask.py --model glm`.
+Один seed; сравнение разных моделей не строго парное из-за токенизаторов.
+Код генерации и исходные результаты не менялись, новых jobs не запускалось.
+
+## GLM-4.6V-Flash: графики голов
+
+Job `bt13713fk021qlqi1imi` завершился SUCCESS 10 октября в15:29:05 МСК.
+Исходные результаты и логи скачаны; повторная агрегация точно совпала.
+Context-only prompt, штатный no-thinking, A100/BF16, лимит256,
+8000/16000/30000 ×15/45/75% ×3кейса. Все27 EOS,19–36 токенов,
+сгенерированных think-блоков нет. Средний ROUGE-1 recall99.79%;
+26 ответов100%, один94.44% (detect-3/30k/45% — пропущено «Because»).
+Все27 проходят >50 и вошли в рейтинги40слоёв ×32Q-головы.
+
+Лидеры mass: **26-21,26-26,5-0,17-27,23-3**.
+Лидеры multiset: **26-21,26-26,5-3,5-0,27-31**.
+В галерее только multiset и attention mass; multiset/mass Pearson0.7164,
+Spearman0.7649. Пересечение top20 —8голов;924 нулевых multiset scores,
+у mass нулевых нет. Это наблюдение внимания, не доказательство причинной
+важности: GLM masking ещё не проводился.
+
+![GLM: attention-mass карта всех голов](report-assets/glm4-6v-flash-no-thinking-survey/needle_attention_mass_v1/head_heatmap.png)
+
+![GLM: сравнение конкретных голов](report-assets/glm4-6v-flash-no-thinking-survey/metric-correlations/pairwise_heads.png)
+
+[Полная галерея10 графиков двух метрик, top-15 и общая диагностика](report-assets/glm4-6v-flash-no-thinking-survey/README.md).
+Средний precision79.60%, F1 87.75% считаются по исходным ответам, включая
+box-маркеры в9 случаях; не следует принимать эту разметку за провалы retrieval.
+Сравнение с Ministral описательное, не строго парное: разные токенизаторы
+могут давать разные контексты при одинаковом nominal length.
+
+## Ministral 3 8B: графики голов
+
+Новый context-only prompt, без thinking, A100/BF16, лимит256; все ответы EOS.
+Графики построены теми же скриптами, что для Qwen, по23 выбранным случаям.
+Здесь retrieval score, не ROUGE. Индексация голов начинается с0.
+
+![Ministral: top-15 attention-mass голов](report-assets/ministral3-8b-context-only-survey/needle_attention_mass_v1/top_heads.png)
+
+![Ministral: attention-mass карта слоёв и голов](report-assets/ministral3-8b-context-only-survey/needle_attention_mass_v1/head_heatmap.png)
+
+![Ministral: конкретные головы в разных метриках](report-assets/ministral3-8b-context-only-survey/metric-correlations/pairwise_heads.png)
+
+Полная галерея всех трёх метрик и детали расчёта:
+[Ministral context-only survey](report-assets/ministral3-8b-context-only-survey/README.md).
+Detection scores сами по себе не доказывают причинную важность голов;
+завершённые masking-прогоны описаны ниже.
+
+## Ministral 3 8B: Paul Graham masking
+
+Оба задания завершились успешно 10 октября: mass `bt1a99kjkl896agbasll`
+в 14:47:31 МСК, multiset `bt1r9dq8r7o220va20k5` в 14:23:27 МСК.
+Скачаны исходные JSON и логи. Проверено по1870 уникальных результатов:
+11 длин1000–30000 ×10 глубин ×17 условий (baseline и top/bottom
+k=5,10,15,20,40,60,80,100). Один context seed42; все110 prompt-хэшей
+совпадают между условиями и между рейтингами.
+
+Context-only prompt, BF16/A100, Flash prefill/decode, лимит256.
+Маска legacy_uniform применяется только при decode к выбранным Q-головам;
+K/V и prefill не маскируются. Рейтинги взяты из context-only detection survey.
+ROUGE пересчитан тем же кодом, что для Qwen, по сохранённому model_response.
+Исходные score/JSON не изменены. Среднее ROUGE-1/2/3 recall — сводная,
+не стандартная ROUGE-метрика; exact — наличие полной нормализованной фразы.
+
+| Условие | Mass: среднее ROUGE-1/2/3 | Multiset: среднее ROUGE-1/2/3 |
+|---|---:|---:|
+| Baseline | 100.00 | 100.00 |
+| Top5 | 99.00 | 100.00 |
+| Top10 | 69.42 | 100.00 |
+| Top15 | 63.75 | 100.00 |
+| Top20 | 66.11 | 96.50 |
+| Top40 | 58.22 | 84.23 |
+| Top60 | 26.67 | 62.05 |
+| Top80 | 23.78 | 26.38 |
+| Top100 | 16.58 | 11.28 |
+| Bottom5–100, каждое условие | 100.00 | 100.00 |
+
+Multiset: все1870 ответов EOS. Mass:1695 EOS и175 завершений по лимиту256:
+bottom60 —10, bottom80 —61, bottom100 —104. Обрывы сохранены в оценках и
+отражены на диагностических графиках. **Bottom100% recall/exact не означает
+отсутствие деградации:** ответы могут содержать иголку, а затем повторения/лишний
+текст. Общая фигура поэтому показывает также precision и F1. Baseline содержит
+полную эталонную фразу во всех110 случаях каждого задания. Bottom-маскирование
+сохранило100% и по exact match; top100 —0% exact для обоих рейтингов.
+Mass-рейтинг сильнее снижает качество уже при top10; зависимость не строго
+монотонная, например top20 немного лучше top15. Это результат конкретной
+иголки/сетки/одного seed, а не универсальная специализация голов.
+С Qwen нельзя сравнивать как строго парный эксперимент: отличаются модель,
+prompt, сетка длин и рейтинги.
+
+При **mass bottom100** среднее precision всего7.97%, F1 —13.29%, несмотря
+на100% recall. У multiset bottom100 precision98.69%, F1 —99.17%.
+Это существенно меняет интерпретацию bottom-контроля: mass-bottom головы
+могут влиять на остановку/краткость ответа, сохраняя извлечение нужной фразы.
+Это предположение по данному прогону, не доказательство функции конкретных голов.
+
+![Ministral: сравнение двух рейтингов при top/bottom masking](report-assets/ministral3-8b-paul-graham-mask/plots/ranking_comparison.png)
+
+Галереи: [attention mass](report-assets/ministral3-8b-paul-graham-mask/attention-mass/README.md),
+[multiset](report-assets/ministral3-8b-paul-graham-mask/multiset/README.md).
+Каждая содержит17 наборов тепловых карт (ROUGE-1/2/3, среднее, exact),
+5 сравнений по длине/глубине/k, 8 парных delta-карт и диагностику генераций;
+вместе с общей фигурой —63 PNG и63 SVG. CSV и JSON оценок лежат рядом.
+Повторное построение: `.venv/bin/python plot_ministral_paul_graham_mask.py`.
 
 ## 1. Протокол актуальных no-thinking экспериментов
 
@@ -133,11 +303,13 @@ Exact phrase — доля ответов с полной эталонной фр
 не штрафует лишний текст и не проверяет отрицание/согласие с процитированным
 фактом. Один корпус и одна needle ограничивают переносимость выводов.
 
-## 4. Текущий эксперимент: новый mass-рейтинг, top5–40
+## 4. Завершённый эксперимент: новый mass-рейтинг, top5–40
 
 [Конфиг](datasphere/qwen3-8b-no-thinking-paul-graham-new-mass-top5-40-mask.yaml).
 Задание **bt1fsj89jp523daa3n8g**, создано 10 октября в **00:40 МСК**.
-Статус в этом отчёте: отправлено на запуск; результаты ещё не анализировались.
+**SUCCESS**, завершено в **03:03:41 МСК**; от создания — **2 ч 23 мин 32 с**.
+Все 1800 исходных JSON скачаны; подтверждены полная сетка, одинаковые prompt
+SHA256 между условиями и воспроизведение исходного ROUGE-1 пересчётом.
 
 От предыдущего протокола меняются рейтинг и размеры маски:
 
@@ -147,14 +319,57 @@ Exact phrase — доля ответов с полной эталонной фр
 - **1800 генераций**, отдельная папка результатов
   `datasphere-results/qwen3-8b-no-thinking-paul-graham-new-mass-top5-40-mask-san-francisco`.
 
-Предварительный ориентир — около 2 часов, диапазон порядка 2–3 часов с подготовкой;
-это прогноз, не замер. Старый baseline занимал 9.37 мин на 200 генераций,
-top20 — 14.09 мин, top40 — 23.13 мин. Новый рейтинг меняет ответы и их длину,
-поэтому время нельзя предсказывать только по числу точек сетки.
+### Итоговые оценки: новый рейтинг
 
-Цель — уточнить переход между сохранением извлечения и деградацией при меньших
-масках, уже без смешения thinking-модели в survey и no-thinking-модели в masking.
-После завершения нужен тот же независимый пересчёт ROUGE-1/2/3 и exact phrase.
+Метрики и нормализация совпадают с разделом 3; по 200 примеров на строку.
+
+| Маска | ROUGE-1 | ROUGE-2 | ROUGE-3 | Среднее 1/2/3 | Exact phrase, % |
+|---|---:|---:|---:|---:|---:|
+| baseline | 100.00 | 99.91 | 99.85 | 99.92 | 99.5 |
+| top5 | 99.67 | 99.50 | 99.50 | 99.56 | 99.5 |
+| top10 | 99.50 | 99.00 | 99.00 | 99.17 | 99.0 |
+| top15 | 85.54 | 79.64 | 78.05 | 81.08 | 69.0 |
+| top20 | 60.92 | 40.55 | 38.20 | 46.55 | 16.0 |
+| top25 | 44.67 | 16.64 | 14.45 | 25.25 | 3.5 |
+| top30 | 41.71 | 13.50 | 11.45 | 22.22 | 1.5 |
+| top35 | 39.08 | 11.27 | 9.75 | 20.04 | 0.0 |
+| top40 | 34.96 | 5.09 | 3.15 | 14.40 | 0.0 |
+
+| Маска | Время генераций, мин | Достигнут лимит 256, случаев |
+|---|---:|---:|
+| baseline | 9.38 | 0 |
+| top5 | 9.30 | 1 |
+| top10 | 9.55 | 1 |
+| top15 | 11.22 | 3 |
+| top20 | 17.19 | 22 |
+| top25 | 19.29 | 17 |
+| top30 | 18.87 | 7 |
+| top35 | 19.42 | 4 |
+| top40 | 19.84 | 0 |
+
+Отключение 5–10 голов почти не меняет средние оценки в этой сетке.
+Заметная деградация возникает между top10 и top20; при top25–40 полная
+эталонная фраза практически исчезает. При top40 все ответы завершились до
+лимита, но качество осталось низким: деградацию нельзя объяснить только
+обрывом генерации. Это вывод по одному needle/корпусу, не универсальный порог.
+
+При top20 среднее ROUGE-1/2/3 нового рейтинга — **46.55 против 64.71** у старого;
+exact phrase — **16% против 45%**. При top40 среднее — **14.40 против 12.73**.
+То есть новый рейтинг не усиливает деградацию монотонно при каждом k.
+Сравниваются разные наборы голов, а не только один параметр thinking.
+
+[Полные таблицы](report-assets/qwen3-8b-no-thinking-paul-graham-new-mass-top5-40/README.md):
+для всех пяти метрик — средние по длине, по глубине и отдельные таблицы
+«длина × глубина» для baseline и каждого top-k.
+[cases.csv](report-assets/qwen3-8b-no-thinking-paul-graham-new-mass-top5-40/cases.csv),
+[summary.csv](report-assets/qwen3-8b-no-thinking-paul-graham-new-mass-top5-40/summary.csv),
+[скрипт](tabulate_new_mass_mask.py). Исходные JSON и рейтинги не изменены.
+
+[Галерея графиков нового прогона](report-assets/qwen3-8b-no-thinking-paul-graham-new-mass-top5-40/visualizations/README.md):
+9 отдельных фигур с тепловыми картами для baseline и top5–40 и 5 сравнительных
+фигур по метрикам, каждая в PNG и SVG. Построены по тем же 1800 исходным JSON.
+
+![Новый mass-рейтинг: среднее ROUGE по длине, глубине и числу голов](report-assets/qwen3-8b-no-thinking-paul-graham-new-mass-top5-40/visualizations/plots/comparison_rouge123_mean_recall.png)
 
 ## 5. Предыдущие thinking-прогоны до 48k
 

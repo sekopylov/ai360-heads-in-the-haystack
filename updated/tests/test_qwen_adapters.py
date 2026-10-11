@@ -111,7 +111,7 @@ class QwenAdapterTests(unittest.TestCase):
                             rope_parameters={'rope_type': 'default', 'rope_theta': 1000000.0})
         with tempfile.TemporaryDirectory() as folder:
             Qwen3ForCausalLM(config).save_pretrained(folder)
-            with patch('retrieval_heads.models.qwen_common.AutoTokenizer.from_pretrained',
+            with patch('retrieval_heads.models.transformers_common.AutoTokenizer.from_pretrained',
                        return_value=ToyTokenizer()):
                 native = Qwen3EightBAdapter(model_id=folder, device_map='cpu', dtype='float32')
                 yarn = Qwen3EightBYarnAdapter(model_id=folder, device_map='cpu', dtype='float32')
@@ -146,7 +146,7 @@ class QwenAdapterTests(unittest.TestCase):
                             rope_parameters={"rope_type": "default", "rope_theta": 1000000.0})
         with tempfile.TemporaryDirectory() as folder:
             Qwen3ForCausalLM(config).save_pretrained(folder)
-            with patch("retrieval_heads.models.qwen_common.AutoTokenizer.from_pretrained",
+            with patch("retrieval_heads.models.transformers_common.AutoTokenizer.from_pretrained",
                        return_value=ToyTokenizer()):
                 native = Qwen3EightBAdapter(model_id=folder, device_map="cpu", dtype="float32")
                 extended = Qwen3EightBNoYarn64KAdapter(
@@ -182,8 +182,8 @@ class QwenAdapterTests(unittest.TestCase):
                             eos_token_id=63, attention_dropout=0.0)
         config._attn_implementation = "sdpa"
         model = Qwen3ForCausalLM(config).eval()
-        with patch("retrieval_heads.models.qwen_common.resolve_model_source", return_value=("fixture", True)), \
-             patch("retrieval_heads.models.qwen_common.AutoTokenizer.from_pretrained", return_value=ToyTokenizer()) as tokenizer_load, \
+        with patch("retrieval_heads.models.transformers_common.resolve_model_source", return_value=("fixture", True)), \
+             patch("retrieval_heads.models.transformers_common.AutoTokenizer.from_pretrained", return_value=ToyTokenizer()) as tokenizer_load, \
              patch.object(Qwen3ForCausalLM, "from_pretrained", return_value=model) as model_load:
             adapter = adapter_class(device_map="cpu", dtype="float32", attention_scope=attention_scope)
         self.assertTrue(tokenizer_load.call_args.kwargs["local_files_only"])
@@ -381,7 +381,8 @@ class QwenAdapterTests(unittest.TestCase):
         self.assertEqual(legacy._discover_attention_layers(), (1,))
         result = legacy._generation_result(Prompt(None, [2]), [9, 62], "newline")
         self.assertEqual(result.text, "word9")
-        self.assertIsNone(result.raw_text)
+        self.assertEqual(result.raw_text, "word9 \n")
+        self.assertEqual(result.finish_reason, "newline")
 
 
 if __name__ == "__main__":

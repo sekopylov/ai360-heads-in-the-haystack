@@ -1,0 +1,47 @@
+name: ministral3-8b-no-thinking-detection-smoke
+desc: Three short offline BF16 Ministral 3 detection cases on A100, all retrieval metrics and artifact validation
+flags:
+  - attach-project-disk
+cmd: >
+  bash -c '
+  python3 retrieval_head_detection.py
+  --adapter ministral3_8b_no_thinking
+  --model ${DS_PROJECT_HOME}/c0/models/mistralai/Ministral-3-8B-Instruct-2512-BF16
+  --output-root datasphere-results/ministral3-detection-smoke
+  --haystack-root ${DETECTION_DATA}
+  --dtype bfloat16
+  --device-map cuda:0
+  --prefill-attention sdpa_flash
+  --attention-scope all_decode_tokens
+  --lengths 1000
+  --depths 50
+  --max-new-tokens 128
+  --retrieval-metrics legacy,needle_token_multiset_v1,needle_attention_mass_v1
+  --context-seed 42
+  && python3 aggregate_head_scores.py
+  --run datasphere-results/ministral3-detection-smoke --all-cases
+  && python3 validate_ministral_smoke.py
+  --run datasphere-results/ministral3-detection-smoke
+  '
+inputs:
+  - data/haystack_for_detect: DETECTION_DATA
+outputs:
+  - datasphere-results/ministral3-detection-smoke
+env:
+  vars:
+    - HF_HUB_OFFLINE: "1"
+    - TRANSFORMERS_OFFLINE: "1"
+  python:
+    type: manual
+    version: "3.12"
+    requirements-file: datasphere/requirements-gpu.txt
+    pip:
+      extra-index-urls:
+        - https://download.pytorch.org/whl/cu118
+    local-paths:
+      - retrieval_head_detection.py
+      - aggregate_head_scores.py
+      - datasphere/validate_ministral_smoke.py
+      - retrieval_heads
+cloud-instance-types:
+  - g2.1

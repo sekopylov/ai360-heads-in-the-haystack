@@ -87,6 +87,98 @@ fallback скачивает в кеш job, но не сохраняет моде
 Смена папки хранения не требует смены адаптера. Произвольная модель другой
 архитектуры потребует отдельного адаптера, одного изменения `--model` недостаточно.
 
+### Адаптер GLM-4.6V-Flash без thinking
+
+В detection/masking CLI доступен `--adapter glm4_6v_flash_no_thinking`;
+модель задавать явно: `--model zai-org/GLM-4.6V-Flash` или путь к локальным весам.
+Он заменяет прежний `glm4_1v_9b` (и более ранний `glm4_9b_0414`).
+
+Адаптер использует нативный `Glm4vForConditionalGeneration`, без remote code и
+без наследования от Qwen. Это мультимодальная модель, но эксперименты передают
+только текст. Наблюдаются и маскируются Q-головы `model.language_model`,
+vision encoder не участвует в forward и не входит в eligible heads.
+Prompt context-only: краткий ответ исключительно по данному тексту, без
+идентификации произведения. Prompt Qwen и существующий Ministral не меняются.
+
+Официальный шаблон GLM-4.6V-Flash поддерживает `enable_thinking=False`:
+адаптер всегда передаёт его в `apply_chat_template`. Сам шаблон добавляет
+`/nothink` к пользовательскому сообщению и `<think></think>\n` в конец
+assistant prefix. Адаптер не вставляет самодельные `<answer>`/think-префиксы,
+не запрещает токены logits processor и не меняет greedy decode.
+Если шаблон не сформировал закрытый пустой think-блок, `encode_prompt`
+завершается ошибкой: старый tokenizer GLM-4.1V не должен молча включать thinking.
+`raw_text` содержит весь сгенерированный вывод; `text` поддерживает обычный
+нетегированный ответ и выделение ответа, если модель всё же вернула think/answer
+теги. Незавершённые мысли дают пустой ответ и `final_answer_started=False`.
+No-thinking выбран штатным шаблоном; реальное поведение checkpoint под masking
+ещё нужно подтвердить GPU smoke. Пустой think-блок относится к prompt, не выходу.
+Detection по умолчанию учитывает все decode-токены (`all_decode_tokens`);
+поддержан также `--attention-scope answer_only` для наблюдений вне мыслей.
+Этот параметр не переключает thinking и не ограничивает masking ответом.
+
+Официальная конфигурация: 40 слоёв ×32 Q-головы =1280 eligible heads,
+2 KV-головы, partial/interleaved M-RoPE, rope_theta500000, BF16.
+Сохраняется лимит checkpoint131072
+для полного prompt + выхода, без автоматического расширения/YaRN.
+Учитываются все EOS ID из конфигурации модели и generation config, а не только
+единственный tokenizer EOS. Поддерживаются observed eager detection,
+`legacy_uniform`/`zero_output` на eager decode и Q-zeroing `legacy_uniform`
+на Flash masking decode. Prefill не маскируется; GQA K/V не изменяются.
+
+Проверено локально на tiny GLM4V с реальными слоями Transformers; Flash проверяется
+эмуляцией CPU backend. Точный официальный Jinja-шаблон сохранён в тестовой fixture
+и проверен с включённым/выключенным thinking. Реальный checkpoint/tokenizer
+и GPU ещё не проверены; веса не скачивались.
+Новых DataSphere jobs для GLM автоматически не запускается.
+
+Официальные источники:
+[checkpoint config](https://huggingface.co/zai-org/GLM-4.6V-Flash/blob/main/config.json),
+[chat template](https://huggingface.co/zai-org/GLM-4.6V-Flash/blob/main/chat_template.jinja).
+
+### GLM-4.6V-Flash no-thinking survey
+
+GLM-4.6V-Flash survey: `datasphere/glm4-6v-flash-no-thinking-survey.yaml` — тот же
+27-кейсный протокол, что `ministral3-8b-survey.yaml`: 8k/16k/30k, глубины15/45/75,
+три метрики, all_decode_tokens, context_seed42, max256, BF16/A100, Flash prefill,
+observed eager decode и default aggregation. Отличаются только модель/адаптер/output.
+Веса должны быть в `/home/jupyter/project/c0/models/zai-org/GLM-4.6V-Flash`.
+Первый job `bt1shu6of4mjrlodpo02` завершился ERROR; пользователь сообщил об
+отсутствовавших весах и скачал их. По явному запросу повторно запущено
+задание `bt13713fk021qlqi1imi` 10 октября2026 в15:20 МСК;
+не запускать повторно ради просмотра статуса. Выход:
+`datasphere-results/glm4-6v-flash-no-thinking-context-only-survey`.
+
+### Detection smoke для Ministral 3 8B без thinking
+
+`datasphere/ministral3-detection-smoke.yaml` запускает три исходных detection-кейса
+с длиной 1000, глубиной 50% и лимитом 128 новых токенов. A100 (`g2.1`),
+BF16, Flash prefill и наблюдаемый eager decode; masking не запускается.
+Веса и tokenizer должны быть заранее скачаны в
+`/home/jupyter/project/c0/models/mistralai/Ministral-3-8B-Instruct-2512-BF16`.
+Offline-режим исключает скачивание checkpoint внутри job.
+
+```bash
+YC_AUTH=yc .venv-datasphere/bin/python datasphere/cli.py project job execute \
+  -p bt1u5v72b71eesdhp9k5 -c datasphere/ministral3-detection-smoke.yaml
+```
+
+Результаты сохраняются в `datasphere-results/ministral3-detection-smoke/`.
+После detection собираются все три метрики и выполняется
+`datasphere/validate_ministral_smoke.py`: проверка трёх завершённых случаев,
+непустых ответов, 1088 голов в каждой метрике, конечных значений, положительной
+наблюдаемой needle attention mass хотя бы в одном случае и полных histories.
+`smoke_validation.json` с `passed=true` подтверждает прохождение проверок.
+ROUGE выводится отдельно; строгий порог качества ответа не является условием smoke.
+Агрегация использует `--all-cases` только для проверки работоспособности и
+не является исследовательским рейтингом голов.
+
+10 октября 2026 smoke успешно прошёл в job `bt165eg77pjsees216db`, исходные JSON
+скачаны, `passed=true`. ROUGE по трём кейсам: 95.0, 100.0, 83.33;
+needle mass qualifying steps: 23, 36, 28. Все ответы достигли лимита 128 токенов,
+поэтому для исследовательских прогонов нужен больший generation budget.
+Проверены реальные BF16-веса, Mistral tokenizer, cached decode и capture всех
+1088 голов; длинные контексты и GPU masking этим smoke не проверяются.
+
 ### Smoke для Qwen3-4B-Thinking-2507
 
 #### Онлайн-метрики и несколько метрик за один прогон

@@ -1,4 +1,6 @@
 from .base import GenerationResult, ModelAdapter, Prompt
+from .ministral3 import Ministral3EightBNoThinkingAdapter
+from .glm4v import Glm46VFlashNoThinkingAdapter
 from .qwen35 import Qwen35Adapter
 from .qwen3 import Qwen3Adapter
 from .qwen3_8b import (
@@ -15,6 +17,8 @@ __all__ = [
     "GenerationResult",
     "ModelAdapter",
     "Prompt",
+    "Ministral3EightBNoThinkingAdapter",
+    "Glm46VFlashNoThinkingAdapter",
     "Qwen35Adapter",
     "Qwen3Adapter",
     "Qwen3EightBAdapter",
