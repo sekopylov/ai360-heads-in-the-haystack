@@ -183,7 +183,10 @@ display((simple[simple["mask"].isin(["none", "top"])].groupby("heads")["correct"
 md("""
 ## 2–4. Усложнения: перефраз вопроса (A), близнецы (B), шум (N)
 
-Три оси на одном рисунке, цвет — ось. Уровень 0 у всех общий: дословный вопрос без вставок (A0).
+Два рисунка. На первом — метрика авторов без маски по уровням каждой оси. На втором — ответы: строка — ось и мера, столбец — маска, внутри панели на каждый уровень стопка классов, как в ноутбуках осей. Легенды справа. Шесть классов каждой градации идут тремя парами от лучшей к худшей: у каждой пары свой цвет по градиенту оси (A: тёмно-фиолетовый → пурпурный → розовый; B: тёмно-бирюзовый → зелёный → жёлто-зелёный; N: красно-коричневый → оранжевый → жёлтый), второй класс в паре заштрихован. В легендах те же три ступени показаны серым, потому что схема одна для всех осей. Первый уровень у всех общий: дословный вопрос без вставок (A0).
+
+- **Фактологическая точность** (строки «факты») — класс ответа по ключевым фактам: верно, смешано, частично, путаница, шум, иное.
+- **Точность по фразам** (строки «фразы») — как записан ответ относительно эталонной фразы: точная фраза, те же части в другом порядке, перефраз, неполный ответ, неполный с заменами, нет частей ответа.
 
 | Ось | Уровень 1 | Уровень 2 | Уровень 3 | Уровень 4 |
 |---|---|---|---|---|
@@ -200,60 +203,112 @@ md("""
 Оговорки. Снижение скора на оси A — следствие формулировки ответа: на дословных ответах он одинаков на всех уровнях (0.67–0.68). На оси B при 40 головах близнецы, наоборот, снижают долю верных по фактам (71% → 56–59% на уровнях 1–3); выигрыш по фактам есть только при 60 головах.
 """)
 code("""
-from matplotlib.lines import Line2D
+from matplotlib.colors import to_hex, to_rgb
+
+from matplotlib.patches import Patch
 
 AXES = {"A": ("перефраз вопроса", VIOLET[7], axis_a, heads_a), "B": ("близнецы", "#2a9d5c", axis_b, heads_b), "N": ("шум", "#f0871f", axis_n, heads_n)}
 steps = lambda df: sorted(df["level"].unique())          # уровни оси по порядку, первый — A0
-dashed = (0, (3, 2))
+tint = lambda color, fade: to_hex([c + (1 - c) * fade for c in to_rgb(color)])    # цвет оси, осветлённый на долю fade
+REST = "#d9d7d0"                                          # последний класс: ни фактов, ни частей ответа
 
-fig, axes = figure(1, 3, 3.9)
+# классы по фактам и структуры по фразам — те же, что в ноутбуках осей, от лучшего к худшему
+FACT_CLASSES = {"correct": "верно: все ключевые факты", "mixed": "смешано: ещё и факты вставок", "partial": "частично: не все факты",
+                "confusion": "путаница: факты близнецов", "noise": "шум: факты шума", "other": "иное: ни одного факта"}
+PHRASES = {"exact": "точная фраза", "reordered": "те же части, другой порядок", "reworded": "перефраз: форма слова, синоним",
+           "cut": "неполный, остальное дословно", "cut_reworded": "неполный с заменами", "none": "нет частей ответа"}
+# три пары классов — три цвета по градиенту оси, от тёмного (лучшая пара) к светлому; у каждой оси свой градиент
+PAIR_COLORS = {"A": ["#3b1a8f", "#c026d3", "#f6b4dc"],     # тёмно-фиолетовый → пурпурный → розовый
+               "B": ["#0b5d4f", "#2a9d5c", "#cbe86b"],     # тёмно-бирюзовый → зелёный → жёлто-зелёный
+               "N": ["#8f2d0e", "#f0871f", "#fcd657"],     # красно-коричневый → оранжевый → жёлтый
+               None: [tint(GREY, 0.0), tint(GREY, 0.45), tint(GREY, 0.80)]}   # общая легенда: те же три ступени серым
+
+def looks(colors, n):
+    # вид каждого класса градации: классы идут парами одного цвета, второй в паре — со штриховкой
+    out = []
+    for i in range(n):
+        step = min(i // 2, len(colors) - 1)
+        if i % 2 == 0:
+            out.append(dict(facecolor=colors[step], edgecolor=t.surface, linewidth=0.6))
+        else:
+            # штрихи цветом фона на тёмных ступенях и тёмным цветом градиента на светлой, иначе их не видно
+            out.append(dict(facecolor=colors[step], hatch="////", edgecolor=t.surface if step < len(colors) - 1 else colors[0], linewidth=0))
+    return out
+
+def gradation(ax, part, column, order, colors, levels):
+    # стопка долей классов на каждый уровень
+    share = (part.groupby("level")[column].value_counts(normalize=True).unstack(fill_value=0) * 100).reindex(index=levels, columns=list(order), fill_value=0)
+    bottom = np.zeros(len(levels))
+    for name, look in zip(order, looks(colors, len(order))):
+        ax.bar(np.arange(len(levels)), share[name], bottom=bottom, width=0.7, **look)
+        bottom += share[name].to_numpy()
+    ax.set_xticks(np.arange(len(levels)), levels)
+    ax.tick_params(axis="x", length=0, labelsize=t.font - 1.5)
+    ax.set_ylim(0, 100)
+    plots.round_axis(ax, "y", 0, 100, 50)
+
+# --- метрика авторов без маски: копирование из иглы и из вставок, по уровням каждой оси
+fig, axes = figure(1, 3, 2.7)
 tables = {}
-for name, (label, color, df, heads_of) in AXES.items():
+for ax, (name, (label, color, df, heads_of)) in zip(axes, AXES.items()):
     levels = steps(df)
-    xs = range(len(levels))
-    # метрика авторов без маски: копирование из иглы и, где есть вставки, из вставок
-    score = pd.Series(heads_of("copy_count")).reindex(levels)
-    axes[0].plot(xs, score, color=color, marker="o")
-    tables[(name, "скор копирования")] = score.set_axis(list(xs))
+    heads = pd.DataFrame({"из иглы": pd.Series(heads_of("copy_count"))}).reindex(levels)
     if name != "A":
-        inserts = pd.Series(heads_of("copy_competing")).reindex(levels)
-        axes[0].plot(xs, inserts, color=color, marker="s", linestyle=dashed)
-        tables[(name, "копирование из вставок")] = inserts.set_axis(list(xs))
-    # ответы под масками лучших голов: верные по фактам и точная фраза
-    for column, ax in (("correct", axes[1]), ("exact", axes[2])):
-        for run, look in (("top40", dict(marker="s", linestyle=dashed)), ("top60", dict(marker="o"))):
-            values = df[df["run"] == run].groupby("level")[column].mean().reindex(levels) * 100
-            ax.plot(xs, values, color=color, **look)
-            tables[(name, f"{'верно' if column == 'correct' else 'точная фраза'}, {MASKS[run]}")] = values.set_axis(list(xs))
-
-for ax, title, ylabel in ((axes[0], "Головы без маски", "retrieval score 20 лучших голов"),
-                          (axes[1], "Ответы: факты", "верные по фактам, %"),
-                          (axes[2], "Ответы: слова", "точная фраза, %")):
-    ax.set_xticks(range(5), ["A0", "1", "2", "3", "4"])
-    ax.set_xlim(-0.25, 4.25)
+        heads["из вставок"] = pd.Series(heads_of("copy_competing")).reindex(levels)
+    width = 0.84 / len(heads.columns)
+    for i, (column, shade) in enumerate(zip(heads.columns, [color, tint(color, 0.55)])):
+        ax.bar(np.arange(len(levels)) + (i - (len(heads.columns) - 1) / 2) * width, heads[column], width=width * 0.92, color=shade)
+        tables[(name, f"копирование {column}")] = heads[column].set_axis(range(len(levels)))
+    ax.set_xticks(np.arange(len(levels)), levels)
+    ax.tick_params(axis="x", length=0)
+    ax.set_ylim(0, 0.8)
+    plots.round_axis(ax, "y", 0, 0.8, 0.2)
     ax.set_xlabel("уровень оси")
-    ax.set_ylabel(ylabel)
-    plots.titles(ax, title)
-axes[0].set_ylim(0, 0.8)
-plots.round_axis(axes[0], "y", 0, 0.8, 0.2)
-for ax in axes[1:]:
-    ax.set_ylim(-3, 103)
-    plots.round_axis(ax, "y", 0, 100, 20)
+    ax.set_ylabel("retrieval score 20 лучших голов" if ax is axes[0] else "")
+    ax.set_title(f"{name}: {label}", loc="left", color=color, fontsize=t.font + 1.5)
+fig.legend(handles=[Patch(color=tint(GREY, 0.0), label="копирование из иглы"), Patch(color=tint(GREY, 0.55), label="копирование из вставок")],
+           loc="outside lower center", ncol=2)
+show(fig, "2a_axes_metric")
 
-# легенды под панелями: цвет — ось, вид линии — что измерено
-line = lambda **kw: Line2D([], [], color=GREY, **kw)
-colour = [Line2D([], [], color=color, marker="o", label=f"{name}: {label}") for name, (label, color, _, _) in AXES.items()]
-fig.legend(handles=colour, loc="outside lower center", ncol=3)
-axes[0].legend(handles=[line(marker="o", label="копирование из иглы"), line(marker="s", linestyle=dashed, label="копирование из вставок")],
-               loc="upper center", bbox_to_anchor=(0.5, -0.24), ncol=1, handlelength=3)
-for ax in axes[1:]:
-    ax.legend(handles=[line(marker="s", linestyle=dashed, label="маска 40 лучших голов"), line(marker="o", label="маска 60 лучших голов")],
-              loc="upper center", bbox_to_anchor=(0.5, -0.24), ncol=1, handlelength=3)
+# --- ответы: градация классов по уровням под каждой маской; строка — ось и мера, столбец — маска, легенды справа
+worded = {name: paraphrase.annotate(df) for name, (_, _, df, _) in AXES.items()}
+measures = (("answer_class", FACT_CLASSES, "факты"), ("structure", PHRASES, "фразы"))
+fig = plt.figure(figsize=(WIDTH, 8.6))
+grid = fig.add_gridspec(len(AXES) * len(measures), len(MASKS) + 1, width_ratios=[1] * len(MASKS) + [1.55])
+for a, (name, (label, color, _, _)) in enumerate(AXES.items()):
+    df = worded[name]
+    levels = steps(df)
+    for m, (column, order, short) in enumerate(measures):
+        row = a * len(measures) + m
+        for c, run in enumerate(MASKS):
+            ax = fig.add_subplot(grid[row, c])
+            gradation(ax, df[df["run"] == run], column, order, PAIR_COLORS[name], levels)
+            if row == 0:
+                ax.set_title(MASKS[run], loc="left", fontsize=t.font + 1)
+            if c == 0:
+                ax.set_ylabel(f"{name}: {short}", color=color, fontweight="bold")
+            else:
+                ax.set_yticklabels([])
+            if row == len(AXES) * len(measures) - 1:
+                ax.set_xlabel("уровень оси")
+            share = df[df["run"] == run].groupby("level")[column].value_counts(normalize=True).unstack(fill_value=0) * 100
+            for kind in order:
+                if kind in share:
+                    tables[(name, f"{short}: {order[kind]}, {MASKS[run]}")] = share[kind].reindex(levels).set_axis(range(len(levels)))
+
+# легенды справа: градация одна для всех осей, поэтому показана серым; цвет строки — ось
+for rows, (column, order, short), title in ((slice(0, 3), measures[0], "Фактологическая точность\\n(строки «факты»)"),
+                                            (slice(3, 6), measures[1], "Точность по фразам\\n(строки «фразы»)")):
+    side = fig.add_subplot(grid[rows, -1])
+    side.axis("off")
+    side.legend(handles=[Patch(label=name, **look) for name, look in zip(order.values(), looks(PAIR_COLORS[None], len(order)))],
+                title=title, loc="center left", bbox_to_anchor=(0.0, 0.5), alignment="left", handlelength=1.6, handleheight=1.1, fontsize=t.font - 1)
 show(fig, "2_axes_ABN")
 
 table = pd.DataFrame(tables).T.rename(columns={0: "A0"})
 table.index.names = ["ось", "величина"]
-display(table.round(3))
+pd.set_option("display.max_rows", 200)
+display(table.round(2))
 
 # к результату 2: на оси A точные фразы и верные ответы по всем уровням оси, и скор только на дословных ответах
 pooled = axis_a[axis_a["run"].isin(["none", "top40", "top60"])].groupby("run")[["exact", "correct"]].mean() * 100
@@ -274,12 +329,12 @@ md("""
 
 Две меры правильности, оттенок — маска:
 
-- **по фактам** (фиолетовый) — в ответе названы ключевые факты иглы и нет фактов вставок;
-- **по смыслу** (бирюзовый) — в ответе сохранены все части эталона: дословно, другой формой слова или синонимом, в любом порядке. Это разбор формулировок из подробных ноутбуков; ответ с потерянной деталью («ring a bell» без `brass`) или без одной из частей сюда не входит.
+- **фактологическая точность** (фиолетовый) — проверка по ключам: в ответе названы ключевые факты иглы (`answer_key`: `brass bell` и `guest book`) и нет фактов вставок;
+- **точность по фразам** (бирюзовый) — проверка по частям эталонной фразы: в ответе сохранены все её части (`ring the brass bell`, `at the entrance`, `sign the guest book`, `with a green pen`) — дословно, другой формой слова или синонимом, в любом порядке. Это разбор формулировок из подробных ноутбуков; ответ с потерянной деталью («ring a bell» без `brass`) или без одной из частей сюда не входит.
 
 Вторая мера строже первой: она требует всего ответа, а не двух ключевых фактов, поэтому её столбики ниже. Сходство по эмбеддингам или другой моделью здесь не считалось.
 
-**Результат.** На всех задачах отключение лучших по простой задаче голов резко снижает фактичность ответа, а отключение того же числа случайных голов её почти не трогает: при 60 лучших головах верных ответов на сложных иглах остаётся от 29% до 55%, при 60 случайных — 99–100% (на перефразированном вопросе 88% из-за одной иглы); исходная игла устойчивее (85% при 60 головах), но и она теряет факты при дальнейшем отключении: 31% при 80 головах и 2% при 100. По смыслу картина та же, но резче: полный ответ под маской 60 лучших голов сохраняется в 9–29% случаев на сложных иглах и в 56% на исходной.
+**Результат.** На всех задачах отключение лучших по простой задаче голов резко снижает фактичность ответа, а отключение того же числа случайных голов её почти не трогает: при 60 лучших головах верных ответов на сложных иглах остаётся от 29% до 55%, при 60 случайных — 99–100% (на перефразированном вопросе 88% из-за одной иглы); исходная игла устойчивее (85% при 60 головах), но и она теряет факты при дальнейшем отключении: 31% при 80 головах и 2% при 100. По фразам картина та же, но резче: полный ответ под маской 60 лучших голов сохраняется в 9–29% случаев на сложных иглах и в 56% на исходной.
 """)
 code("""
 FULL = ["exact", "reordered", "reworded"]   # структуры ответа, в которых сохранены все части эталона
@@ -317,12 +372,12 @@ from matplotlib.patches import Patch
 order_masks = list(MASKS)
 handles = [Patch(color=FACTS[run], label=MASKS[run]) for run in order_masks] + [Patch(color=TEAL[run], label=MASKS[run]) for run in order_masks]
 legend = ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.24), ncol=2, columnspacing=4,
-                   title="верно по фактам: названы ключевые факты                по смыслу: сохранены все части ответа")
+                   title="фактологическая точность:                                 точность по фразам:\\nназваны ключевые факты                          сохранены все части эталона")
 show(fig, "5_masking")
 
-print("верно по фактам, %")
+print("фактологическая точность (названы ключевые факты), %")
 display(quality.round(1))
-print("сохранены все части ответа (дословно, формой слова или синонимом), %")
+print("точность по фразам (сохранены все части эталона: дословно, формой слова или синонимом), %")
 display(meaning.round(1))
 """)
 
