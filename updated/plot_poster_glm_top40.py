@@ -208,7 +208,10 @@ def main():
         '[Отдельная фигура: слой по X, номер головы по Y](HEAD_SCORES.md) · '
         '[SVG](head_scores_three_metrics.svg) · [PDF](head_scores_three_metrics.pdf)', '',
         '[Три круговые диаграммы распределения голов](HEAD_SCORE_DISTRIBUTION.md) · '
-        '[SVG](head_score_distribution_three_metrics.svg) · [PDF](head_score_distribution_three_metrics.pdf)', '']
+        '[SVG](head_score_distribution_three_metrics.svg) · [PDF](head_score_distribution_three_metrics.pdf)', '',
+        '## Схема подсчёта Attention mass', '',
+        '[Учебная схема с матрицей внимания](ATTENTION_MASS_SCHEME.md) · '
+        '[SVG](attention_mass_scheme.svg) · [PDF](attention_mass_scheme.pdf)', '']
     for k in KS:
         name = f'top{k}_three_rankings'
         lines += [f'## Top-{k}', '', f'![Top-{k}]({name}.png)', '',
