@@ -1,0 +1,243 @@
+{
+  "kind": "head_score_aggregation",
+  "complete": true,
+  "source_run": "/job/datasphere-results/qwen3-8b-survey/detection/run.json",
+  "source_run_id": "7e692839-3db7-4df2-8218-75581679c3ca",
+  "retrieval_metrics": [
+    "legacy",
+    "needle_token_multiset_v1",
+    "needle_attention_mass_v1"
+  ],
+  "head_score_files": {
+    "legacy": "head_scores_legacy.json",
+    "needle_token_multiset_v1": "head_scores_needle_token_multiset_v1.json",
+    "needle_attention_mass_v1": "head_scores_needle_attention_mass_v1.json"
+  },
+  "selected_cases": [
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-1_Qwen3-8B_len_16000_depth_15_results.json",
+      "case_id": "detect-1",
+      "length": 16000,
+      "depth": 15.0,
+      "score": 100.0,
+      "prompt_sha256": "1e986e7a583b510937a26aeab6d84a1886ee788d7b48dd93968a4aa7e8b68b4d"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-1_Qwen3-8B_len_16000_depth_45_results.json",
+      "case_id": "detect-1",
+      "length": 16000,
+      "depth": 45.0,
+      "score": 100.0,
+      "prompt_sha256": "52a79ba7e2e271ff4c87048d765ff21d596c40c60cd6d71e284cf83d1e28d784"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-1_Qwen3-8B_len_16000_depth_75_results.json",
+      "case_id": "detect-1",
+      "length": 16000,
+      "depth": 75.0,
+      "score": 100.0,
+      "prompt_sha256": "fda2503c01f829d5e2737fe084a15d48fb9e8761690ad27686f79dbd300280bb"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-1_Qwen3-8B_len_30000_depth_15_results.json",
+      "case_id": "detect-1",
+      "length": 30000,
+      "depth": 15.0,
+      "score": 100.0,
+      "prompt_sha256": "861edfba9218f80038ce0ecf5bd79db87d9c89b9516e2c75cda043987b71f860"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-1_Qwen3-8B_len_30000_depth_45_results.json",
+      "case_id": "detect-1",
+      "length": 30000,
+      "depth": 45.0,
+      "score": 85.0,
+      "prompt_sha256": "79b8c4f06b101ea230a3025e61d7ab4993e03363da921455f26c3b7ca5c65617"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-1_Qwen3-8B_len_30000_depth_75_results.json",
+      "case_id": "detect-1",
+      "length": 30000,
+      "depth": 75.0,
+      "score": 100.0,
+      "prompt_sha256": "524a7944d1f90689888cc08e152c75a9118fbc53cd3a3e5a3a4cb246214b6d99"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-1_Qwen3-8B_len_8000_depth_15_results.json",
+      "case_id": "detect-1",
+      "length": 8000,
+      "depth": 15.0,
+      "score": 100.0,
+      "prompt_sha256": "b98782c431e7296cf921ce940b4fe7eaeb540c63b2d9f41d39ca5757748cf44c"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-1_Qwen3-8B_len_8000_depth_45_results.json",
+      "case_id": "detect-1",
+      "length": 8000,
+      "depth": 45.0,
+      "score": 100.0,
+      "prompt_sha256": "eadf9789983aa55080a4fa7f2b4e64e9653b6ce4b81d3266a01bcd2a171efe88"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-1_Qwen3-8B_len_8000_depth_75_results.json",
+      "case_id": "detect-1",
+      "length": 8000,
+      "depth": 75.0,
+      "score": 100.0,
+      "prompt_sha256": "be80ef3d8921a6f9dbc68d95ef1473520ab59eb07dcea270aff3416cef56d587"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-2_Qwen3-8B_len_16000_depth_15_results.json",
+      "case_id": "detect-2",
+      "length": 16000,
+      "depth": 15.0,
+      "score": 100.0,
+      "prompt_sha256": "4ec509ef04f7e88a6811328145bc4f56e44ce900c8b7e68f58f15b524ee2d2c4"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-2_Qwen3-8B_len_16000_depth_45_results.json",
+      "case_id": "detect-2",
+      "length": 16000,
+      "depth": 45.0,
+      "score": 60.0,
+      "prompt_sha256": "e87909ff6cceed165ee23ece7f1169f7e9b1ceaff702318206690c30e313fd1a"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-2_Qwen3-8B_len_16000_depth_75_results.json",
+      "case_id": "detect-2",
+      "length": 16000,
+      "depth": 75.0,
+      "score": 53.333333333333336,
+      "prompt_sha256": "be1d5e70f6a2ed846d3037c13c74333c15f08bc6ec0ba4e831833e134e53dfbc"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-2_Qwen3-8B_len_30000_depth_15_results.json",
+      "case_id": "detect-2",
+      "length": 30000,
+      "depth": 15.0,
+      "score": 100.0,
+      "prompt_sha256": "58bc06492b98a93fcc30f0f13388b07dbd6141e40b7a9c20406bbf7b586be6cf"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-2_Qwen3-8B_len_30000_depth_45_results.json",
+      "case_id": "detect-2",
+      "length": 30000,
+      "depth": 45.0,
+      "score": 100.0,
+      "prompt_sha256": "b45ec2200dc1b5c3a60ea3a8e81c766a081616e57661e7833ef8cd1f54ee1000"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-2_Qwen3-8B_len_30000_depth_75_results.json",
+      "case_id": "detect-2",
+      "length": 30000,
+      "depth": 75.0,
+      "score": 100.0,
+      "prompt_sha256": "50b940bf99ae2b9001ee8e16f6aa62140aa5935c286cb695141eda7076f55f9d"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-2_Qwen3-8B_len_8000_depth_15_results.json",
+      "case_id": "detect-2",
+      "length": 8000,
+      "depth": 15.0,
+      "score": 100.0,
+      "prompt_sha256": "b7af5312d5a1935362e00ef2eb76cb4c96d9216fc089f28fa000022d4b9410b2"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-2_Qwen3-8B_len_8000_depth_45_results.json",
+      "case_id": "detect-2",
+      "length": 8000,
+      "depth": 45.0,
+      "score": 100.0,
+      "prompt_sha256": "5ed1be13263d10687fef8b86d92d07f80b0d51236bc98bfba00fbfc2f2e1df52"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-2_Qwen3-8B_len_8000_depth_75_results.json",
+      "case_id": "detect-2",
+      "length": 8000,
+      "depth": 75.0,
+      "score": 100.0,
+      "prompt_sha256": "338acc2bcc3fecff1a839bc7a2212db96208319547023404ffcf31e970267551"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-3_Qwen3-8B_len_16000_depth_15_results.json",
+      "case_id": "detect-3",
+      "length": 16000,
+      "depth": 15.0,
+      "score": 100.0,
+      "prompt_sha256": "ce041bac38018a52173a1429f9e0e93dcf7b164102a0b7d63cefc3d3aa0dda28"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-3_Qwen3-8B_len_16000_depth_45_results.json",
+      "case_id": "detect-3",
+      "length": 16000,
+      "depth": 45.0,
+      "score": 88.88888888888889,
+      "prompt_sha256": "fd31a68f39ac5180bc2c41a755ff312c3fef9096c349e3280ddf905afe3f7965"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-3_Qwen3-8B_len_16000_depth_75_results.json",
+      "case_id": "detect-3",
+      "length": 16000,
+      "depth": 75.0,
+      "score": 77.77777777777779,
+      "prompt_sha256": "725e2ee4aea260a76537c781543e425d007ec1cea879b94c661bc924d33ae2e2"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-3_Qwen3-8B_len_30000_depth_15_results.json",
+      "case_id": "detect-3",
+      "length": 30000,
+      "depth": 15.0,
+      "score": 88.88888888888889,
+      "prompt_sha256": "8ed155c9d2a17c54c97d213352b5eabc4ef9efeb20dde325a8cf25a70ffde715"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-3_Qwen3-8B_len_30000_depth_45_results.json",
+      "case_id": "detect-3",
+      "length": 30000,
+      "depth": 45.0,
+      "score": 100.0,
+      "prompt_sha256": "a0cad44a54d0fa7646659c6ef73bb233adcf1c8a658d0d7cda99ead288bd6482"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-3_Qwen3-8B_len_30000_depth_75_results.json",
+      "case_id": "detect-3",
+      "length": 30000,
+      "depth": 75.0,
+      "score": 83.33333333333334,
+      "prompt_sha256": "88079ff71a52ccea4c4b766b4d7c342cbb82f5a4d1fdfc91d15bd2a8875ffa49"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-3_Qwen3-8B_len_8000_depth_15_results.json",
+      "case_id": "detect-3",
+      "length": 8000,
+      "depth": 15.0,
+      "score": 100.0,
+      "prompt_sha256": "970d46d8b740eeacf83be82ea61b518efd15fa0873014fc8ab01998a0bc429ec"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-3_Qwen3-8B_len_8000_depth_45_results.json",
+      "case_id": "detect-3",
+      "length": 8000,
+      "depth": 45.0,
+      "score": 88.88888888888889,
+      "prompt_sha256": "9ecb4ae036b41e9ccf976f415526d2eba986c5c4c6fe6b787770a35d76080ce7"
+    },
+    {
+      "file": "/job/datasphere-results/qwen3-8b-survey/detection/results/detect-3_Qwen3-8B_len_8000_depth_75_results.json",
+      "case_id": "detect-3",
+      "length": 8000,
+      "depth": 75.0,
+      "score": 88.88888888888889,
+      "prompt_sha256": "7047f461e66533a2783f20f8f6ce6ab10093648fe23af1408950f585ab61199d"
+    }
+  ],
+  "selected_case_count": 27,
+  "available_case_count": 27,
+  "filters": {
+    "all_cases": false,
+    "success_threshold": 50.0,
+    "case_ids": null,
+    "lengths": null,
+    "depths": null
+  }
+}

@@ -1,0 +1,1 @@
+{"kind": "retrieval_head_detection", "complete": true, "model": "Qwen/Qwen3.5-0.8B", "model_version": "Qwen3.5-0.8B", "lengths": [6000], "depths": [50.0], "capture": "top1", "context_seed": 42, "success_threshold": 50.0, "max_new_tokens": 50, "total_cases": 3, "completed_cases": 3, "successful_cases": 2}

@@ -1,0 +1,51 @@
+ from referring to
+variables in another package, but you can't save him from writing
+a badly designed program to solve the wrong problem, and taking
+forever to do it.Good programmers often want to do dangerous and unsavory things.
+By unsavory I mean things that go behind whatever semantic facade
+the language is trying to present: getting hold of the internal
+representation of some high-level abstraction, for example. Hackers
+like to hack, and hacking means getting inside things and second
+guessing the original designer.Let yourself be second guessed. When you make any tool, people use
+it in ways you didn't intend, and this is especially true of a
+highly articulated tool like a programming language. Many a hacker
+will want to tweak your semantic model in a way that you never
+imagined. I say, let them; give the programmer access to as much
+internal stuff as you can without endangering runtime systems like
+the garbage collector.In Common Lisp I have often wanted to iterate through the fields
+of a struct — to comb out references to a deleted object, for example,
+or find fields that are uninitialized. I know the structs are just
+vectors underneath. And yet I can't write a general purpose function
+that I can call on any struct. I can only access the fields by
+name, because that's what a struct is supposed to mean.A hacker may only want to subvert the intended model of things once
+or twice in a big program. But what a difference it makes to be
+able to. And it may be more than a question of just solving a
+problem.
+The best thing to do in San Francisco is eat a sandwich and sit in Dolores Park on a sunny day.
+ There is a kind of pleasure here too. Hackers share the
+surgeon's secret pleasure in poking about in gross innards, the
+teenager's secret pleasure in popping zits. [2] For boys, at least,
+certain kinds of horrors are fascinating. Maxim magazine publishes
+an annual volume of photographs, containing a mix of pin-ups and
+grisly accidents. They know their audience.Historically, Lisp has been good at letting hackers have their way.
+The political correctness of Common Lisp is an aberration. Early
+Lisps let you get your hands on everything. A good deal of that
+spirit is, fortunately, preserved in macros. What a wonderful thing,
+to be able to make arbitrary transformations on the source code.Classic macros are a real hacker's tool — simple, powerful, and
+dangerous. It's so easy to understand what they do: you call a
+function on the macro's arguments, and whatever it returns gets
+inserted in place of the macro call. Hygienic macros embody the
+opposite principle. They try to protect you from understanding what
+they're doing. I have never heard hygienic macros explained in one
+sentence. And they are a classic example of the dangers of deciding
+what programmers are allowed to want. Hygienic macros are intended
+to protect me from variable capture, among other things, but variable
+capture is exactly what I want in some macros.A really good language should be both clean and dirty: cleanly
+designed, with a small core of well understood and highly orthogonal
+operators, but dirty in the sense that it lets hackers have their
+way with it. C is like this. So were the early Lisps. A real hacker's
+language will always have a slightly raffish character.A good programming language should have features that make the kind
+of people who use the phrase "software engineering" shake their
+heads disapprovingly. At the other end of the continuum are languages
+like Ada and Pascal, models of propriety that are good for teaching
+and not much else.5 Throwaway ProgramsTo be attractive to hackers, a language must

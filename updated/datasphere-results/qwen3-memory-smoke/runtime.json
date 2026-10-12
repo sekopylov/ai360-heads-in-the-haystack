@@ -1,0 +1,20 @@
+{
+  "torch": "2.6.0+cu118",
+  "cuda_build": "11.8",
+  "cuda_available": true,
+  "gpu": "Tesla T4",
+  "capability": [
+    7,
+    5
+  ],
+  "compiled_architectures": [
+    "sm_50",
+    "sm_60",
+    "sm_70",
+    "sm_75",
+    "sm_80",
+    "sm_86",
+    "sm_37",
+    "sm_90"
+  ]
+}

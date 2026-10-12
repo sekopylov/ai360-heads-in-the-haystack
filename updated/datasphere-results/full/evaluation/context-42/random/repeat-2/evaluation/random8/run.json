@@ -1,0 +1,1 @@
+{"kind": "head_masking", "complete": true, "condition": "random8", "model": "Qwen/Qwen3.5-0.8B", "model_version": "Qwen3.5-0.8B", "lengths": [10000], "depths": [25.0, 50.0, 75.0], "mask_mode": "legacy_uniform", "blocked_heads": null, "randomized_per_case": true, "seed": 44, "context_seed": 42, "random_exclusion_top": 8, "max_new_tokens": 50, "completed_cases": 3}

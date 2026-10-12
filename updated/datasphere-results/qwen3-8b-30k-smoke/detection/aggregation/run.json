@@ -1,0 +1,35 @@
+{
+  "kind": "head_score_aggregation",
+  "complete": true,
+  "source_run": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-30k-smoke/detection/run.json",
+  "source_run_id": null,
+  "retrieval_metrics": [
+    "legacy",
+    "needle_token_multiset_v1",
+    "needle_attention_mass_v1"
+  ],
+  "head_score_files": {
+    "legacy": "head_scores_legacy.json",
+    "needle_token_multiset_v1": "head_scores_needle_token_multiset_v1.json",
+    "needle_attention_mass_v1": "head_scores_needle_attention_mass_v1.json"
+  },
+  "selected_cases": [
+    {
+      "file": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-30k-smoke/detection/results/detect-1_Qwen3-8B_len_30000_depth_45_results.json",
+      "case_id": "detect-1",
+      "length": 30000,
+      "depth": 45.0,
+      "score": 85.0,
+      "prompt_sha256": "79b8c4f06b101ea230a3025e61d7ab4993e03363da921455f26c3b7ca5c65617"
+    }
+  ],
+  "selected_case_count": 1,
+  "available_case_count": 1,
+  "filters": {
+    "all_cases": false,
+    "success_threshold": 50.0,
+    "case_ids": null,
+    "lengths": null,
+    "depths": null
+  }
+}

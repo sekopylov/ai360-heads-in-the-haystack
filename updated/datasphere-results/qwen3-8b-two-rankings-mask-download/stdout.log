@@ -1,0 +1,692 @@
+[job] runtime: {"torch": "2.6.0+cu118", "cuda_build": "11.8", "cuda_available": true, "gpu": "Tesla V100-PCIE-32GB", "capability": [7, 0], "compiled_architectures": ["sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_37", "sm_90"]}
+[progress] 0/63 generations (0.0%)
+[job] $ /job/.job_python_venv_6Xq/bin/python3 -u needle_in_haystack_with_mask.py --adapter qwen3_8b --model /job/project/c0/models/Qwen/Qwen3-8B --max-new-tokens 2048 --device-map cuda:0 --dtype float16 --prefill-attention sdpa_memory_efficient --attention-scope all_decode_tokens --lengths 8000,16000,30000 --depths 15,45,75 --haystack-dir /job/mask_data_0wa --mask-mode legacy_uniform --head-scores /job/multiset_head_scores_jtk --context-seed 42 --output-root /job/datasphere-results/qwen3-8b-two-rankings-mask/multiset/evaluation/context-42 --mask-topk 0
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=baseline mask_mode=legacy_uniform blocked_heads=[]
+[1/9] context=8000 depth=15% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the October 2004 section, where the author reflects on the process of writing essays and contrasts it with traditional educational practices.'
+[progress] 1/63 generations (1.6%)
+[2/9] context=8000 depth=45% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the text as an example of the author\'s writing style and is not directly tied to the broader themes of the essays.'
+[progress] 2/63 generations (3.2%)
+[3/9] context=8000 depth=75% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This observation is made in the context of discussing how surprises and unexpected discoveries can arise from simple, everyday experiences.'
+[progress] 3/63 generations (4.8%)
+[4/9] context=16000 depth=15% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.022
+[memory] generation peak_allocated_gib=19.022
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the section discussing the evolution of academic disciplines and the study of ancient texts, serving as a brief, whimsical interjection unrelated to the surrounding content. It is presented as a standalone observation rather than a metaphor or rhetorical device.'
+[progress] 4/63 generations (6.3%)
+[5/9] context=16000 depth=45% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the May 2003 section, which discusses programming languages and the philosophy of startup investing. The author uses this line as a brief, whimsical interjection unrelated to the broader technical or philosophical themes.'
+[progress] 5/63 generations (7.9%)
+[6/9] context=16000 depth=75% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco, as mentioned in the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** \n\nThis statement appears in the essay discussing the challenges of starting a startup, where the author contrasts the intense, all-consuming nature of entrepreneurial life with the simplicity and serendipity of leisurely activities. The example serves to emphasize the value of taking time for enjoyment and reflection, especially in the context of a fast-paced, high-stakes environment like Silicon Valley.'
+[progress] 6/63 generations (9.5%)
+[7/9] context=30000 depth=15% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, as mentioned in the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This observation is made in the context of discussing how expressing ideas helps form them, with the author reflecting on the value of simple, enjoyable activities as a contrast to the complexity of intellectual work.'
+[progress] 7/63 generations (11.1%)
+[8/9] context=30000 depth=45% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the section titled "Ideas" under the October 2014 essay, where the author reflects on the value of engaging with interesting problems and the importance of enjoying simple, meaningful experiences.'
+[progress] 8/63 generations (12.7%)
+[9/9] context=30000 depth=75% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the essay discussing programming language design, specifically in the section titled "Brevity."'
+[progress] 9/63 generations (14.3%)
+[job] $ /job/.job_python_venv_6Xq/bin/python3 -u needle_in_haystack_with_mask.py --adapter qwen3_8b --model /job/project/c0/models/Qwen/Qwen3-8B --max-new-tokens 2048 --device-map cuda:0 --dtype float16 --prefill-attention sdpa_memory_efficient --attention-scope all_decode_tokens --lengths 8000,16000,30000 --depths 15,45,75 --haystack-dir /job/mask_data_0wa --mask-mode legacy_uniform --head-scores /job/multiset_head_scores_jtk --context-seed 42 --output-root /job/datasphere-results/qwen3-8b-two-rankings-mask/multiset/evaluation/context-42 --mask-topk 4 --head-selection top
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=top4 mask_mode=legacy_uniform blocked_heads=[(13, 13), (22, 23), (24, 22), (29, 11)]
+[1/9] context=8000 depth=15% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the October 2004 section, where the author reflects on the process of writing essays and contrasts it with the rigid structures taught in schools.'
+[progress] 10/63 generations (15.9%)
+[2/9] context=8000 depth=45% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the section discussing the nature of essays and the importance of writing as a process of discovery.'
+[progress] 11/63 generations (17.5%)
+[3/9] context=8000 depth=75% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This observation is made in the context of discussing how surprises and unexpected discoveries can arise from simple, everyday experiences.'
+[progress] 12/63 generations (19.0%)
+[4/9] context=16000 depth=15% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.022
+[memory] generation peak_allocated_gib=19.022
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the section discussing the evolution of essay writing and the role of education, serving as a brief, whimsical interjection about the city. No other recommendations for San Francisco are mentioned in the text.'
+[progress] 13/63 generations (20.6%)
+[5/9] context=16000 depth=45% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the May 2003 section of the book, which discusses programming languages and the philosophy of software development. The mention of San Francisco is brief and standalone, with no further elaboration on the city\'s attractions or activities.'
+[progress] 14/63 generations (22.2%)
+[6/9] context=16000 depth=75% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This observation appears in the context of a broader discussion about the trade-offs between pursuing ambitious ventures (like starting a startup) and appreciating the simplicity and serendipity of life. The author contrasts the all-consuming nature of entrepreneurship with the value of unplanned, leisurely experiences, suggesting that such moments in San Francisco offer a refreshing break from the pressures of ambition.'
+[progress] 15/63 generations (23.8%)
+[7/9] context=30000 depth=15% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, as mentioned in the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This observation is made in the context of discussing Montaigne\'s approach to essays and the value of reflective, unstructured thinking.'
+[progress] 16/63 generations (25.4%)
+[8/9] context=30000 depth=45% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco, as mentioned in the text, is:  \n\n**"The best thing to do in San Francisco is eat a sandwich and sit in Dolores Park on a sunny day."**  \n\nThis recommendation appears in the *Ideas* section of the October 2014 essay, where the author reflects on the value of pursuing interesting problems and the importance of curiosity in creative work. The line is presented as a lighthearted observation, emphasizing simplicity and enjoyment in everyday experiences.'
+[progress] 17/63 generations (27.0%)
+[9/9] context=30000 depth=75% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the section discussing programming language design, specifically under the "Brevity" subsection, where the author uses it as an illustrative example of simplicity and efficiency. While the context is technical, the statement itself is presented as a standalone observation.'
+[progress] 18/63 generations (28.6%)
+[job] $ /job/.job_python_venv_6Xq/bin/python3 -u needle_in_haystack_with_mask.py --adapter qwen3_8b --model /job/project/c0/models/Qwen/Qwen3-8B --max-new-tokens 2048 --device-map cuda:0 --dtype float16 --prefill-attention sdpa_memory_efficient --attention-scope all_decode_tokens --lengths 8000,16000,30000 --depths 15,45,75 --haystack-dir /job/mask_data_0wa --mask-mode legacy_uniform --head-scores /job/multiset_head_scores_jtk --context-seed 42 --output-root /job/datasphere-results/qwen3-8b-two-rankings-mask/multiset/evaluation/context-42 --mask-topk 4 --head-selection bottom
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=bottom4 mask_mode=legacy_uniform blocked_heads=[(35, 28), (35, 29), (35, 30), (35, 31)]
+[1/9] context=8000 depth=15% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the October 2004 section, where the author reflects on the structure of essays and contrasts it with the rigid, formulaic approaches taught in schools. The mention of San Francisco serves as a brief, whimsical interlude in the discussion.'
+[progress] 19/63 generations (30.2%)
+[2/9] context=8000 depth=45% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the October 2004 section, where the author reflects on the structure of essays and writing.'
+[progress] 20/63 generations (31.7%)
+[3/9] context=8000 depth=75% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This example is used to illustrate the value of seeking surprises and unexpected experiences, as the author reflects on how such simple, seemingly mundane activities can reveal interesting insights.'
+[progress] 21/63 generations (33.3%)
+[4/9] context=16000 depth=15% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.022
+[memory] generation peak_allocated_gib=19.022
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the section discussing the evolution of educational curricula and the study of literature, where the author interjects this personal recommendation as an aside.'
+[progress] 22/63 generations (34.9%)
+[5/9] context=16000 depth=45% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the May 2003 section, where the author reflects on the relative merits of programming languages and contrasts them with the simplicity of this activity. No other specific recommendations for San Francisco are mentioned in the text.'
+[progress] 23/63 generations (36.5%)
+[6/9] context=16000 depth=75% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco, as mentioned in the text, is:\n\n**"The best thing to do in San Francisco is eat a sandwich and sit in Dolores Park on a sunny day."**\n\nThis statement appears in the essay titled *October 2014* (derived from a guest lecture in Sam Altman\'s startup class at Stanford). The author uses this example to illustrate the value of serendipity and the importance of preserving opportunities for exploration and enjoyment in early life, rather than rushing into commitments like starting a startup.'
+[progress] 24/63 generations (38.1%)
+[7/9] context=30000 depth=15% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, as mentioned in the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This observation is made in the context of discussing Montaigne\'s approach to essays, where the author reflects on the value of simple, reflective experiences.'
+[progress] 25/63 generations (39.7%)
+[8/9] context=30000 depth=45% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This advice appears in the essay titled *Ideas* (November 2022), where the author humorously interjects this suggestion while discussing the importance of pursuing interesting problems and intellectual curiosity. The statement reflects a moment of levity, emphasizing the value of simple pleasures and mindfulness in a bustling city.'
+[progress] 26/63 generations (41.3%)
+[9/9] context=30000 depth=75% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This specific recommendation appears in the essay titled **"May 2001"** under the section **"3 Brevity"** (see the paragraph discussing brevity in programming languages). \n\nThe text states:  \n*"The best thing to do in San Francisco is eat a sandwich and sit in Dolores Park on a sunny day."*  \n\nThis line is included as an illustrative example of brevity and simplicity, unrelated to the broader discussion of programming languages.'
+[progress] 27/63 generations (42.9%)
+[job] $ /job/.job_python_venv_6Xq/bin/python3 -u needle_in_haystack_with_mask.py --adapter qwen3_8b --model /job/project/c0/models/Qwen/Qwen3-8B --max-new-tokens 2048 --device-map cuda:0 --dtype float16 --prefill-attention sdpa_memory_efficient --attention-scope all_decode_tokens --lengths 8000,16000,30000 --depths 15,45,75 --haystack-dir /job/mask_data_0wa --mask-mode legacy_uniform --head-scores /job/multiset_head_scores_jtk --context-seed 42 --output-root /job/datasphere-results/qwen3-8b-two-rankings-mask/multiset/evaluation/context-42 --mask-topk 8 --head-selection top
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=top8 mask_mode=legacy_uniform blocked_heads=[(13, 13), (13, 15), (20, 26), (22, 23), (23, 4), (24, 22), (29, 11), (29, 14)]
+[1/9] context=8000 depth=15% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the October 2004 section of the book, where the author reflects on the process of writing essays and contrasts it with conventional educational practices.'
+[progress] 28/63 generations (44.4%)
+[2/9] context=8000 depth=45% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."**'
+[progress] 29/63 generations (46.0%)
+[3/9] context=8000 depth=75% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This observation is made in the context of discussing how surprises and unexpected discoveries can arise from simple, everyday experiences.'
+[progress] 30/63 generations (47.6%)
+[4/9] context=16000 depth=15% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.022
+[memory] generation peak_allocated_gib=19.022
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"to eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the essay discussing the evolution of English education, serving as a brief, whimsical interjection about the city. No other specific recommendations for San Francisco are mentioned in the provided content.'
+[progress] 31/63 generations (49.2%)
+[5/9] context=16000 depth=45% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the May 2003 section of the book, which discusses programming languages and startup culture, but the recommendation is presented as a standalone observation. No further elaboration or alternative suggestions about San Francisco are provided in the text.'
+[progress] 32/63 generations (50.8%)
+[6/9] context=16000 depth=75% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the October 2014 essay discussing startup advice, where the author contrasts the intense demands of starting a business with the value of simple, enjoyable experiences. The passage emphasizes the importance of serendipity and leisurely exploration, particularly for young people before committing to major life choices like founding a startup.'
+[progress] 33/63 generations (52.4%)
+[7/9] context=30000 depth=15% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"to eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the essay discussing the nature of essays and the value of reflective, unstructured thinking. The author emphasizes the simplicity and joy of this activity as an example of how engaging with the world thoughtfully can lead to meaningful insights.'
+[progress] 34/63 generations (54.0%)
+[8/9] context=30000 depth=45% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **to eat a sandwich and sit in Dolores Park on a sunny day**. This recommendation appears in the "Ideas" section under the November 2022 essay, where the author humorously suggests it as a simple, enjoyable activity.'
+[progress] 35/63 generations (55.6%)
+[9/9] context=30000 depth=75% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"to eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the section discussing programming language design, specifically under the "Brevity" subsection, where it is used as an illustrative example. While the surrounding context focuses on technical topics, this sentence is presented as a standalone observation.'
+[progress] 36/63 generations (57.1%)
+[job] $ /job/.job_python_venv_6Xq/bin/python3 -u needle_in_haystack_with_mask.py --adapter qwen3_8b --model /job/project/c0/models/Qwen/Qwen3-8B --max-new-tokens 2048 --device-map cuda:0 --dtype float16 --prefill-attention sdpa_memory_efficient --attention-scope all_decode_tokens --lengths 8000,16000,30000 --depths 15,45,75 --haystack-dir /job/mask_data_0wa --mask-mode legacy_uniform --head-scores /job/multiset_head_scores_jtk --context-seed 42 --output-root /job/datasphere-results/qwen3-8b-two-rankings-mask/multiset/evaluation/context-42 --mask-topk 8 --head-selection bottom
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=bottom8 mask_mode=legacy_uniform blocked_heads=[(35, 24), (35, 25), (35, 26), (35, 27), (35, 28), (35, 29), (35, 30), (35, 31)]
+[1/9] context=8000 depth=15% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the October 2004 section, where the author reflects on the structure of essays and contrasts them with the rigid, formulaic approaches taught in schools. The mention of San Francisco serves as a brief, whimsical interlude in the discussion.'
+[progress] 37/63 generations (58.7%)
+[2/9] context=8000 depth=45% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears explicitly in the text as a standalone observation.'
+[progress] 38/63 generations (60.3%)
+[3/9] context=8000 depth=75% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This example is used to illustrate the value of finding surprises and unexpected insights, as the author reflects on how such simple, observational experiences can reveal interesting truths.'
+[progress] 39/63 generations (61.9%)
+[4/9] context=16000 depth=15% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.022
+[memory] generation peak_allocated_gib=19.022
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the text as a brief, standalone observation within a broader discussion about education and writing, highlighting the author\'s personal preference for simple, enjoyable activities.'
+[progress] 40/63 generations (63.5%)
+[5/9] context=16000 depth=45% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the May 2003 section, embedded within a discussion about programming languages and the philosophy of ideas. The author uses it as a brief, whimsical interjection rather than a detailed recommendation, highlighting the simplicity and charm of the activity.'
+[progress] 41/63 generations (65.1%)
+[6/9] context=16000 depth=75% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco, as mentioned in the text, is:\n\n**"The best thing to do in San Francisco is eat a sandwich and sit in Dolores Park on a sunny day."**\n\nThis statement appears in the section discussing the challenges of starting a startup and the trade-offs between pursuing entrepreneurial ambitions and enjoying life\'s simpler pleasures. The author contrasts the intense, all-consuming nature of startup life with the tranquility of such a leisurely activity, emphasizing the value of serendipity and unstructured exploration early in life.'
+[progress] 42/63 generations (66.7%)
+[7/9] context=30000 depth=15% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, as mentioned in the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the essay discussing the process of writing and thinking, where the author uses it as an example to illustrate how expressing ideas helps form them.'
+[progress] 43/63 generations (68.3%)
+[8/9] context=30000 depth=45% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the essay about starting a startup, where the author humorously suggests it as a simple, enjoyable activity.'
+[progress] 44/63 generations (69.8%)
+[9/9] context=30000 depth=75% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the "Brevity" section of the May 2001 article, where it is presented as a concise and enjoyable activity.'
+[progress] 45/63 generations (71.4%)
+[job] $ /job/.job_python_venv_6Xq/bin/python3 -u needle_in_haystack_with_mask.py --adapter qwen3_8b --model /job/project/c0/models/Qwen/Qwen3-8B --max-new-tokens 2048 --device-map cuda:0 --dtype float16 --prefill-attention sdpa_memory_efficient --attention-scope all_decode_tokens --lengths 8000,16000,30000 --depths 15,45,75 --haystack-dir /job/mask_data_0wa --mask-mode legacy_uniform --head-scores /job/multiset_head_scores_jtk --context-seed 42 --output-root /job/datasphere-results/qwen3-8b-two-rankings-mask/multiset/evaluation/context-42 --mask-topk 16 --head-selection top
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=top16 mask_mode=legacy_uniform blocked_heads=[(2, 31), (13, 13), (13, 15), (13, 28), (20, 26), (22, 22), (22, 23), (23, 4), (24, 22), (28, 23), (29, 9), (29, 11), (29, 14), (29, 15), (33, 30), (33, 31)]
+[1/9] context=8000 depth=15% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the October 2004 section, embedded within a discussion about writing essays and the challenges of traditional academic writing. The author uses it as an illustrative example of a simple, enjoyable activity.'
+[progress] 46/63 generations (73.0%)
+[2/9] context=8000 depth=45% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the section discussing the nature of essays and the importance of expressing ideas to clarify thoughts.'
+[progress] 47/63 generations (74.6%)
+[3/9] context=8000 depth=75% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This observation is made in the context of discussing how surprises and unexpected discoveries can arise from simple, everyday experiences.'
+[progress] 48/63 generations (76.2%)
+[4/9] context=16000 depth=15% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.022
+[memory] generation peak_allocated_gib=19.022
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the essay discussing the evolution of essay writing and the role of curiosity in learning, serving as a whimsical interjection about the city.'
+[progress] 49/63 generations (77.8%)
+[5/9] context=16000 depth=45% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content provided in the book, the best thing to do in San Francisco is:  \n\n**"Eat a sandwich and sit in Dolores Park on a sunny day."**  \n\nThis line appears in the December 2014 section, inserted as a standalone observation amidst discussions about programming languages and startups. It reflects a lighthearted, practical suggestion for enjoying the city.'
+[progress] 50/63 generations (79.4%)
+[6/9] context=16000 depth=75% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"to eat a sandwich and sit in Dolores Park on a sunny day."** This observation appears in the essay discussing startups and the trade-offs of starting a business at a young age, serving as a brief, reflective interlude about life outside of entrepreneurial pursuits.'
+[progress] 51/63 generations (81.0%)
+[7/9] context=30000 depth=15% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"to eat a sandwich and sit in Dolores Park on a sunny day."** This observation is made in the context of discussing how expressing ideas helps form them, with the example of San Francisco as a metaphor for creative exploration and simple pleasures.'
+[progress] 52/63 generations (82.5%)
+[8/9] context=30000 depth=45% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"to eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the essay discussing free will and decision-making, where the author humorously suggests it as a simple, enjoyable activity.'
+[progress] 53/63 generations (84.1%)
+[9/9] context=30000 depth=75% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"to eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the section discussing brevity and programming languages, where the author uses it as an illustrative example of concise, enjoyable activities.'
+[progress] 54/63 generations (85.7%)
+[job] $ /job/.job_python_venv_6Xq/bin/python3 -u needle_in_haystack_with_mask.py --adapter qwen3_8b --model /job/project/c0/models/Qwen/Qwen3-8B --max-new-tokens 2048 --device-map cuda:0 --dtype float16 --prefill-attention sdpa_memory_efficient --attention-scope all_decode_tokens --lengths 8000,16000,30000 --depths 15,45,75 --haystack-dir /job/mask_data_0wa --mask-mode legacy_uniform --head-scores /job/multiset_head_scores_jtk --context-seed 42 --output-root /job/datasphere-results/qwen3-8b-two-rankings-mask/multiset/evaluation/context-42 --mask-topk 16 --head-selection bottom
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=bottom16 mask_mode=legacy_uniform blocked_heads=[(35, 15), (35, 16), (35, 17), (35, 18), (35, 19), (35, 20), (35, 21), (35, 23), (35, 24), (35, 25), (35, 26), (35, 27), (35, 28), (35, 29), (35, 30), (35, 31)]
+[1/9] context=8000 depth=15% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the October 2004 section, where the author reflects on the process of writing essays and contrasts it with traditional educational practices.'
+[progress] 55/63 generations (87.3%)
+[2/9] context=8000 depth=45% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the section discussing the structure and purpose of essays, serving as an illustrative example of the author\'s writing style and approach to creativity.'
+[progress] 56/63 generations (88.9%)
+[3/9] context=8000 depth=75% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This observation is made in the context of discussing how surprises and unexpected discoveries can arise from simple, everyday experiences.'
+[progress] 57/63 generations (90.5%)
+[4/9] context=16000 depth=15% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.022
+[memory] generation peak_allocated_gib=19.022
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the section from December 2014, where the author reflects on the structure of essays and contrasts them with traditional educational practices. The mention of San Francisco is brief and serves as a standalone observation rather than part of a broader discussion.'
+[progress] 58/63 generations (92.1%)
+[5/9] context=16000 depth=45% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the May 2003 section, though it is presented as a standalone observation rather than being directly tied to the surrounding discussion about programming languages.'
+[progress] 59/63 generations (93.7%)
+[6/9] context=16000 depth=75% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the essay discussing startup advice, where the author contrasts the all-consuming nature of starting a business with the value of simple, spontaneous experiences. The mention of Dolores Park highlights the appeal of leisure and serendipity, which the author suggests are more beneficial early in life than the pressures of entrepreneurial pursuits.'
+[progress] 60/63 generations (95.2%)
+[7/9] context=30000 depth=15% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the essay discussing the nature of essays and the Meander river, where the author uses it as an example of how expressing ideas helps to form them.'
+[progress] 61/63 generations (96.8%)
+[8/9] context=30000 depth=45% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the October 2014 section of the book, where the author reflects on the value of simple, enjoyable experiences and the importance of aligning with personal interests rather than rigid structures. The passage emphasizes that such activities, though seemingly mundane, can be deeply satisfying and illustrative of a life well-lived.'
+[progress] 62/63 generations (98.4%)
+[9/9] context=30000 depth=75% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This mention appears in the essay titled **"May 2001"** under the section discussing brevity and programming language design. While the book primarily focuses on topics like programming, startups, and philosophy, this specific recommendation is the only reference to San Francisco in the text.'
+[progress] 63/63 generations (100.0%)
+[job] mask experiment artifacts: /job/datasphere-results/qwen3-8b-two-rankings-mask/multiset
+[job] runtime: {"torch": "2.6.0+cu118", "cuda_build": "11.8", "cuda_available": true, "gpu": "Tesla V100-PCIE-32GB", "capability": [7, 0], "compiled_architectures": ["sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_37", "sm_90"]}
+[progress] 0/63 generations (0.0%)
+[job] $ /job/.job_python_venv_6Xq/bin/python3 -u needle_in_haystack_with_mask.py --adapter qwen3_8b --model /job/project/c0/models/Qwen/Qwen3-8B --max-new-tokens 2048 --device-map cuda:0 --dtype float16 --prefill-attention sdpa_memory_efficient --attention-scope all_decode_tokens --lengths 8000,16000,30000 --depths 15,45,75 --haystack-dir /job/mask_data_0wa --mask-mode legacy_uniform --head-scores /job/attention_mass_head_scores_uld --context-seed 42 --output-root /job/datasphere-results/qwen3-8b-two-rankings-mask/attention-mass/evaluation/context-42 --mask-topk 0
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=baseline mask_mode=legacy_uniform blocked_heads=[]
+[1/9] context=8000 depth=15% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the October 2004 section, where the author reflects on the process of writing essays and contrasts it with traditional educational practices.'
+[progress] 1/63 generations (1.6%)
+[2/9] context=8000 depth=45% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the text as an example of the author\'s writing style and is not directly tied to the broader themes of the essays.'
+[progress] 2/63 generations (3.2%)
+[3/9] context=8000 depth=75% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This observation is made in the context of discussing how surprises and unexpected discoveries can arise from simple, everyday experiences.'
+[progress] 3/63 generations (4.8%)
+[4/9] context=16000 depth=15% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.022
+[memory] generation peak_allocated_gib=19.022
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the section discussing the evolution of academic disciplines and the study of ancient texts, serving as a brief, whimsical interjection unrelated to the surrounding content. It is presented as a standalone observation rather than a metaphor or rhetorical device.'
+[progress] 4/63 generations (6.3%)
+[5/9] context=16000 depth=45% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the May 2003 section, which discusses programming languages and the philosophy of startup investing. The author uses this line as a brief, whimsical interjection unrelated to the broader technical or philosophical themes.'
+[progress] 5/63 generations (7.9%)
+[6/9] context=16000 depth=75% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco, as mentioned in the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** \n\nThis statement appears in the essay discussing the challenges of starting a startup, where the author contrasts the intense, all-consuming nature of entrepreneurial life with the simplicity and serendipity of leisurely activities. The example serves to emphasize the value of taking time for enjoyment and reflection, especially in the context of a fast-paced, high-stakes environment like Silicon Valley.'
+[progress] 6/63 generations (9.5%)
+[7/9] context=30000 depth=15% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, as mentioned in the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This observation is made in the context of discussing how expressing ideas helps form them, with the author reflecting on the value of simple, enjoyable activities as a contrast to the complexity of intellectual work.'
+[progress] 7/63 generations (11.1%)
+[8/9] context=30000 depth=45% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the section titled "Ideas" under the October 2014 essay, where the author reflects on the value of engaging with interesting problems and the importance of enjoying simple, meaningful experiences.'
+[progress] 8/63 generations (12.7%)
+[9/9] context=30000 depth=75% blocked=0
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the essay discussing programming language design, specifically in the section titled "Brevity."'
+[progress] 9/63 generations (14.3%)
+[job] $ /job/.job_python_venv_6Xq/bin/python3 -u needle_in_haystack_with_mask.py --adapter qwen3_8b --model /job/project/c0/models/Qwen/Qwen3-8B --max-new-tokens 2048 --device-map cuda:0 --dtype float16 --prefill-attention sdpa_memory_efficient --attention-scope all_decode_tokens --lengths 8000,16000,30000 --depths 15,45,75 --haystack-dir /job/mask_data_0wa --mask-mode legacy_uniform --head-scores /job/attention_mass_head_scores_uld --context-seed 42 --output-root /job/datasphere-results/qwen3-8b-two-rankings-mask/attention-mass/evaluation/context-42 --mask-topk 4 --head-selection top
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=top4 mask_mode=legacy_uniform blocked_heads=[(7, 4), (13, 15), (22, 23), (23, 10)]
+[1/9] context=8000 depth=15% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the October 2004 section of the book, where the author reflects on the structure of essays and contrasts them with the rigid, formulaic writing taught in schools. The mention of San Francisco serves as a brief, whimsical interlude in the discussion.'
+[progress] 10/63 generations (15.9%)
+[2/9] context=8000 depth=45% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears as a standalone observation in the book\'s content.'
+[progress] 11/63 generations (17.5%)
+[3/9] context=8000 depth=75% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This specific recommendation appears in the section discussing the value of surprises and unexpected discoveries in writing.'
+[progress] 12/63 generations (19.0%)
+[4/9] context=16000 depth=15% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.022
+[memory] generation peak_allocated_gib=19.022
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in a section discussing the evolution of academic disciplines, where the author contrasts the complexity of scholarly pursuits with the simplicity of this leisurely activity. It serves as a brief, whimsical interjection rather than a serious recommendation, highlighting the value of small, enjoyable moments.'
+[progress] 13/63 generations (20.6%)
+[5/9] context=16000 depth=45% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the December 2014 section of the book, where the author reflects on the nature of programming languages and the importance of open-mindedness. The mention of Dolores Park serves as a brief, whimsical interjection about leisure and simplicity, contrasting with the more serious discussions around ideas and innovation. \n\nNo other references to San Francisco or specific activities in the city are made in the text. Thus, the answer is directly derived from this single sentence.'
+[progress] 14/63 generations (22.2%)
+[6/9] context=16000 depth=75% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the December 2014 essay discussing the challenges of starting a startup and the trade-offs of pursuing ambitious projects at a young age. The author contrasts the intense, all-consuming nature of startups with the simplicity and serendipity of enjoying a quiet moment in Dolores Park, emphasizing the value of taking time to appreciate life\'s small pleasures before committing to major endeavors.'
+[progress] 15/63 generations (23.8%)
+[7/9] context=30000 depth=15% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This example is used by the author to illustrate how expressing ideas helps form them, emphasizing the value of reflective, unstructured moments for creativity and clarity.'
+[progress] 16/63 generations (25.4%)
+[8/9] context=30000 depth=45% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the "Ideas" section under the November 2022 essay, where it is presented as a simple, enjoyable activity that aligns with the author\'s perspective on finding value in interesting and personally meaningful experiences.'
+[progress] 17/63 generations (27.0%)
+[9/9] context=30000 depth=75% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This mention appears in the "Brevity" section of the May 2001 article discussing programming language design.'
+[progress] 18/63 generations (28.6%)
+[job] $ /job/.job_python_venv_6Xq/bin/python3 -u needle_in_haystack_with_mask.py --adapter qwen3_8b --model /job/project/c0/models/Qwen/Qwen3-8B --max-new-tokens 2048 --device-map cuda:0 --dtype float16 --prefill-attention sdpa_memory_efficient --attention-scope all_decode_tokens --lengths 8000,16000,30000 --depths 15,45,75 --haystack-dir /job/mask_data_0wa --mask-mode legacy_uniform --head-scores /job/attention_mass_head_scores_uld --context-seed 42 --output-root /job/datasphere-results/qwen3-8b-two-rankings-mask/attention-mass/evaluation/context-42 --mask-topk 4 --head-selection bottom
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=bottom4 mask_mode=legacy_uniform blocked_heads=[(10, 8), (14, 0), (14, 1), (14, 29)]
+[1/9] context=8000 depth=15% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the October 2004 section of the book, where the author reflects on the process of writing essays and contrasts it with conventional educational practices.'
+[progress] 19/63 generations (30.2%)
+[2/9] context=8000 depth=45% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the text as an illustrative example within a discussion about writing and thinking.'
+[progress] 20/63 generations (31.7%)
+[3/9] context=8000 depth=75% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This observation is made in the context of discussing how surprises and unexpected discoveries can arise from simple, everyday experiences.'
+[progress] 21/63 generations (33.3%)
+[4/9] context=16000 depth=15% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.022
+[memory] generation peak_allocated_gib=19.022
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the text as an illustrative example within a broader discussion about the evolution of education and the value of simple, enjoyable experiences. While the context is academic, the sentence is presented as a direct recommendation.'
+[progress] 22/63 generations (34.9%)
+[5/9] context=16000 depth=45% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the October 2014 essay, which discusses startup advice and the importance of open-mindedness. The author uses this example to illustrate the value of simplicity and enjoying the present moment, contrasting it with the complexities of entrepreneurship and overthinking.'
+[progress] 23/63 generations (36.5%)
+[6/9] context=16000 depth=75% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This advice appears in the October 2014 essay on starting a startup, where the author contrasts the intense, all-consuming nature of startup life with the value of simple, enjoyable moments. The statement serves as a reminder to appreciate serendipity and balance amidst the pressures of ambition and work.'
+[progress] 24/63 generations (38.1%)
+[7/9] context=30000 depth=15% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This observation appears in the essay discussing the nature of essays and the Meander River, where the author reflects on the value of simple, enjoyable experiences.'
+[progress] 25/63 generations (39.7%)
+[8/9] context=30000 depth=45% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the "Ideas" section under Notes[9], where the author reflects on the value of engaging with interesting problems and the importance of curiosity in creative work. The suggestion is framed as a personal preference, emphasizing simplicity and enjoyment in everyday moments.'
+[progress] 26/63 generations (41.3%)
+[9/9] context=30000 depth=75% blocked=4
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the section discussing programming language design under the "Brevity" subsection, where the author uses it as an illustrative example of simplicity and enjoyment.'
+[progress] 27/63 generations (42.9%)
+[job] $ /job/.job_python_venv_6Xq/bin/python3 -u needle_in_haystack_with_mask.py --adapter qwen3_8b --model /job/project/c0/models/Qwen/Qwen3-8B --max-new-tokens 2048 --device-map cuda:0 --dtype float16 --prefill-attention sdpa_memory_efficient --attention-scope all_decode_tokens --lengths 8000,16000,30000 --depths 15,45,75 --haystack-dir /job/mask_data_0wa --mask-mode legacy_uniform --head-scores /job/attention_mass_head_scores_uld --context-seed 42 --output-root /job/datasphere-results/qwen3-8b-two-rankings-mask/attention-mass/evaluation/context-42 --mask-topk 8 --head-selection top
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=top8 mask_mode=legacy_uniform blocked_heads=[(7, 4), (13, 15), (15, 11), (19, 24), (22, 23), (23, 10), (24, 22), (29, 11)]
+[1/9] context=8000 depth=15% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the October 2004 section of the book, where the author reflects on the structure and purpose of essays, interweaving personal observations about writing and life.'
+[progress] 28/63 generations (44.4%)
+[2/9] context=8000 depth=45% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the middle of a discussion about the nature of essays and the importance of curiosity, highlighting a lighthearted, reflective moment in the author\'s writing.'
+[progress] 29/63 generations (46.0%)
+[3/9] context=8000 depth=75% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation is highlighted as an example of finding unexpected joy in simple, unassuming activities.'
+[progress] 30/63 generations (47.6%)
+[4/9] context=16000 depth=15% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.022
+[memory] generation peak_allocated_gib=19.022
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This quip appears in the section discussing the evolution of literary studies and the transition from classical to modern literature, where the author humorously contrasts traditional academic pursuits with simple, enjoyable activities.'
+[progress] 31/63 generations (49.2%)
+[5/9] context=16000 depth=45% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the section discussing programming languages and the author\'s reflections on work and leisure. The text humorously contrasts the mundane with the profound, suggesting that simple pleasures like this can be more fulfilling than complex intellectual pursuits.'
+[progress] 32/63 generations (50.8%)
+[6/9] context=16000 depth=75% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** \n\nThis recommendation appears in the context of discussing the contrast between the intense, all-consuming nature of startup work and the value of simple, enjoyable moments. The author uses this example to highlight the importance of balancing productivity with leisure and appreciating the small, fulfilling aspects of life.'
+[progress] 33/63 generations (52.4%)
+[7/9] context=30000 depth=15% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=0.0 response=''
+[progress] 34/63 generations (54.0%)
+[8/9] context=30000 depth=45% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is to **eat a sandwich and sit in Dolores Park on a sunny day**. This recommendation is part of a broader discussion about the value of environment, serendipity, and the role of physical spaces in fostering creativity and intellectual exchange. The author emphasizes that such simple, unstructured moments can lead to unexpected insights and connections, highlighting the importance of being in the right place at the right time for ideas to flourish.'
+[progress] 35/63 generations (55.6%)
+[9/9] context=30000 depth=75% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This mention appears in the section discussing brevity and the importance of concise, effective design in programming languages. While the context is technical, the author includes this anecdote as a brief, lighthearted interjection, highlighting the value of simplicity and enjoyment in both work and leisure.'
+[progress] 36/63 generations (57.1%)
+[job] $ /job/.job_python_venv_6Xq/bin/python3 -u needle_in_haystack_with_mask.py --adapter qwen3_8b --model /job/project/c0/models/Qwen/Qwen3-8B --max-new-tokens 2048 --device-map cuda:0 --dtype float16 --prefill-attention sdpa_memory_efficient --attention-scope all_decode_tokens --lengths 8000,16000,30000 --depths 15,45,75 --haystack-dir /job/mask_data_0wa --mask-mode legacy_uniform --head-scores /job/attention_mass_head_scores_uld --context-seed 42 --output-root /job/datasphere-results/qwen3-8b-two-rankings-mask/attention-mass/evaluation/context-42 --mask-topk 8 --head-selection bottom
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=bottom8 mask_mode=legacy_uniform blocked_heads=[(10, 8), (14, 0), (14, 1), (14, 2), (14, 28), (14, 29), (27, 3), (28, 28)]
+[1/9] context=8000 depth=15% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the October 2004 section, where the author reflects on the structure of essays and contrasts it with the rigid, formulaic approaches often taught in schools. The mention of Dolores Park serves as a brief, vivid example of a simple, enjoyable activity in the city.'
+[progress] 37/63 generations (58.7%)
+[2/9] context=8000 depth=45% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears as a standalone observation in the middle of a discussion about essay writing, highlighting a personal preference for simple, enjoyable activities.'
+[progress] 38/63 generations (60.3%)
+[3/9] context=8000 depth=75% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This example is used by the author to illustrate the value of seeking surprises and observing the unexpected in everyday experiences.'
+[progress] 39/63 generations (61.9%)
+[4/9] context=16000 depth=15% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.022
+[memory] generation peak_allocated_gib=19.022
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the essay discussing the evolution of essay writing and is presented as a lighthearted observation about the city.'
+[progress] 40/63 generations (63.5%)
+[5/9] context=16000 depth=45% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the May 2003 section, though it is presented as a standalone observation rather than being tied to the broader discussion of programming languages or other topics.'
+[progress] 41/63 generations (65.1%)
+[6/9] context=16000 depth=75% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation appears in the December 2014 section discussing the challenges of starting a startup and the importance of not starting one in college. The author contrasts the intense demands of entrepreneurship with the simplicity and serendipity of such a relaxed activity.'
+[progress] 42/63 generations (66.7%)
+[7/9] context=30000 depth=15% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, as mentioned in the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This example is used by the author to illustrate how expressing ideas helps form them, drawing a parallel between the act of writing and the reflective experience of sitting in a park.'
+[progress] 43/63 generations (68.3%)
+[8/9] context=30000 depth=45% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This advice appears in the *Ideas* section of the October 2014 essay on starting a startup, where it is framed as an example of finding joy in simple, thoughtful experiences.'
+[progress] 44/63 generations (69.8%)
+[9/9] context=30000 depth=75% blocked=8
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the section discussing programming language design, specifically in the "Brevity" subsection, as a brief, whimsical example.'
+[progress] 45/63 generations (71.4%)
+[job] $ /job/.job_python_venv_6Xq/bin/python3 -u needle_in_haystack_with_mask.py --adapter qwen3_8b --model /job/project/c0/models/Qwen/Qwen3-8B --max-new-tokens 2048 --device-map cuda:0 --dtype float16 --prefill-attention sdpa_memory_efficient --attention-scope all_decode_tokens --lengths 8000,16000,30000 --depths 15,45,75 --haystack-dir /job/mask_data_0wa --mask-mode legacy_uniform --head-scores /job/attention_mass_head_scores_uld --context-seed 42 --output-root /job/datasphere-results/qwen3-8b-two-rankings-mask/attention-mass/evaluation/context-42 --mask-topk 16 --head-selection top
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=top16 mask_mode=legacy_uniform blocked_heads=[(7, 4), (7, 7), (13, 15), (15, 11), (18, 19), (19, 24), (20, 15), (20, 21), (21, 8), (22, 4), (22, 23), (23, 5), (23, 10), (24, 22), (24, 23), (29, 11)]
+[1/9] context=8000 depth=15% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=0.0 response=''
+[progress] 46/63 generations (73.0%)
+[2/9] context=8000 depth=45% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **to eat a sandwich and sit in Dolores Park on a sunny day**. This example is used by the author to illustrate a broader point about the process of thinking and writing, highlighting how even mundane activities can be framed as reflections of deeper intellectual or creative processes.'
+[progress] 47/63 generations (74.6%)
+[3/9] context=8000 depth=75% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response="The best thing to do in San Francisco, according to the text, is **to eat a sandwich and sit in Dolores Park on a sunny day**. This example is used to illustrate the author's point about how even mundane activities can lead to unexpected insights and how the process of writing essays (or thinking) can reveal surprising truths. The author emphasizes the value of observing and reflecting on simple, everyday experiences, which aligns with their broader argument about the importance of curiosity and openness to new ideas."
+[progress] 48/63 generations (76.2%)
+[4/9] context=16000 depth=15% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.022
+[memory] generation peak_allocated_gib=19.022
+  score=58.3 response='The best thing to do in San Francisco, as mentioned in the text, is to **eat a sandwich**. This is humorously noted in the context of the author\'s reflections on the city, where they mention that the most important thing is to "eat a sandwich" as a way to illustrate the point about the absurdity of certain ideas or situations. The reference is part of a broader discussion on the nature of ideas and the importance of simplicity, but it\'s used here to highlight the contrast between the complexity of academic or professional discussions and the straightforward, everyday actions people take. \n\nThe exact quote is:  \n*"The one saving grace was that they were not the sort of people who would be interested in the sort of thing I was doing."*  \nHowever, this is not directly about San Francisco. The mention of San Francisco in the text is more about the author\'s experience with Y Combinator and the idea of starting a startup, not a specific activity in the city. \n\nBut in the context of the question, the answer is likely a humorous or metaphorical reference to the idea that the best thing to do in San Francisco is to **eat a sandwich**, as it\'s a simple, relatable action that contrasts with the more complex and abstract discussions the author is engaged in. \n\n**Answer:**  \nThe best thing to do in San Francisco is to **eat a sandwich**.'
+[progress] 49/63 generations (77.8%)
+[5/9] context=16000 depth=45% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is to **eat a sandwich and sit in Dolores Park on a sunny day**. This statement appears in the May 2021 section of the text, where the author reflects on the importance of open-mindedness and the value of simple, enjoyable experiences. While the context of the passage is broader, this specific recommendation is highlighted as an example of how to approach life with curiosity and simplicity.'
+[progress] 50/63 generations (79.4%)
+[6/9] context=16000 depth=75% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=83.3 response="The best thing to do in San Francisco, according to the text, is to **eat a sandwich and sit in Dolores Park and watch the world go by**. This is mentioned in the context of discussing the author's reflections on the city and the importance of observing and engaging with the world around them. The passage highlights the value of simple, reflective activities in a place where ideas and experiences intersect."
+[progress] 51/63 generations (81.0%)
+[7/9] context=30000 depth=15% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=0.0 response=''
+[progress] 52/63 generations (82.5%)
+[8/9] context=30000 depth=45% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=0.0 response=''
+[progress] 53/63 generations (84.1%)
+[9/9] context=30000 depth=75% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response="The best thing to do in San Francisco, according to the text, is **to eat a sandwich and sit in Dolores Park on a sunny day**. This is mentioned in the context of discussing design and programming, where the author uses it as an example of a simple, enjoyable activity. The text emphasizes that this activity allows for relaxation and appreciation of the city's atmosphere."
+[progress] 54/63 generations (85.7%)
+[job] $ /job/.job_python_venv_6Xq/bin/python3 -u needle_in_haystack_with_mask.py --adapter qwen3_8b --model /job/project/c0/models/Qwen/Qwen3-8B --max-new-tokens 2048 --device-map cuda:0 --dtype float16 --prefill-attention sdpa_memory_efficient --attention-scope all_decode_tokens --lengths 8000,16000,30000 --depths 15,45,75 --haystack-dir /job/mask_data_0wa --mask-mode legacy_uniform --head-scores /job/attention_mass_head_scores_uld --context-seed 42 --output-root /job/datasphere-results/qwen3-8b-two-rankings-mask/attention-mass/evaluation/context-42 --mask-topk 16 --head-selection bottom
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=bottom16 mask_mode=legacy_uniform blocked_heads=[(7, 12), (10, 0), (10, 8), (14, 0), (14, 1), (14, 2), (14, 3), (14, 28), (14, 29), (14, 30), (18, 0), (21, 0), (27, 3), (28, 28), (30, 29), (32, 25)]
+[1/9] context=8000 depth=15% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the October 2004 section discussing the evolution of essay writing.'
+[progress] 55/63 generations (87.3%)
+[2/9] context=8000 depth=45% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, as mentioned in the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** \n\nThis line appears in the section discussing the structure and purpose of essays, serving as an illustrative example of the author\'s writing style and perspective on creativity.'
+[progress] 56/63 generations (88.9%)
+[3/9] context=8000 depth=75% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=17.125
+[memory] generation peak_allocated_gib=17.125
+  score=100.0 response='The best thing to do in San Francisco, as mentioned in the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This recommendation is part of a discussion about observing surprises and finding interest in everyday experiences.'
+[progress] 57/63 generations (90.5%)
+[4/9] context=16000 depth=15% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.022
+[memory] generation peak_allocated_gib=19.022
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the December 2019 section, embedded within a discussion about the evolution of education and the misalignment between academic traditions and practical learning. The author uses it as a brief, illustrative example of a simple, enjoyable activity in the city. No other mentions of San Francisco appear in the text.'
+[progress] 58/63 generations (92.1%)
+[5/9] context=16000 depth=45% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This statement appears in the May 2003 section of the text, though it is presented as a standalone observation rather than a central theme of the discussion about programming languages or other topics.'
+[progress] 59/63 generations (93.7%)
+[6/9] context=16000 depth=75% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=19.023
+[memory] generation peak_allocated_gib=19.023
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is:  \n**"The best thing to do in San Francisco is eat a sandwich and sit in Dolores Park on a sunny day."**  \n\nThis line appears in the December 2014 essay discussing the trade-offs of starting a startup versus pursuing other activities, serving as a contrast to the intense demands of entrepreneurial life.'
+[progress] 60/63 generations (95.2%)
+[7/9] context=30000 depth=15% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='The best thing to do in San Francisco, according to the text, is **"eat a sandwich and sit in Dolores Park on a sunny day."** This example is used by the author to illustrate the value of thinking through the process of writing and the importance of allowing ideas to develop organically, rather than forcing a predetermined structure. The anecdote highlights how engaging in simple, reflective activities can lead to deeper insights.'
+[progress] 61/63 generations (96.8%)
+[8/9] context=30000 depth=45% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day"**. This recommendation appears in the section titled *Ideas* under the essay "How to Start a Startup" (October 2014), where the author reflects on the value of simple, enjoyable activities during downtime. The passage emphasizes that such moments of leisure can be deeply satisfying and align with the spirit of exploration and curiosity that drives creative and intellectual work. \n\n**Source**: The book explicitly states:  \n*"The best thing to do in San Francisco is eat a sandwich and sit in Dolores Park on a sunny day."*  \n— *October 2014 essay, "How to Start a Startup"*.'
+[progress] 62/63 generations (98.4%)
+[9/9] context=30000 depth=75% blocked=16
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.339
+[memory] generation peak_allocated_gib=22.339
+  score=100.0 response='Based on the content of the book, the best thing to do in San Francisco is **"eat a sandwich and sit in Dolores Park on a sunny day."** This line appears in the section discussing brevity in programming languages, serving as a humorous or illustrative example rather than a serious recommendation.'
+[progress] 63/63 generations (100.0%)
+[job] mask experiment artifacts: /job/datasphere-results/qwen3-8b-two-rankings-mask/attention-mass

@@ -1,0 +1,1313 @@
+{
+  "threshold": 50.0,
+  "head_bin_counts": [
+    18,
+    24,
+    6
+  ],
+  "mean_head_scores": {
+    "3-0": 0.0,
+    "3-1": 0.0,
+    "3-2": 0.0,
+    "3-3": 0.0,
+    "3-4": 0.0,
+    "3-5": 0.05109682199465481,
+    "3-6": 0.0,
+    "3-7": 0.0,
+    "7-0": 0.0,
+    "7-1": 0.1582651954168982,
+    "7-2": 0.1255854568548067,
+    "7-3": 0.1105554232489217,
+    "7-4": 0.023629964806435394,
+    "7-5": 0.0,
+    "7-6": 0.017094017094017096,
+    "7-7": 0.008547008547008548,
+    "11-0": 0.1501547987616099,
+    "11-1": 0.7013442353999628,
+    "11-2": 0.20119869810272287,
+    "11-3": 0.11433939297716388,
+    "11-4": 0.15806673546611627,
+    "11-5": 0.11187848958746792,
+    "11-6": 0.07253049667910348,
+    "11-7": 0.1517292477044799,
+    "15-0": 0.20522081977190337,
+    "15-1": 0.24418512344208937,
+    "15-2": 0.279272842740335,
+    "15-3": 0.37209917705273743,
+    "15-4": 0.16293561959196634,
+    "15-5": 0.41234685507131325,
+    "15-6": 0.1195390436876505,
+    "15-7": 0.8805403402926621,
+    "19-0": 0.3845227699716864,
+    "19-1": 0.32935090365430925,
+    "19-2": 0.4698473181445318,
+    "19-3": 0.3917070201899923,
+    "19-4": 0.005847953216374269,
+    "19-5": 0.6212457992643751,
+    "19-6": 0.506416871741949,
+    "19-7": 0.4571458812944881,
+    "23-0": 0.6318700219629012,
+    "23-1": 0.4891243946971501,
+    "23-2": 0.0,
+    "23-3": 0.470455928660263,
+    "23-4": 0.05153343388637507,
+    "23-5": 0.5070387129210658,
+    "23-6": 0.0,
+    "23-7": 0.4700722394220846
+  },
+  "masking": [
+    {
+      "condition": "top",
+      "k": 0,
+      "n": 9,
+      "accuracy": 100.0,
+      "mean_rouge": 100.0,
+      "std_rouge": 0.0,
+      "min_rouge": 100.0,
+      "max_rouge": 100.0
+    },
+    {
+      "condition": "top",
+      "k": 4,
+      "n": 9,
+      "accuracy": 100.0,
+      "mean_rouge": 100.0,
+      "std_rouge": 0.0,
+      "min_rouge": 100.0,
+      "max_rouge": 100.0
+    },
+    {
+      "condition": "top",
+      "k": 8,
+      "n": 9,
+      "accuracy": 100.0,
+      "mean_rouge": 85.18518518518519,
+      "std_rouge": 3.674654598700812,
+      "min_rouge": 83.33333333333334,
+      "max_rouge": 91.66666666666666
+    },
+    {
+      "condition": "top",
+      "k": 16,
+      "n": 9,
+      "accuracy": 44.44444444444444,
+      "mean_rouge": 46.2962962962963,
+      "std_rouge": 28.59897261385278,
+      "min_rouge": 8.333333333333332,
+      "max_rouge": 83.33333333333334
+    },
+    {
+      "condition": "random",
+      "k": 0,
+      "n": 9,
+      "accuracy": 100.0,
+      "mean_rouge": 100.0,
+      "std_rouge": 0.0,
+      "min_rouge": 100.0,
+      "max_rouge": 100.0
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "n": 27,
+      "accuracy": 96.29629629629629,
+      "mean_rouge": 95.37037037037037,
+      "std_rouge": 15.561659364130875,
+      "min_rouge": 25.0,
+      "max_rouge": 100.0
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "n": 27,
+      "accuracy": 77.77777777777777,
+      "mean_rouge": 80.55555555555556,
+      "std_rouge": 32.10892252914922,
+      "min_rouge": 16.666666666666664,
+      "max_rouge": 100.0
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "n": 27,
+      "accuracy": 55.55555555555556,
+      "mean_rouge": 61.72839506172839,
+      "std_rouge": 39.512200543244205,
+      "min_rouge": 8.333333333333332,
+      "max_rouge": 100.0
+    }
+  ],
+  "spread": "Sample SD across individual context/depth/repeat tests, not a confidence interval",
+  "raw_results": [
+    {
+      "condition": "baseline",
+      "k": 0,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": null,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/evaluation/baseline/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "baseline",
+      "k": 0,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": null,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/evaluation/baseline/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "baseline",
+      "k": 0,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": null,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/evaluation/baseline/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 16,
+      "score": 33.33333333333333,
+      "context_seed": 42,
+      "head_seed": null,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/evaluation/top16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 16,
+      "score": 75.0,
+      "context_seed": 42,
+      "head_seed": null,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/evaluation/top16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 16,
+      "score": 50.0,
+      "context_seed": 42,
+      "head_seed": null,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/evaluation/top16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": null,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/evaluation/top4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": null,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/evaluation/top4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": null,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/evaluation/top4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 8,
+      "score": 83.33333333333334,
+      "context_seed": 42,
+      "head_seed": null,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/evaluation/top8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 8,
+      "score": 83.33333333333334,
+      "context_seed": 42,
+      "head_seed": null,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/evaluation/top8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 8,
+      "score": 83.33333333333334,
+      "context_seed": 42,
+      "head_seed": null,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/evaluation/top8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 75.0,
+      "context_seed": 42,
+      "head_seed": 42,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-0/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 42,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-0/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 16.666666666666664,
+      "context_seed": 42,
+      "head_seed": 42,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-0/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 42,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-0/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 42,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-0/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 42,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-0/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 42,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-0/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 42,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-0/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 42,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-0/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 43,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-1/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 8.333333333333332,
+      "context_seed": 42,
+      "head_seed": 43,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-1/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 43,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-1/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 43,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-1/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 43,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-1/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 43,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-1/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 91.66666666666666,
+      "context_seed": 42,
+      "head_seed": 43,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-1/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 25.0,
+      "context_seed": 42,
+      "head_seed": 43,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-1/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 43,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-1/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 33.33333333333333,
+      "context_seed": 42,
+      "head_seed": 44,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-2/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 16.666666666666664,
+      "context_seed": 42,
+      "head_seed": 44,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-2/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 83.33333333333334,
+      "context_seed": 42,
+      "head_seed": 44,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-2/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 44,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-2/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 25.0,
+      "context_seed": 42,
+      "head_seed": 44,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-2/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 44,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-2/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 16.666666666666664,
+      "context_seed": 42,
+      "head_seed": 44,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-2/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 42,
+      "head_seed": 44,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-2/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 16.666666666666664,
+      "context_seed": 42,
+      "head_seed": 44,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-42/random/repeat-2/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "baseline",
+      "k": 0,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": null,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/evaluation/baseline/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "baseline",
+      "k": 0,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": null,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/evaluation/baseline/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "baseline",
+      "k": 0,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": null,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/evaluation/baseline/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 16,
+      "score": 75.0,
+      "context_seed": 43,
+      "head_seed": null,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/evaluation/top16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 16,
+      "score": 16.666666666666664,
+      "context_seed": 43,
+      "head_seed": null,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/evaluation/top16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 16,
+      "score": 58.333333333333336,
+      "context_seed": 43,
+      "head_seed": null,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/evaluation/top16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": null,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/evaluation/top4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": null,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/evaluation/top4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": null,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/evaluation/top4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 8,
+      "score": 83.33333333333334,
+      "context_seed": 43,
+      "head_seed": null,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/evaluation/top8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 8,
+      "score": 83.33333333333334,
+      "context_seed": 43,
+      "head_seed": null,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/evaluation/top8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 8,
+      "score": 83.33333333333334,
+      "context_seed": 43,
+      "head_seed": null,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/evaluation/top8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 42,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-0/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 42,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-0/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 16.666666666666664,
+      "context_seed": 43,
+      "head_seed": 42,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-0/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 42,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-0/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 42,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-0/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 42,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-0/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 42,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-0/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 42,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-0/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 42,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-0/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 43,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-1/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 8.333333333333332,
+      "context_seed": 43,
+      "head_seed": 43,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-1/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 43,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-1/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 43,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-1/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 43,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-1/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 43,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-1/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 43,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-1/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 66.66666666666666,
+      "context_seed": 43,
+      "head_seed": 43,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-1/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 43,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-1/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 33.33333333333333,
+      "context_seed": 43,
+      "head_seed": 44,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-2/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 16.666666666666664,
+      "context_seed": 43,
+      "head_seed": 44,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-2/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 91.66666666666666,
+      "context_seed": 43,
+      "head_seed": 44,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-2/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 44,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-2/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 44,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-2/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 75.0,
+      "context_seed": 43,
+      "head_seed": 44,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-2/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 44,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-2/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 43,
+      "head_seed": 44,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-2/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 33.33333333333333,
+      "context_seed": 43,
+      "head_seed": 44,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-43/random/repeat-2/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "baseline",
+      "k": 0,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": null,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/evaluation/baseline/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "baseline",
+      "k": 0,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": null,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/evaluation/baseline/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "baseline",
+      "k": 0,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": null,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/evaluation/baseline/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 16,
+      "score": 8.333333333333332,
+      "context_seed": 44,
+      "head_seed": null,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/evaluation/top16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 16,
+      "score": 83.33333333333334,
+      "context_seed": 44,
+      "head_seed": null,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/evaluation/top16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 16,
+      "score": 16.666666666666664,
+      "context_seed": 44,
+      "head_seed": null,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/evaluation/top16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": null,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/evaluation/top4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": null,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/evaluation/top4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": null,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/evaluation/top4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 8,
+      "score": 83.33333333333334,
+      "context_seed": 44,
+      "head_seed": null,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/evaluation/top8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 8,
+      "score": 91.66666666666666,
+      "context_seed": 44,
+      "head_seed": null,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/evaluation/top8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "top",
+      "k": 8,
+      "score": 91.66666666666666,
+      "context_seed": 44,
+      "head_seed": null,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/evaluation/top8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 42,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-0/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 42,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-0/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 16.666666666666664,
+      "context_seed": 44,
+      "head_seed": 42,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-0/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 42,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-0/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 42,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-0/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 42,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-0/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 42,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-0/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 42,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-0/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 42,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-0/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 43,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-1/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 8.333333333333332,
+      "context_seed": 44,
+      "head_seed": 43,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-1/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 43,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-1/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 43,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-1/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 43,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-1/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 43,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-1/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 75.0,
+      "context_seed": 44,
+      "head_seed": 43,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-1/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 25.0,
+      "context_seed": 44,
+      "head_seed": 43,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-1/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 43,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-1/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 33.33333333333333,
+      "context_seed": 44,
+      "head_seed": 44,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-2/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 25.0,
+      "context_seed": 44,
+      "head_seed": 44,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-2/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 16,
+      "score": 83.33333333333334,
+      "context_seed": 44,
+      "head_seed": 44,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-2/evaluation/random16/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 44,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-2/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 75.0,
+      "context_seed": 44,
+      "head_seed": 44,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-2/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 4,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 44,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-2/evaluation/random4/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 44,
+      "depth": 25.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-2/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_25_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 100.0,
+      "context_seed": 44,
+      "head_seed": 44,
+      "depth": 50.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-2/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_50_results.json"
+    },
+    {
+      "condition": "random",
+      "k": 8,
+      "score": 25.0,
+      "context_seed": 44,
+      "head_seed": 44,
+      "depth": 75.0,
+      "length": 10000,
+      "source": "datasphere-results/full/evaluation/context-44/random/repeat-2/evaluation/random8/results/san-francisco_Qwen3_5-0_8B_len_10000_depth_75_results.json"
+    }
+  ]
+}

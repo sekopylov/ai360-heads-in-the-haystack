@@ -1,0 +1,22 @@
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=top64 mask_mode=legacy_uniform blocked_heads=[(2, 31), (4, 4), (7, 23), (8, 16), (8, 17), (9, 10), (13, 13), (13, 15), (13, 28), (17, 4), (17, 25), (17, 27), (18, 15), (18, 19), (19, 13), (20, 15), (20, 21), (20, 26), (21, 8), (21, 22), (22, 4), (22, 20), (22, 22), (22, 23), (23, 4), (23, 5), (23, 10), (23, 21), (23, 30), (24, 5), (24, 20), (24, 21), (24, 22), (24, 23), (24, 29), (25, 30), (26, 14), (26, 27), (28, 0), (28, 2), (28, 3), (28, 11), (28, 23), (29, 7), (29, 9), (29, 10), (29, 11), (29, 12), (29, 13), (29, 14), (29, 15), (30, 24), (31, 28), (31, 30), (32, 2), (32, 5), (32, 7), (32, 8), (32, 11), (33, 16), (33, 28), (33, 29), (33, 30), (33, 31)]
+[1/2] case=eugene-onegin-glass-compass context=32000 depth=45% blocked=64
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.812
+[memory] generation peak_allocated_gib=22.812
+  score=0.0 response=''
+[2/2] case=eugene-onegin-glass-compass context=48000 depth=45% blocked=64
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=26.608
+[memory] generation peak_allocated_gib=26.608
+  score=27.3 response='The strange object that Lensky carried at the winter ball was a **mirror**. \n\n**Explanation:**  \nIn the text, it is mentioned that Lensky, during the winter, carried a mirror. This is referenced in the context of his interactions and the symbolic significance of mirrors in the narrative, often tied to themes of self-reflection, vanity, or hidden truths. The mention of "strange" in the context of his actions and the objects he carried (like the mirror) underscores the thematic elements of self-examination and societal expectations.'
+[model] source=local path=/job/project/c0/models/Qwen/Qwen3-8B
+[model] parameter devices=['cuda:0']; device_map=None
+condition=top64 mask_mode=legacy_uniform blocked_heads=[(2, 31), (4, 4), (7, 23), (8, 16), (8, 17), (9, 10), (13, 13), (13, 15), (13, 28), (17, 4), (17, 25), (17, 27), (18, 15), (18, 19), (19, 13), (20, 15), (20, 21), (20, 26), (21, 8), (21, 22), (22, 4), (22, 20), (22, 22), (22, 23), (23, 4), (23, 5), (23, 10), (23, 21), (23, 30), (24, 5), (24, 20), (24, 21), (24, 22), (24, 23), (24, 29), (25, 30), (26, 14), (26, 27), (28, 0), (28, 2), (28, 3), (28, 11), (28, 23), (29, 7), (29, 9), (29, 10), (29, 11), (29, 12), (29, 13), (29, 14), (29, 15), (30, 24), (31, 28), (31, 30), (32, 2), (32, 5), (32, 7), (32, 8), (32, 11), (33, 16), (33, 28), (33, 29), (33, 30), (33, 31)]
+[1/2] case=eugene-onegin-glass-compass context=32000 depth=45% blocked=64
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=22.812
+[memory] generation peak_allocated_gib=22.812
+  score=0.0 response=''
+[2/2] case=eugene-onegin-glass-compass context=48000 depth=45% blocked=64
+[memory] prefill=sdpa_memory_efficient peak_allocated_gib=26.608
+[memory] generation peak_allocated_gib=26.608
+  score=27.3 response='The strange object that Lens carried at the winter ball was a **mirror**. \n\n**Explanation:**  \nIn the text, it is mentioned that Lens carried a "strange" object, which is described as a mirror. The passage refers to "strange" in the context of a mirror, implying that it was an unusual or peculiar item he carried. The text states:  \n*"strange" (referring to the object he carried at the ball)*.  \n\nThus, the answer is **a mirror**.'

@@ -1,0 +1,285 @@
+[INFO] Image 'cr.yandex/datasphere.pools/cloud/data-sphere/jobs-env-pip:releases-datasphere-25-06-06-13' exists
+[INFO] Creating container from image cr.yandex/datasphere.pools/cloud/data-sphere/jobs-env-pip:releases-datasphere-25-06-06-13 ...
+[INFO] Set job pod shmem size to 97925254348
+[INFO] Creating container... (attempt 1)
+[INFO] Container job-bt1af8nq5baf9a9t6b6f from image cr.yandex/datasphere.pools/cloud/data-sphere/jobs-env-pip:releases-datasphere-25-06-06-13 created
+[INFO] Start environment container job-bt1af8nq5baf9a9t6b6f ...
+[INFO] Environment container job-bt1af8nq5baf9a9t6b6f started
+[INFO] Creating python env...
+[INFO] Found 'python3.12' binary, version '3.12.11'
+[INFO] Python env created at '/job/.job_python_venv_Rkk'. Installing requirements...
+[INFO] Found 'pip' binary, version '25.1.1'
+[INFO] Looking in indexes: https://pypi.org/simple, https://download.pytorch.org/whl/cu118
+[INFO] Collecting torch==2.6.0+cu118 (from -r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading https://download-r2.pytorch.org/whl/cu118/torch-2.6.0%2Bcu118-cp312-cp312-linux_x86_64.whl.metadata (27 kB)
+[INFO] Collecting transformers<6,>=5.17 (from -r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading transformers-5.19.0-py3-none-any.whl.metadata (32 kB)
+[INFO] Collecting accelerate>=1.0 (from -r /job/requirements_cSKwj.txt (line 5))
+[INFO]   Downloading accelerate-1.15.0-py3-none-any.whl.metadata (19 kB)
+[INFO] Collecting rouge-score>=0.1.2 (from -r /job/requirements_cSKwj.txt (line 6))
+[INFO]   Downloading rouge_score-0.1.2.tar.gz (17 kB)
+[INFO]   Installing build dependencies: started
+[INFO]   Installing build dependencies: finished with status 'done'
+[INFO]   Getting requirements to build wheel: started
+[INFO]   Getting requirements to build wheel: finished with status 'done'
+[INFO]   Preparing metadata (pyproject.toml): started
+[INFO]   Preparing metadata (pyproject.toml): finished with status 'done'
+[INFO] Collecting sentencepiece>=0.2 (from -r /job/requirements_cSKwj.txt (line 7))
+[INFO]   Downloading sentencepiece-0.2.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (33 kB)
+[INFO] Collecting mistral-common>=1.8.6 (from -r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading mistral_common-1.12.0-py3-none-any.whl.metadata (6.1 kB)
+[INFO] Collecting filelock (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading filelock-4.1.0-py3-none-any.whl.metadata (2.0 kB)
+[INFO] Collecting typing-extensions>=4.10.0 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+[INFO] Collecting networkx (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading networkx-3.7-py3-none-any.whl.metadata (6.7 kB)
+[INFO] Collecting jinja2 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading https://download.pytorch.org/whl/jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+[INFO] Collecting fsspec (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading fsspec-2026.9.0-py3-none-any.whl.metadata (10 kB)
+[INFO] Collecting nvidia-cuda-nvrtc-cu11==11.8.89 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading nvidia_cuda_nvrtc_cu11-11.8.89-py3-none-manylinux2014_x86_64.whl.metadata (1.5 kB)
+[INFO] Collecting nvidia-cuda-runtime-cu11==11.8.89 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading nvidia_cuda_runtime_cu11-11.8.89-py3-none-manylinux2014_x86_64.whl.metadata (1.5 kB)
+[INFO] Collecting nvidia-cuda-cupti-cu11==11.8.87 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading nvidia_cuda_cupti_cu11-11.8.87-py3-none-manylinux2014_x86_64.whl.metadata (1.6 kB)
+[INFO] Collecting nvidia-cudnn-cu11==9.1.0.70 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading https://download.pytorch.org/whl/cu118/nvidia_cudnn_cu11-9.1.0.70-py3-none-manylinux2014_x86_64.whl (663.9 MB)
+[INFO]      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 663.9/663.9 MB 9.2 MB/s eta 0:00:00
+[INFO] Collecting nvidia-cublas-cu11==11.11.3.6 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading nvidia_cublas_cu11-11.11.3.6-py3-none-manylinux2014_x86_64.whl.metadata (1.5 kB)
+[INFO] Collecting nvidia-cufft-cu11==10.9.0.58 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading nvidia_cufft_cu11-10.9.0.58-py3-none-manylinux2014_x86_64.whl.metadata (1.5 kB)
+[INFO] Collecting nvidia-curand-cu11==10.3.0.86 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading nvidia_curand_cu11-10.3.0.86-py3-none-manylinux2014_x86_64.whl.metadata (1.5 kB)
+[INFO] Collecting nvidia-cusolver-cu11==11.4.1.48 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading nvidia_cusolver_cu11-11.4.1.48-py3-none-manylinux2014_x86_64.whl.metadata (1.6 kB)
+[INFO] Collecting nvidia-cusparse-cu11==11.7.5.86 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading nvidia_cusparse_cu11-11.7.5.86-py3-none-manylinux2014_x86_64.whl.metadata (1.5 kB)
+[INFO] Collecting nvidia-nccl-cu11==2.21.5 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading https://download.pytorch.org/whl/cu118/nvidia_nccl_cu11-2.21.5-py3-none-manylinux2014_x86_64.whl (147.8 MB)
+[INFO]      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 147.8/147.8 MB 15.5 MB/s eta 0:00:00
+[INFO] Collecting nvidia-nvtx-cu11==11.8.86 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading nvidia_nvtx_cu11-11.8.86-py3-none-manylinux2014_x86_64.whl.metadata (1.7 kB)
+[INFO] Collecting triton==3.2.0 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading https://download-r2.pytorch.org/whl/triton-3.2.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (1.4 kB)
+[INFO] Collecting setuptools (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Using cached setuptools-84.0.0-py3-none-any.whl.metadata (6.6 kB)
+[INFO] Collecting sympy==1.13.1 (from torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading sympy-1.13.1-py3-none-any.whl.metadata (12 kB)
+[INFO] Collecting mpmath<1.4,>=1.1.0 (from sympy==1.13.1->torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading mpmath-1.3.0-py3-none-any.whl.metadata (8.6 kB)
+[INFO] Collecting huggingface-hub<3.0,>=1.31.0 (from transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading huggingface_hub-2.2.0-py3-none-any.whl.metadata (16 kB)
+[INFO] Collecting numpy>=1.17 (from transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading numpy-2.5.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+[INFO] Collecting packaging>=20.0 (from transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+[INFO] Collecting pyyaml>=5.1 (from transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+[INFO] Collecting regex>=2025.10.22 (from transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading regex-2026.9.29-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (40 kB)
+[INFO] Collecting tokenizers<0.24.0,>=0.23.1 (from transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading tokenizers-0.23.3-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.8 kB)
+[INFO] Collecting typer (from transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading typer-0.27.3-py3-none-any.whl.metadata (16 kB)
+[INFO] Collecting safetensors>=0.8.0 (from transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.2 kB)
+[INFO] Collecting tqdm>=4.60 (from transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading tqdm-4.70.1-py3-none-any.whl.metadata (57 kB)
+[INFO] Collecting psutil (from accelerate>=1.0->-r /job/requirements_cSKwj.txt (line 5))
+[INFO]   Downloading psutil-7.2.2-cp36-abi3-manylinux2010_x86_64.manylinux_2_12_x86_64.manylinux_2_28_x86_64.whl.metadata (22 kB)
+[INFO] Collecting absl-py (from rouge-score>=0.1.2->-r /job/requirements_cSKwj.txt (line 6))
+[INFO]   Downloading absl_py-2.5.1-py3-none-any.whl.metadata (3.3 kB)
+[INFO] Collecting nltk (from rouge-score>=0.1.2->-r /job/requirements_cSKwj.txt (line 6))
+[INFO]   Downloading nltk-3.10.3-py3-none-any.whl.metadata (3.2 kB)
+[INFO] Collecting six>=1.14.0 (from rouge-score>=0.1.2->-r /job/requirements_cSKwj.txt (line 6))
+[INFO]   Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+[INFO] Collecting pydantic<3.0,>=2.7 (from mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading pydantic-2.14.0-py3-none-any.whl.metadata (131 kB)
+[INFO] Collecting jsonschema>=4.21.1 (from mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading jsonschema-4.26.0-py3-none-any.whl.metadata (7.6 kB)
+[INFO] Collecting tiktoken>=0.7.0 (from mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading tiktoken-0.14.0-cp312-cp312-manylinux_2_28_x86_64.whl.metadata (6.7 kB)
+[INFO] Collecting pillow>=10.3.0 (from mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.1 kB)
+[INFO] Collecting requests>=2.0.0 (from mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+[INFO] Collecting numpy>=1.17 (from transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading numpy-2.3.5-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+[INFO] Collecting pydantic-extra-types>=2.10.5 (from pydantic-extra-types[pycountry]>=2.10.5->mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading pydantic_extra_types-2.11.1-py3-none-any.whl.metadata (4.2 kB)
+[INFO] Collecting click<9.0.0,>=8.4.2 (from huggingface-hub<3.0,>=1.31.0->transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading click-8.5.0-py3-none-any.whl.metadata (2.6 kB)
+[INFO] Collecting hf-xet<2.0.0,>=1.6.0 (from huggingface-hub<3.0,>=1.31.0->transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading hf_xet-1.7.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (4.9 kB)
+[INFO] Collecting httpx2<3,>=2.0.0 (from huggingface-hub<3.0,>=1.31.0->transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading httpx2-2.13.1-py3-none-any.whl.metadata (9.8 kB)
+[INFO] Collecting attrs>=22.2.0 (from jsonschema>=4.21.1->mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+[INFO] Collecting jsonschema-specifications>=2023.03.6 (from jsonschema>=4.21.1->mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading jsonschema_specifications-2025.9.1-py3-none-any.whl.metadata (2.9 kB)
+[INFO] Collecting referencing>=0.28.4 (from jsonschema>=4.21.1->mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading referencing-0.37.0-py3-none-any.whl.metadata (2.8 kB)
+[INFO] Collecting rpds-py>=0.25.0 (from jsonschema>=4.21.1->mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.1 kB)
+[INFO] Collecting annotated-types>=0.6.0 (from pydantic<3.0,>=2.7->mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+[INFO] Collecting pydantic-core==2.50.0 (from pydantic<3.0,>=2.7->mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading pydantic_core-2.50.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.5 kB)
+[INFO] Collecting typing-inspection>=0.4.4 (from pydantic<3.0,>=2.7->mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+[INFO] Collecting pycountry>=23 (from pydantic-extra-types[pycountry]>=2.10.5->mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading pycountry-26.2.16-py3-none-any.whl.metadata (12 kB)
+[INFO] Collecting charset_normalizer<4,>=2 (from requests>=2.0.0->mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (46 kB)
+[INFO] Collecting idna<4,>=2.5 (from requests>=2.0.0->mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+[INFO] Collecting urllib3<3,>=1.26 (from requests>=2.0.0->mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)
+[INFO] Collecting certifi>=2023.5.7 (from requests>=2.0.0->mistral-common>=1.8.6->-r /job/requirements_cSKwj.txt (line 8))
+[INFO]   Downloading certifi-2026.7.22-py3-none-any.whl.metadata (2.5 kB)
+[INFO] Collecting MarkupSafe>=2.0 (from jinja2->torch==2.6.0+cu118->-r /job/requirements_cSKwj.txt (line 3))
+[INFO]   Downloading markupsafe-3.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.7 kB)
+[INFO] Collecting defusedxml (from nltk->rouge-score>=0.1.2->-r /job/requirements_cSKwj.txt (line 6))
+[INFO]   Downloading defusedxml-0.7.1-py2.py3-none-any.whl.metadata (32 kB)
+[INFO] Collecting joblib (from nltk->rouge-score>=0.1.2->-r /job/requirements_cSKwj.txt (line 6))
+[INFO]   Downloading joblib-1.6.0-py3-none-any.whl.metadata (6.5 kB)
+[INFO] Collecting shellingham>=1.3.0 (from typer->transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading shellingham-1.5.4-py2.py3-none-any.whl.metadata (3.5 kB)
+[INFO] Collecting rich>=13.8.0 (from typer->transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading rich-15.0.0-py3-none-any.whl.metadata (18 kB)
+[INFO] Collecting annotated-doc>=0.0.2 (from typer->transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading annotated_doc-0.0.5-py3-none-any.whl.metadata (6.5 kB)
+[INFO] Collecting anyio>=4.10 (from httpx2<3,>=2.0.0->huggingface-hub<3.0,>=1.31.0->transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+[INFO] Collecting httpcore2==2.13.1 (from httpx2<3,>=2.0.0->huggingface-hub<3.0,>=1.31.0->transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading httpcore2-2.13.1-py3-none-any.whl.metadata (26 kB)
+[INFO] Collecting truststore>=0.10 (from httpx2<3,>=2.0.0->huggingface-hub<3.0,>=1.31.0->transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading truststore-0.10.4-py3-none-any.whl.metadata (4.4 kB)
+[INFO] Collecting h11>=0.16 (from httpcore2==2.13.1->httpx2<3,>=2.0.0->huggingface-hub<3.0,>=1.31.0->transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+[INFO] Collecting markdown-it-py>=2.2.0 (from rich>=13.8.0->typer->transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading markdown_it_py-4.2.0-py3-none-any.whl.metadata (7.4 kB)
+[INFO] Collecting pygments<3.0.0,>=2.13.0 (from rich>=13.8.0->typer->transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+[INFO] Collecting cloudpickle>=3.0 (from joblib->nltk->rouge-score>=0.1.2->-r /job/requirements_cSKwj.txt (line 6))
+[INFO]   Downloading cloudpickle-3.1.2-py3-none-any.whl.metadata (7.1 kB)
+[INFO] Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich>=13.8.0->typer->transformers<6,>=5.17->-r /job/requirements_cSKwj.txt (line 4))
+[INFO]   Downloading mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+[INFO] Downloading https://download-r2.pytorch.org/whl/cu118/torch-2.6.0%2Bcu118-cp312-cp312-linux_x86_64.whl (848.7 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 848.7/848.7 MB 14.9 MB/s eta 0:00:00
+[INFO] Downloading nvidia_cublas_cu11-11.11.3.6-py3-none-manylinux2014_x86_64.whl (417.9 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 417.9/417.9 MB 13.2 MB/s eta 0:00:00
+[INFO] Downloading nvidia_cuda_cupti_cu11-11.8.87-py3-none-manylinux2014_x86_64.whl (13.1 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 13.1/13.1 MB 3.3 MB/s eta 0:00:00
+[INFO] Downloading nvidia_cuda_nvrtc_cu11-11.8.89-py3-none-manylinux2014_x86_64.whl (23.2 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 23.2/23.2 MB 35.9 MB/s eta 0:00:00
+[INFO] Downloading nvidia_cuda_runtime_cu11-11.8.89-py3-none-manylinux2014_x86_64.whl (875 kB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 875.6/875.6 kB 30.3 MB/s eta 0:00:00
+[INFO] Downloading nvidia_cufft_cu11-10.9.0.58-py3-none-manylinux2014_x86_64.whl (168.4 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 168.4/168.4 MB 39.7 MB/s eta 0:00:00
+[INFO] Downloading nvidia_curand_cu11-10.3.0.86-py3-none-manylinux2014_x86_64.whl (58.1 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 58.1/58.1 MB 10.1 MB/s eta 0:00:00
+[INFO] Downloading nvidia_cusolver_cu11-11.4.1.48-py3-none-manylinux2014_x86_64.whl (128.2 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 128.2/128.2 MB 32.9 MB/s eta 0:00:00
+[INFO] Downloading nvidia_cusparse_cu11-11.7.5.86-py3-none-manylinux2014_x86_64.whl (204.1 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 204.1/204.1 MB 49.2 MB/s eta 0:00:00
+[INFO] Downloading nvidia_nvtx_cu11-11.8.86-py3-none-manylinux2014_x86_64.whl (99 kB)
+[INFO] Downloading sympy-1.13.1-py3-none-any.whl (6.2 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.2/6.2 MB 89.7 MB/s eta 0:00:00
+[INFO] Downloading https://download-r2.pytorch.org/whl/triton-3.2.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (166.7 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 166.7/166.7 MB 42.9 MB/s eta 0:00:00
+[INFO] Downloading transformers-5.19.0-py3-none-any.whl (12.6 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.6/12.6 MB 77.1 MB/s eta 0:00:00
+[INFO] Downloading accelerate-1.15.0-py3-none-any.whl (394 kB)
+[INFO] Downloading sentencepiece-0.2.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (1.4 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.4/1.4 MB 43.3 MB/s eta 0:00:00
+[INFO] Downloading mistral_common-1.12.0-py3-none-any.whl (6.6 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.6/6.6 MB 91.0 MB/s eta 0:00:00
+[INFO] Downloading huggingface_hub-2.2.0-py3-none-any.whl (839 kB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 839.9/839.9 kB 32.7 MB/s eta 0:00:00
+[INFO] Downloading filelock-4.1.0-py3-none-any.whl (133 kB)
+[INFO] Downloading fsspec-2026.9.0-py3-none-any.whl (221 kB)
+[INFO] Downloading jsonschema-4.26.0-py3-none-any.whl (90 kB)
+[INFO] Downloading numpy-2.3.5-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.6 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.6/16.6 MB 102.7 MB/s eta 0:00:00
+[INFO] Downloading packaging-26.3-py3-none-any.whl (129 kB)
+[INFO] Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 95.6 MB/s eta 0:00:00
+[INFO] Downloading pydantic-2.14.0-py3-none-any.whl (487 kB)
+[INFO] Downloading pydantic_core-2.50.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.2 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.2/2.2 MB 69.9 MB/s eta 0:00:00
+[INFO] Downloading pydantic_extra_types-2.11.1-py3-none-any.whl (79 kB)
+[INFO] Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (807 kB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 807.9/807.9 kB 30.0 MB/s eta 0:00:00
+[INFO] Downloading regex-2026.9.29-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (807 kB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 807.8/807.8 kB 37.3 MB/s eta 0:00:00
+[INFO] Downloading requests-2.34.2-py3-none-any.whl (73 kB)
+[INFO] Downloading safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (516 kB)
+[INFO] Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+[INFO] Downloading tiktoken-0.14.0-cp312-cp312-manylinux_2_28_x86_64.whl (1.2 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 51.5 MB/s eta 0:00:00
+[INFO] Downloading tokenizers-0.23.3-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.4 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.4/3.4 MB 78.8 MB/s eta 0:00:00
+[INFO] Downloading tqdm-4.70.1-py3-none-any.whl (80 kB)
+[INFO] Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+[INFO] Downloading absl_py-2.5.1-py3-none-any.whl (137 kB)
+[INFO] Downloading https://download.pytorch.org/whl/jinja2-3.1.6-py3-none-any.whl (134 kB)
+[INFO] Downloading networkx-3.7-py3-none-any.whl (2.1 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 71.5 MB/s eta 0:00:00
+[INFO] Downloading nltk-3.10.3-py3-none-any.whl (1.8 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 58.4 MB/s eta 0:00:00
+[INFO] Downloading psutil-7.2.2-cp36-abi3-manylinux2010_x86_64.manylinux_2_12_x86_64.manylinux_2_28_x86_64.whl (155 kB)
+[INFO] Using cached setuptools-84.0.0-py3-none-any.whl (818 kB)
+[INFO] Downloading typer-0.27.3-py3-none-any.whl (123 kB)
+[INFO] Downloading annotated_doc-0.0.5-py3-none-any.whl (5.3 kB)
+[INFO] Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+[INFO] Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+[INFO] Downloading certifi-2026.7.22-py3-none-any.whl (136 kB)
+[INFO] Downloading charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (257 kB)
+[INFO] Downloading click-8.5.0-py3-none-any.whl (125 kB)
+[INFO] Downloading hf_xet-1.7.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.2 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.2/4.2 MB 90.6 MB/s eta 0:00:00
+[INFO] Downloading httpx2-2.13.1-py3-none-any.whl (95 kB)
+[INFO] Downloading httpcore2-2.13.1-py3-none-any.whl (83 kB)
+[INFO] Downloading idna-3.20-py3-none-any.whl (69 kB)
+[INFO] Downloading jsonschema_specifications-2025.9.1-py3-none-any.whl (18 kB)
+[INFO] Downloading markupsafe-3.0.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
+[INFO] Downloading mpmath-1.3.0-py3-none-any.whl (536 kB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 536.2/536.2 kB 18.2 MB/s eta 0:00:00
+[INFO] Downloading pycountry-26.2.16-py3-none-any.whl (8.0 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.0/8.0 MB 88.4 MB/s eta 0:00:00
+[INFO] Downloading referencing-0.37.0-py3-none-any.whl (26 kB)
+[INFO] Downloading rich-15.0.0-py3-none-any.whl (310 kB)
+[INFO] Downloading rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (371 kB)
+[INFO] Downloading shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
+[INFO] Downloading typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+[INFO] Downloading urllib3-2.8.0-py3-none-any.whl (135 kB)
+[INFO] Downloading defusedxml-0.7.1-py2.py3-none-any.whl (25 kB)
+[INFO] Downloading joblib-1.6.0-py3-none-any.whl (306 kB)
+[INFO] Downloading anyio-4.15.1-py3-none-any.whl (132 kB)
+[INFO] Downloading cloudpickle-3.1.2-py3-none-any.whl (22 kB)
+[INFO] Downloading markdown_it_py-4.2.0-py3-none-any.whl (91 kB)
+[INFO] Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+[INFO]    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 47.0 MB/s eta 0:00:00
+[INFO] Downloading truststore-0.10.4-py3-none-any.whl (18 kB)
+[INFO] Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+[INFO] Downloading mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+[INFO] Building wheels for collected packages: rouge-score
+[INFO]   Building wheel for rouge-score (pyproject.toml): started
+[INFO]   Building wheel for rouge-score (pyproject.toml): finished with status 'done'
+[INFO]   Created wheel for rouge-score: filename=rouge_score-0.1.2-py3-none-any.whl size=24987 sha256=548337eb250c6381869af8884da7bccde1fe10cfcc30198157c3a6e14f0fbecc
+[INFO]   Stored in directory: /job/.cache/pip/wheels/85/9d/af/01feefbe7d55ef5468796f0c68225b6788e85d9d0a281e7a70
+[INFO] Successfully built rouge-score
+[INFO] Installing collected packages: triton, mpmath, urllib3, typing-extensions, truststore, tqdm, sympy, six, shellingham, setuptools, sentencepiece, safetensors, rpds-py, regex, pyyaml, pygments, pycountry, psutil, pillow, packaging, nvidia-nvtx-cu11, nvidia-nccl-cu11, nvidia-cusparse-cu11, nvidia-curand-cu11, nvidia-cufft-cu11, nvidia-cuda-runtime-cu11, nvidia-cuda-nvrtc-cu11, nvidia-cuda-cupti-cu11, nvidia-cublas-cu11, numpy, networkx, mdurl, MarkupSafe, idna, hf-xet, h11, fsspec, filelock, defusedxml, cloudpickle, click, charset_normalizer, certifi, attrs, annotated-types, annotated-doc, absl-py, typing-inspection, requests, referencing, pydantic-core, nvidia-cusolver-cu11, nvidia-cudnn-cu11, markdown-it-py, joblib, jinja2, httpcore2, anyio, torch, tiktoken, rich, pydantic, nltk, jsonschema-specifications, httpx2, typer, rouge-score, pydantic-extra-types, jsonschema, huggingface-hub, tokenizers, accelerate, transformers, mistral-common
+[INFO] Successfully installed MarkupSafe-3.0.4 absl-py-2.5.1 accelerate-1.15.0 annotated-doc-0.0.5 annotated-types-0.8.0 anyio-4.15.1 attrs-26.1.0 certifi-2026.7.22 charset_normalizer-3.5.2 click-8.5.0 cloudpickle-3.1.2 defusedxml-0.7.1 filelock-4.1.0 fsspec-2026.9.0 h11-0.16.0 hf-xet-1.7.0 httpcore2-2.13.1 httpx2-2.13.1 huggingface-hub-2.2.0 idna-3.20 jinja2-3.1.6 joblib-1.6.0 jsonschema-4.26.0 jsonschema-specifications-2025.9.1 markdown-it-py-4.2.0 mdurl-0.1.2 mistral-common-1.12.0 mpmath-1.3.0 networkx-3.7 nltk-3.10.3 numpy-2.3.5 nvidia-cublas-cu11-11.11.3.6 nvidia-cuda-cupti-cu11-11.8.87 nvidia-cuda-nvrtc-cu11-11.8.89 nvidia-cuda-runtime-cu11-11.8.89 nvidia-cudnn-cu11-9.1.0.70 nvidia-cufft-cu11-10.9.0.58 nvidia-curand-cu11-10.3.0.86 nvidia-cusolver-cu11-11.4.1.48 nvidia-cusparse-cu11-11.7.5.86 nvidia-nccl-cu11-2.21.5 nvidia-nvtx-cu11-11.8.86 packaging-26.3 pillow-12.3.0 psutil-7.2.2 pycountry-26.2.16 pydantic-2.14.0 pydantic-core-2.50.0 pydantic-extra-types-2.11.1 pygments-2.21.0 pyyaml-6.0.3 referencing-0.37.0 regex-2026.9.29 requests-2.34.2 rich-15.0.0 rouge-score-0.1.2 rpds-py-2026.9.1 safetensors-0.8.0 sentencepiece-0.2.2 setuptools-84.0.0 shellingham-1.5.4 six-1.17.0 sympy-1.13.1 tiktoken-0.14.0 tokenizers-0.23.3 torch-2.6.0+cu118 tqdm-4.70.1 transformers-5.19.0 triton-3.2.0 truststore-0.10.4 typer-0.27.3 typing-extensions-4.16.0 typing-inspection-0.4.4 urllib3-2.8.0
+[INFO] Python requirements successfully installed
+[INFO] Install python local modules to /job
+[INFO] Installing local module '_LOCAL_MODULE_2'...
+[INFO] Local module '_LOCAL_MODULE_2' successfully installed
+[INFO] Installing local module '_LOCAL_MODULE_1'...
+[INFO] Local module '_LOCAL_MODULE_1' successfully installed
+[INFO] Installing local module '_LOCAL_MODULE_0'...
+[INFO] Local module '_LOCAL_MODULE_0' successfully installed

@@ -1,0 +1,248 @@
+ macro's arguments, and whatever it returns gets
+inserted in place of the macro call. Hygienic macros embody the
+opposite principle. They try to protect you from understanding what
+they're doing. I have never heard hygienic macros explained in one
+sentence. And they are a classic example of the dangers of deciding
+what programmers are allowed to want. Hygienic macros are intended
+to protect me from variable capture, among other things, but variable
+capture is exactly what I want in some macros.A really good language should be both clean and dirty: cleanly
+designed, with a small core of well understood and highly orthogonal
+operators, but dirty in the sense that it lets hackers have their
+way with it. C is like this. So were the early Lisps. A real hacker's
+language will always have a slightly raffish character.A good programming language should have features that make the kind
+of people who use the phrase "software engineering" shake their
+heads disapprovingly. At the other end of the continuum are languages
+like Ada and Pascal, models of propriety that are good for teaching
+and not much else.5 Throwaway ProgramsTo be attractive to hackers, a language must be good for writing
+the kinds of programs they want to write. And that means, perhaps
+surprisingly, that it has to be good for writing throwaway programs.A throwaway program is a program you write quickly for some limited
+task: a program to automate some system administration task, or
+generate test data for a simulation, or convert data from one format
+to another. The surprising thing about throwaway programs is that,
+like the "temporary" buildings built at so many American universities
+during World War II, they often don't get thrown away. Many evolve
+into real programs, with real features and real users.I have a hunch that the best big programs begin life this way,
+rather than being designed big from the start, like the Hoover Dam.
+It's terrifying to build something big from scratch. When people
+take on a project that's too big, they become overwhelmed. The
+project either gets bogged down, or the result is sterile and
+wooden: a shopping mall rather than a real downtown, Brasilia rather
+than Rome, Ada rather than C.Another way to get a big program is to start with a throwaway
+program and keep improving it. This approach is less daunting, and
+the design of the program benefits from evolution. I think, if one
+looked, that this would turn out to be the way most big programs
+were developed. And those that did evolve this way are probably
+still written in whatever language they were first written in,
+because it's rare for a program to be ported, except for political
+reasons. And so, paradoxically, if you want to make a language that
+is used for big systems, you have to make it good for writing
+throwaway programs, because that's where big systems come from.Perl is a striking example of this idea. It was not only designed
+for writing throwaway programs, but was pretty much a throwaway
+program itself. Perl began life as a collection of utilities for
+generating reports, and only evolved into a programming language
+as the throwaway programs people wrote in it grew larger. It was
+not until Perl 5 (if then) that the language was suitable for
+writing serious programs, and yet it was already massively popular.What makes a language good for throwaway programs? To start with,
+it must be readily available. A throwaway program is something that
+you expect to write in an hour. So the language probably must
+already be installed on the computer you're using. It can't be
+something you have to install before you use it. It has to be there.
+C was there because it came with the operating system. Perl was
+there because it was originally a tool for system administrators,
+and yours had already installed it.Being available means more than being installed, though. An
+interactive language, with a command-line interface, is more
+available than one that you have to compile and run separately. A
+popular programming language should be interactive, and start up
+fast.Another thing you want in a throwaway program is brevity. Brevity
+is always attractive to hackers, and never more so than in a program
+they expect to turn out in an hour.6 LibrariesOf course the ultimate in brevity is to have the program already
+written for you, and merely to call it. And this brings us to what
+I think will be an increasingly important feature of programming
+languages: library functions. Perl wins because it has large
+libraries for manipulating strings. This class of library functions
+are especially important for throwaway programs, which are often
+originally written for converting or extracting data.  Many Perl
+programs probably begin as just a couple library calls stuck
+together.I think a lot of the advances that happen in programming languages
+in the next fifty years will have to do with library functions. I
+think future programming languages will have libraries that are as
+carefully designed as the core language. Programming language design
+will not be about whether to make your language strongly or weakly
+typed, or object oriented, or functional, or whatever, but about
+how to design great libraries. The kind of language designers who
+like to think about how to design type systems may shudder at this.
+It's almost like writing applications! Too bad. Languages are for
+programmers, and libraries are what programmers need.It's hard to design good libraries. It's not simply a matter of
+writing a lot of code. Once the libraries get too big, it can
+sometimes take longer to find the function you need than to write
+the code yourself. Libraries need to be designed using a small set
+of orthogonal operators, just like the core language. It ought to
+be possible for the programmer to guess what library call will do
+what he needs.Libraries are one place Common Lisp falls short. There are only
+rudimentary libraries for manipulating strings, and almost none
+for talking to the operating system. For historical reasons, Common
+Lisp tries to pretend that the OS doesn't exist. And because you
+can't talk to the OS, you're unlikely to be able to write a serious
+program using only the built-in operators in Common Lisp. You have
+to use some implementation-specific hacks as well, and in practice
+these tend not to give you everything you want. Hackers would think
+a lot more highly of Lisp if Common Lisp had powerful string
+libraries and good OS support.7 SyntaxCould a language with Lisp's syntax, or more precisely, lack of
+syntax, ever become popular? I don't know the answer to this
+question. I do think that syntax is not the main reason Lisp isn't
+currently popular. Common Lisp has worse problems than unfamiliar
+syntax. I know several programmers who are comfortable with prefix
+syntax and yet use Perl by default, because it has powerful string
+libraries and can talk to the os.There are two possible problems with prefix notation: that it is
+unfamiliar to programmers, and that it is not dense enough. The
+conventional wisdom in the Lisp world is that the first problem is
+the real one. I'm not so sure. Yes, prefix notation makes ordinary
+programmers panic. But I don't think ordinary programmers' opinions
+matter. Languages become popular or unpopular based on what expert
+hackers think of them, and I think expert hackers might be able to
+deal with prefix notation. Perl syntax can be pretty incomprehensible,
+but that has not stood in the way of Perl's popularity. If anything
+it may have helped foster a Perl cult.A more serious problem is the diffuseness of prefix notation. For
+expert hackers, that really is a problem. No one wants to write
+(aref a x y) when they could write a[x,y].In this particular case there is a way to finesse our way out of
+the problem. If we treat data structures as if they were functions
+on indexes, we could write (a x y) instead, which is even shorter
+than the Perl form. Similar tricks may shorten other types of
+expressions.We can get rid of (or make optional) a lot of parentheses by making
+indentation significant. That's how programmers read code anyway:
+when indentation says one thing and delimiters say another, we go
+by the indentation. Treating indentation as significant would
+eliminate this common source of bugs as well as making programs
+shorter.Sometimes infix syntax is easier to read. This is especially true
+for math expressions. I've used Lisp my whole programming life and
+I still don't find prefix math expressions natural. And yet it is
+convenient, especially when you're generating code, to have operators
+that take any number of arguments. So if we do have infix syntax,
+it should probably be implemented as some kind of read-macro.I don't think we should be religiously opposed to introducing syntax
+into Lisp, as long as it translates in a well-understood way into
+underlying s-expressions. There is already a good deal of syntax
+in Lisp. It's not necessarily bad to introduce more, as long as no
+one is forced to use it. In Common Lisp, some delimiters are reserved
+for the language, suggesting that at least some of the designers
+intended to have more syntax in the future.One of the most egregiously unlispy pieces of syntax in Common Lisp
+occurs in format strings; format is a language in its own right,
+and that language is not Lisp. If there were a plan for introducing
+more syntax into Lisp, format specifiers might be able to be included
+in it. It would be a good thing if macros could generate format
+specifiers the way they generate any other kind of code.An eminent Lisp hacker told me that his copy of CLTL falls open to
+the section format. Mine too. This probably indicates room for
+improvement. It may also mean that programs do a lot of I/O.8 EfficiencyA good language, as everyone knows, should generate fast code. But
+in practice I don't think fast code comes primarily from things
+you do in the design of the language. As Knuth pointed out long
+ago, speed only matters in certain critical bottlenecks.  And as
+many programmers have observed since, one is very often mistaken
+about where these bottlenecks are.So, in practice, the way to get fast code is to have a very good
+profiler, rather than by, say, making the language strongly typed.
+You don't need to know the type of every argument in every call in
+the program. You do need to be able to declare the types of arguments
+in the bottlenecks. And even more, you need to be able to find out
+where the bottlenecks are.One complaint people have had with Lisp is that it's hard to tell
+what's expensive. This might be true. It might also be inevitable,
+if you want to have a very abstract language. And in any case I
+think good profiling would go a long way toward fixing the problem:
+you'd soon learn what was expensive.Part of the problem here is social. Language designers like to
+write fast compilers. That's how they measure their skill. They
+think of the profiler as an add-on, at best. But in practice a good
+profiler may do more to improve the speed of actual programs written
+in the language than a compiler that generates fast code. Here,
+again, language designers are somewhat out of touch with their
+users. They do a really good job of solving slightly the wrong
+problem.It might be a good idea to have an active profiler — to push
+performance data to the programmer instead of waiting for him to
+come asking for it. For example, the editor could display bottlenecks
+in red when the programmer edits the source code. Another approach
+would be to somehow represent what's happening in running programs.
+This would be an especially big win in server-based applications,
+where you have lots of running programs to look at. An active
+profiler could show graphically what's happening in memory as a
+program's running, or even make sounds that tell what's happening.Sound is a good cue to problems.
+The best thing to do in San Francisco is eat a sandwich and sit in Dolores Park on a sunny day.
+ In one place I worked, we had a
+big board of dials showing what was happening to our web servers.
+The hands were moved by little servomotors that made a slight noise
+when they turned. I couldn't see the board from my desk, but I
+found that I could tell immediately, by the sound, when there was
+a problem with a server.It might even be possible to write a profiler that would automatically
+detect inefficient algorithms. I would not be surprised if certain
+patterns of memory access turned out to be sure signs of bad
+algorithms. If there were a little guy running around inside the
+computer executing our programs, he would probably have as long
+and plaintive a tale to tell about his job as a federal government
+employee. I often have a feeling that I'm sending the processor on
+a lot of wild goose chases, but I've never had a good way to look
+at what it's doing.A number of Lisps now compile into byte code, which is then executed
+by an interpreter. This is usually done to make the implementation
+easier to port, but it could be a useful language feature. It might
+be a good idea to make the byte code an official part of the
+language, and to allow programmers to use inline byte code in
+bottlenecks. Then such optimizations would be portable too.The nature of speed, as perceived by the end-user, may be changing.
+With the rise of server-based applications, more and more programs
+may turn out to be i/o-bound. It will be worth making i/o fast.
+The language can help with straightforward measures like simple,
+fast, formatted output functions, and also with deep structural
+changes like caching and persistent objects.Users are interested in response time. But another kind of efficiency
+will be increasingly important: the number of simultaneous users
+you can support per processor. Many of the interesting applications
+written in the near future will be server-based, and the number of
+users per server is the critical question for anyone hosting such
+applications. In the capital cost of a business offering a server-based
+application, this is the divisor.For years, efficiency hasn't mattered much in most end-user
+applications. Developers have been able to assume that each user
+would have an increasingly powerful processor sitting on their
+desk. And by Parkinson's Law, software has expanded to use the
+resources available. That will change with server-based applications.
+In that world, the hardware and software will be supplied together.
+For companies that offer server-based applications, it will make
+a very big difference to the bottom line how many users they can
+support per server.In some applications, the processor will be the limiting factor,
+and execution speed will be the most important thing to optimize.
+But often memory will be the limit; the number of simultaneous
+users will be determined by the amount of memory you need for each
+user's data. The language can help here too. Good support for
+threads will enable all the users to share a single heap. It may
+also help to have persistent objects and/or language level support
+for lazy loading.9 TimeThe last ingredient a popular language needs is time. No one wants
+to write programs in a language that might go away, as so many
+programming languages do. So most hackers will tend to wait until
+a language has been around for a couple years before even considering
+using it.Inventors of wonderful new things are often surprised to discover
+this, but you need time to get any message through to people. A
+friend of mine rarely does anything the first time someone asks
+him. He knows that people sometimes ask for things that they turn
+out not to want. To avoid wasting his time, he waits till the third
+or fourth time he's asked to do something; by then, whoever's asking
+him may be fairly annoyed, but at least they probably really do
+want whatever they're asking for.Most people have learned to do a similar sort of filtering on new
+things they hear about. They don't even start paying attention
+until they've heard about something ten times. They're perfectly
+justified: the majority of hot new whatevers do turn out to be a
+waste of time, and eventually go away. By delaying learning VRML,
+I avoided having to learn it at all.So anyone who invents something new has to expect to keep repeating
+their message for years before people will start to get it. We
+wrote what was, as far as I know, the first web-server based
+application, and it took us years to get it through to people that
+it didn't have to be downloaded. It wasn't that they were stupid.
+They just had us tuned out.The good news is, simple repetition solves the problem. All you
+have to do is keep telling your story, and eventually people will
+start to hear. It's not when people notice you're there that they
+pay attention; it's when they notice you're still there.It's just as well that it usually takes a while to gain momentum.
+Most technologies evolve a good deal even after they're first
+launched — programming languages especially. Nothing could be better,
+for a new techology, than a few years of being used only by a small
+number of early adopters. Early adopters are sophisticated and
+demanding, and quickly flush out whatever flaws remain in your
+technology. When you only have a few users you can be in close
+contact with all of them. And early adopters are forgiving when
+you improve your system, even if this causes some breakage.There are two ways new technology gets introduced: the organic
+growth method, and the big bang method. The organic growth method
+is exemplified by the classic seat-of-the-pants underfunded garage
+startup. A couple guys, working in obscurity, develop some new
+technology. They launch it with no marketing and initially have
+only a few (fanatically devoted) users. They continue to improve
+the technology, and meanwhile their user base grows by word of
+mouth. Before they know it, they're big.The other approach, the big bang

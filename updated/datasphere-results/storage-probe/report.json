@@ -1,0 +1,18 @@
+{
+  "project_home": "/job/project",
+  "root_entries": [
+    ".ipynb_checkpoints",
+    "=4.37.2",
+    "Justamouse",
+    "Nikita-prog-art",
+    "ai360-heads-in-the-haystack",
+    "getting-started_dedicated_en.ipynb",
+    "getting-started_dedicated_ru.ipynb",
+    "logs",
+    "rh-venv",
+    "timon"
+  ],
+  "checkpoints": [],
+  "directories_visited": 66,
+  "scan_limit_reached": false
+}

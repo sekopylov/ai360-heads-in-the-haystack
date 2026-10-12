@@ -1,0 +1,51 @@
+{
+  "kind": "head_score_aggregation",
+  "complete": true,
+  "source_run": "/job/datasphere-results/ministral3-detection-smoke/detection/run.json",
+  "source_run_id": "c11f16cb-d0f9-4642-a109-a65be18533d2",
+  "retrieval_metrics": [
+    "legacy",
+    "needle_token_multiset_v1",
+    "needle_attention_mass_v1"
+  ],
+  "head_score_files": {
+    "legacy": "head_scores_legacy.json",
+    "needle_token_multiset_v1": "head_scores_needle_token_multiset_v1.json",
+    "needle_attention_mass_v1": "head_scores_needle_attention_mass_v1.json"
+  },
+  "selected_cases": [
+    {
+      "file": "/job/datasphere-results/ministral3-detection-smoke/detection/results/detect-1_Ministral-3-8B-Instruct-2512-BF16_len_1000_depth_50_results.json",
+      "case_id": "detect-1",
+      "length": 1000,
+      "depth": 50.0,
+      "score": 95.0,
+      "prompt_sha256": "c6f5f70afd4eef1f82bcdb70469c007611fa5fb493bb7f3841beb64e11c3c1de"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-detection-smoke/detection/results/detect-2_Ministral-3-8B-Instruct-2512-BF16_len_1000_depth_50_results.json",
+      "case_id": "detect-2",
+      "length": 1000,
+      "depth": 50.0,
+      "score": 100.0,
+      "prompt_sha256": "74ebaef6aeeecd3b53501b2af5542a73a022c97d7d4fd14f595d2f506b779c31"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-detection-smoke/detection/results/detect-3_Ministral-3-8B-Instruct-2512-BF16_len_1000_depth_50_results.json",
+      "case_id": "detect-3",
+      "length": 1000,
+      "depth": 50.0,
+      "score": 83.33333333333334,
+      "prompt_sha256": "c567dcde46c8ebbce785c2b48a28761015224416711a5be814855f10c3accfec"
+    }
+  ],
+  "selected_case_count": 3,
+  "available_case_count": 3,
+  "filters": {
+    "all_cases": true,
+    "success_threshold": 50.0,
+    "case_ids": null,
+    "lengths": null,
+    "depths": null
+  }
+}

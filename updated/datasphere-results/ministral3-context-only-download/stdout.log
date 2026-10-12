@@ -1,0 +1,111 @@
+[model] source=local path=/job/project/c0/models/mistralai/Ministral-3-8B-Instruct-2512-BF16
+[model] parameter devices=['cuda:0']; device_map=None
+[1/27] case=detect-1 context=8000 depth=15%
+[memory] prefill=sdpa_flash peak_allocated_gib=18.530
+[memory] generation peak_allocated_gib=18.530
+  score=100.0 response='A new report from the WMO shows that records were once again broken, and in some cases smashed, for greenhouse gas levels, surface temperatures, ocean heat and acidification.'
+[2/27] case=detect-1 context=8000 depth=45%
+[memory] prefill=sdpa_flash peak_allocated_gib=18.530
+[memory] generation peak_allocated_gib=18.530
+  score=100.0 response='A new report from the WMO shows that records were once again broken, and in some cases smashed, for greenhouse gas levels, surface temperatures, ocean heat and acidification.'
+[3/27] case=detect-1 context=8000 depth=75%
+[memory] prefill=sdpa_flash peak_allocated_gib=18.530
+[memory] generation peak_allocated_gib=18.530
+  score=100.0 response='"a new report from the WMO shows that records were once again broken, and in some cases smashed, for greenhouse gas levels, surface temperatures, ocean heat and acidification."'
+[4/27] case=detect-1 context=16000 depth=15%
+[memory] prefill=sdpa_flash peak_allocated_gib=20.459
+[memory] generation peak_allocated_gib=20.459
+  score=95.0 response='That greenhouse gas levels, surface temperatures, ocean heat and acidification records were once again broken, and in some cases smashed.'
+[5/27] case=detect-1 context=16000 depth=45%
+[memory] prefill=sdpa_flash peak_allocated_gib=20.459
+[memory] generation peak_allocated_gib=20.459
+  score=100.0 response='"records were once again broken, and in some cases smashed, for greenhouse gas levels, surface temperatures, ocean heat and acidification."'
+[6/27] case=detect-1 context=16000 depth=75%
+[memory] prefill=sdpa_flash peak_allocated_gib=20.459
+[memory] generation peak_allocated_gib=20.459
+  score=100.0 response='"records were once again broken, and in some cases smashed, for greenhouse gas levels, surface temperatures, ocean heat and acidification."'
+[7/27] case=detect-1 context=30000 depth=15%
+[memory] prefill=sdpa_flash peak_allocated_gib=23.828
+[memory] generation peak_allocated_gib=23.828
+  score=100.0 response='"records were once again broken, and in some cases smashed, for greenhouse gas levels, surface temperatures, ocean heat and acidification."'
+[8/27] case=detect-1 context=30000 depth=45%
+[memory] prefill=sdpa_flash peak_allocated_gib=23.828
+[memory] generation peak_allocated_gib=23.828
+  score=0.0 response='The text does not mention a new report from the WMO.'
+[9/27] case=detect-1 context=30000 depth=75%
+[memory] prefill=sdpa_flash peak_allocated_gib=23.828
+[memory] generation peak_allocated_gib=23.828
+  score=100.0 response='"records were once again broken, and in some cases smashed, for greenhouse gas levels, surface temperatures, ocean heat and acidification."'
+[10/27] case=detect-2 context=8000 depth=15%
+[memory] prefill=sdpa_flash peak_allocated_gib=18.530
+[memory] generation peak_allocated_gib=18.530
+  score=100.0 response='*"The best thing to do in Beijing is to take a walk in Chaoyang Park and have a cup of Espresso in the evening."*'
+[11/27] case=detect-2 context=8000 depth=45%
+[memory] prefill=sdpa_flash peak_allocated_gib=18.530
+[memory] generation peak_allocated_gib=18.530
+  score=100.0 response='"the best thing to do in Beijing is to take a walk in Chaoyang Park and have a cup of Espresso in the evening."'
+[12/27] case=detect-2 context=8000 depth=75%
+[memory] prefill=sdpa_flash peak_allocated_gib=18.530
+[memory] generation peak_allocated_gib=18.530
+  score=13.3 response='"Let us then sell our lives at such a rate as shall make our enemies believe the purchase too dear."'
+[13/27] case=detect-2 context=16000 depth=15%
+[memory] prefill=sdpa_flash peak_allocated_gib=20.459
+[memory] generation peak_allocated_gib=20.459
+  score=13.3 response='"The sweetness, the beauty, the witchery of your younger daughter, Colonel Munro, might explain my motives, without imputing to me this injustice."'
+[14/27] case=detect-2 context=16000 depth=45%
+[memory] prefill=sdpa_flash peak_allocated_gib=20.459
+[memory] generation peak_allocated_gib=20.459
+  score=33.3 response='But the quick and dancing eyes of Alice soon caught a glimpse of his figure reflected from a glass'
+[15/27] case=detect-2 context=16000 depth=75%
+[memory] prefill=sdpa_flash peak_allocated_gib=20.459
+[memory] generation peak_allocated_gib=20.459
+  score=100.0 response='*"The best thing to do in Beijing is to take a walk in Chaoyang Park and have a cup of Espresso in the evening."*'
+[16/27] case=detect-2 context=30000 depth=15%
+[memory] prefill=sdpa_flash peak_allocated_gib=23.828
+[memory] generation peak_allocated_gib=23.828
+  score=100.0 response='Take a walk in Chaoyang Park and have a cup of Espresso in the evening.'
+[17/27] case=detect-2 context=30000 depth=45%
+[memory] prefill=sdpa_flash peak_allocated_gib=23.828
+[memory] generation peak_allocated_gib=23.828
+  score=100.0 response='Take a walk in Chaoyang Park and have a cup of Espresso in the evening.'
+[18/27] case=detect-2 context=30000 depth=75%
+[memory] prefill=sdpa_flash peak_allocated_gib=23.828
+[memory] generation peak_allocated_gib=23.828
+  score=100.0 response='Take a walk in Chaoyang Park and have a cup of Espresso in the evening.'
+[19/27] case=detect-3 context=8000 depth=15%
+[memory] prefill=sdpa_flash peak_allocated_gib=18.530
+[memory] generation peak_allocated_gib=18.530
+  score=100.0 response='"Mr Green is disliked by everyone because he is a mean person and also he can\'t ride a horse or dive a car."'
+[20/27] case=detect-3 context=8000 depth=45%
+[memory] prefill=sdpa_flash peak_allocated_gib=18.530
+[memory] generation peak_allocated_gib=18.530
+  score=100.0 response='"Mr Green is disliked by everyone because he is a mean person and also he can\'t ride a horse or dive a car."'
+[21/27] case=detect-3 context=8000 depth=75%
+[memory] prefill=sdpa_flash peak_allocated_gib=18.530
+[memory] generation peak_allocated_gib=18.530
+  score=100.0 response='"Mr Green is disliked by everyone because he is a mean person and also he can\'t ride a horse or dive a car."'
+[22/27] case=detect-3 context=16000 depth=15%
+[memory] prefill=sdpa_flash peak_allocated_gib=20.459
+[memory] generation peak_allocated_gib=20.459
+  score=100.0 response='"Mr Green is disliked by everyone because he is a mean person and also he can\'t ride a horse or dive a car."'
+[23/27] case=detect-3 context=16000 depth=45%
+[memory] prefill=sdpa_flash peak_allocated_gib=20.459
+[memory] generation peak_allocated_gib=20.459
+  score=100.0 response='"Mr Green is disliked by everyone because he is a mean person and also he can\'t ride a horse or dive a car."'
+[24/27] case=detect-3 context=16000 depth=75%
+[memory] prefill=sdpa_flash peak_allocated_gib=20.459
+[memory] generation peak_allocated_gib=20.459
+  score=100.0 response='"Mr Green is disliked by everyone because he is a mean person and also he can\'t ride a horse or dive a car."'
+[25/27] case=detect-3 context=30000 depth=15%
+[memory] prefill=sdpa_flash peak_allocated_gib=23.828
+[memory] generation peak_allocated_gib=23.828
+  score=94.4 response='"He is a mean person and also he can\'t ride a horse or dive a car."'
+[26/27] case=detect-3 context=30000 depth=45%
+[memory] prefill=sdpa_flash peak_allocated_gib=23.828
+[memory] generation peak_allocated_gib=23.828
+  score=100.0 response='"Mr Green is disliked by everyone because he is a mean person and also he can\'t ride a horse or dive a car."'
+[27/27] case=detect-3 context=30000 depth=75%
+[memory] prefill=sdpa_flash peak_allocated_gib=23.828
+[memory] generation peak_allocated_gib=23.828
+  score=94.4 response='"He is a mean person and also he can\'t ride a horse or dive a car."'
+Aggregated 23/27 cases

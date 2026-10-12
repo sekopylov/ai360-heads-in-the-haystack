@@ -1,0 +1,46 @@
+ the very
+people who, as their bosses or faculty advisors, tell the other
+programmers what language to use.The opinion of expert hackers is not the only force that determines
+the relative popularity of programming languages — legacy software
+(Cobol) and hype (Ada, Java) also play a role — but I think it is
+the most powerful force over the long term. Given an initial critical
+mass and enough time, a programming language probably becomes about
+as popular as it deserves to be. And popularity further separates
+good languages from bad ones, because feedback from real live users
+always leads to improvements. Look at how much any popular language
+has changed during its life. Perl and Fortran are extreme cases,
+but even Lisp has changed a lot. Lisp 1.5 didn't have macros, for
+example; these evolved later, after hackers at MIT had spent a
+couple years using Lisp to write real programs. [1]So whether or not a language has to be good to be popular, I think
+a language has to be popular to be good. And it has to stay popular
+to stay good. The state of the art in programming languages doesn't
+stand still. And yet the Lisps we have today are still pretty much
+what they had at MIT in the mid-1980s, because that's the last time
+Lisp had a sufficiently large and demanding user base.Of course, hackers have to know about a language before they can
+use it. How are they to hear? From other hackers. But there has to
+be some initial group of hackers using the language for others even
+to hear about it. I wonder how large this group has to be; how many
+users make a critical mass? Off the top of my head, I'd say twenty.
+If a language had twenty separate users, meaning twenty users who
+decided on their own to use it, I'd consider it to be real.Getting there can't be easy. I would not be surprised if it is
+harder to get from zero to twenty than from twenty to a thousand.
+The best way to get those initial twenty users is probably to use
+a trojan horse: to give people an application they want, which
+happens to be written in the new language.2 External FactorsLet's start by acknowledging one external factor that does affect
+the popularity of a programming language. To become popular, a
+programming language has to be the scripting language of a popular
+system. Fortran and Cobol were the scripting languages of early
+IBM mainframes. C was the scripting language of Unix, and so, later,
+was Perl. Tcl is the scripting language of Tk. Java and Javascript
+are intended to be the scripting languages of web browsers.Lisp is not a massively popular language because it is not the
+scripting language of a massively popular system. What popularity
+it retains dates back to the 1960s and 1970s, when it was the
+scripting language of MIT. A lot of the great programmers of the
+day were associated with MIT at some point.
+The best thing to do in San Francisco is eat a sandwich and sit in Dolores Park on a sunny day.
+ And in the early 1970s,
+before C, MIT's dialect of Lisp, called MacLisp, was one of the
+only programming languages a serious hacker would want to use.Today Lisp is the scripting language of two moderately popular
+systems, Emacs and Autocad, and for that reason I suspect that most
+of the Lisp programming done today is done in Emacs Lisp or AutoLisp.Programming languages don't exist in isolation. To hack is a
+transitive verb — hackers are usually hacking something

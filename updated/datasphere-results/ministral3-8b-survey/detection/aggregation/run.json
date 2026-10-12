@@ -1,0 +1,163 @@
+{
+  "kind": "head_score_aggregation",
+  "complete": true,
+  "source_run": "/job/datasphere-results/ministral3-8b-survey/detection/run.json",
+  "source_run_id": "b00bfef8-317a-40e6-8dd8-3ba5efebe9b3",
+  "retrieval_metrics": [
+    "legacy",
+    "needle_token_multiset_v1",
+    "needle_attention_mass_v1"
+  ],
+  "head_score_files": {
+    "legacy": "head_scores_legacy.json",
+    "needle_token_multiset_v1": "head_scores_needle_token_multiset_v1.json",
+    "needle_attention_mass_v1": "head_scores_needle_attention_mass_v1.json"
+  },
+  "selected_cases": [
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-1_Ministral-3-8B-Instruct-2512-BF16_len_16000_depth_15_results.json",
+      "case_id": "detect-1",
+      "length": 16000,
+      "depth": 15.0,
+      "score": 100.0,
+      "prompt_sha256": "d599d64f6eeafc926ab124901f51f362213140f3cad98ec399108a9fbae943cc"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-1_Ministral-3-8B-Instruct-2512-BF16_len_16000_depth_45_results.json",
+      "case_id": "detect-1",
+      "length": 16000,
+      "depth": 45.0,
+      "score": 65.0,
+      "prompt_sha256": "47f0c0eecf9a0258348675a6e4cb751d560c40c16218b7b56838bc6e6635c3fc"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-1_Ministral-3-8B-Instruct-2512-BF16_len_16000_depth_75_results.json",
+      "case_id": "detect-1",
+      "length": 16000,
+      "depth": 75.0,
+      "score": 65.0,
+      "prompt_sha256": "7f824ad5ac663f5733c2f07104c9155544e4ee8adc0cb3dc0b8600af403a2af3"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-1_Ministral-3-8B-Instruct-2512-BF16_len_30000_depth_15_results.json",
+      "case_id": "detect-1",
+      "length": 30000,
+      "depth": 15.0,
+      "score": 100.0,
+      "prompt_sha256": "ffada848dd7276a8931f1614631648e8885e0d13e89d1594fea2a803260b25a0"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-1_Ministral-3-8B-Instruct-2512-BF16_len_8000_depth_15_results.json",
+      "case_id": "detect-1",
+      "length": 8000,
+      "depth": 15.0,
+      "score": 100.0,
+      "prompt_sha256": "4642cdf7cc72076da76fd19ec23da8d8012e9368d79d32ee7d01cfe77fb7c361"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-1_Ministral-3-8B-Instruct-2512-BF16_len_8000_depth_45_results.json",
+      "case_id": "detect-1",
+      "length": 8000,
+      "depth": 45.0,
+      "score": 100.0,
+      "prompt_sha256": "4ef0a3e8033c430fd16ba84c1bae70f595abb4ae33520a29cfa4f0dc2b8e96ab"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-1_Ministral-3-8B-Instruct-2512-BF16_len_8000_depth_75_results.json",
+      "case_id": "detect-1",
+      "length": 8000,
+      "depth": 75.0,
+      "score": 60.0,
+      "prompt_sha256": "84448168d4620afad9f94512bafa931a589d37de23c50307920e3fd8aca235cd"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-2_Ministral-3-8B-Instruct-2512-BF16_len_16000_depth_45_results.json",
+      "case_id": "detect-2",
+      "length": 16000,
+      "depth": 45.0,
+      "score": 60.0,
+      "prompt_sha256": "454c807738c5d42e23fe52c56add7efc33607e8bf3cf7e2a8d5c0dd3141d1e6b"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-2_Ministral-3-8B-Instruct-2512-BF16_len_30000_depth_15_results.json",
+      "case_id": "detect-2",
+      "length": 30000,
+      "depth": 15.0,
+      "score": 53.333333333333336,
+      "prompt_sha256": "329e85993241c14783dfa18440397b8070190067eb529d9143a87ba57896ee06"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-2_Ministral-3-8B-Instruct-2512-BF16_len_30000_depth_45_results.json",
+      "case_id": "detect-2",
+      "length": 30000,
+      "depth": 45.0,
+      "score": 53.333333333333336,
+      "prompt_sha256": "8f083be3bc5dc750959cd374a8d3ec430f4cc0fe55498f7728e9aed120a5b439"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-2_Ministral-3-8B-Instruct-2512-BF16_len_8000_depth_15_results.json",
+      "case_id": "detect-2",
+      "length": 8000,
+      "depth": 15.0,
+      "score": 100.0,
+      "prompt_sha256": "30683e706a0b6f607d270693c932f6f363a637f300976c8c37c1b25074ba31ef"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-2_Ministral-3-8B-Instruct-2512-BF16_len_8000_depth_45_results.json",
+      "case_id": "detect-2",
+      "length": 8000,
+      "depth": 45.0,
+      "score": 80.0,
+      "prompt_sha256": "44ea8be7f3e82fd8a33633390f507f8d46d30e09f0fa047a7adabd4f8325ca4c"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-2_Ministral-3-8B-Instruct-2512-BF16_len_8000_depth_75_results.json",
+      "case_id": "detect-2",
+      "length": 8000,
+      "depth": 75.0,
+      "score": 60.0,
+      "prompt_sha256": "61e11915158111e93c73b567dfa7998a245006db74eaa1981b2aacd8cdfb54f6"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-3_Ministral-3-8B-Instruct-2512-BF16_len_16000_depth_75_results.json",
+      "case_id": "detect-3",
+      "length": 16000,
+      "depth": 75.0,
+      "score": 61.111111111111114,
+      "prompt_sha256": "f718e9aca049fe23b755c048204406590b8145aecbcd366ca3b7652ee4eb0f0f"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-3_Ministral-3-8B-Instruct-2512-BF16_len_30000_depth_15_results.json",
+      "case_id": "detect-3",
+      "length": 30000,
+      "depth": 15.0,
+      "score": 100.0,
+      "prompt_sha256": "a95a38c0594592d6ae50eac8d298b069975885b812638ef3f887b1b0de8e1283"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-3_Ministral-3-8B-Instruct-2512-BF16_len_8000_depth_45_results.json",
+      "case_id": "detect-3",
+      "length": 8000,
+      "depth": 45.0,
+      "score": 100.0,
+      "prompt_sha256": "4de909fc1fb303c275016fd3e6efb6233b517b54650cdcb3297a73a5cee99464"
+    },
+    {
+      "file": "/job/datasphere-results/ministral3-8b-survey/detection/results/detect-3_Ministral-3-8B-Instruct-2512-BF16_len_8000_depth_75_results.json",
+      "case_id": "detect-3",
+      "length": 8000,
+      "depth": 75.0,
+      "score": 100.0,
+      "prompt_sha256": "1930466fe015b10e1e03b6b12aff80c05a92a00764030c7d2ab49c2401c8d81c"
+    }
+  ],
+  "selected_case_count": 17,
+  "available_case_count": 27,
+  "filters": {
+    "all_cases": false,
+    "success_threshold": 50.0,
+    "case_ids": null,
+    "lengths": null,
+    "depths": null
+  }
+}
