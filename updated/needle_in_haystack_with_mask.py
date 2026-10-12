@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import random
+import hashlib
+import json
 from pathlib import Path
 
 from retrieval_heads.attention import AttentionRequest, Head
@@ -103,6 +105,7 @@ def parse_args() -> argparse.Namespace:
                         help="select a validation case; repeat to select multiple cases")
     parser.add_argument("--output-root", type=Path, default=HERE)
     parser.add_argument("--head-scores", type=Path)
+    parser.add_argument("--resume", action="store_true", help="validate and skip saved deterministic masking cases")
     return parser.parse_args()
 
 
@@ -176,8 +179,32 @@ def choose_blocked_heads(
     return frozenset(random.sample(candidates, count))
 
 
+def validate_saved_case(row, prepared, model_id, config, blocked):
+    expected = {'case_id': prepared.case.case_id, 'model': model_id,
+                'context_length': prepared.context_length, 'depth_percent': prepared.depth_percent,
+                'needle': prepared.case.needle, 'expected_answer': prepared.case.expected_answer,
+                'prompt_sha256': hashlib.sha256(json.dumps(prepared.prompt.token_ids).encode()).hexdigest()}
+    if any(row.get(key) != value for key, value in expected.items()):
+        raise ValueError('Saved result differs from regenerated prompt/model/case')
+    experiment = row.get('experiment', {})
+    for key in ('condition', 'mask_mode', 'context_seed', 'context_window',
+                'prefill_attention', 'decode_attention', 'seed'):
+        if experiment.get(key) != config[key]:
+            raise ValueError(f'Saved result experiment mismatch: {key}')
+    if experiment.get('blocked_heads') != [list(h) for h in sorted(blocked)]:
+        raise ValueError('Saved result uses different blocked heads')
+    if (not row.get('generated_token_ids') or len(row['generated_token_ids']) > config['max_new_tokens']
+            or row.get('finish_reason') not in ('eos', 'max_new_tokens', 'length') or 'score' not in row):
+        raise ValueError('Saved result is incomplete')
+    if (row['finish_reason'] == 'max_new_tokens' and
+            len(row['generated_token_ids']) != config['max_new_tokens']):
+        raise ValueError('Saved token-limit result has inconsistent token count')
+
+
 def main() -> None:
     args = parse_args()
+    if args.resume and args.mask_topk < 0:
+        raise ValueError('Resume is supported only for deterministic baseline/top/bottom')
     if args.validation_root is None and args.haystack_dir is None:
         raise ValueError("Use --validation-root or --haystack-dir")
     if args.mask_topk < 0 and args.head_selection == "bottom":
@@ -286,7 +313,13 @@ def main() -> None:
         "prefill_attention": args.prefill_attention,
         "decode_attention": args.decode_attention,
     }
-    write_json(run_path, run_config)
+    if args.resume and run_path.exists():
+        previous = read_json(run_path)
+        for key, value in run_config.items():
+            if key != 'complete' and previous.get(key) != value:
+                raise ValueError(f'Resume configuration mismatch: {key}')
+    if not args.resume or not run_path.exists():
+        write_json(run_path, run_config)
     if args.mask_topk >= 0:
         print(
             f"condition={condition} mask_mode={args.mask_mode} "
@@ -321,6 +354,14 @@ def main() -> None:
                     context_length=context_length,
                     depth_percent=depth,
                 )
+                if args.resume:
+                    saved_path = results_dir / (result_stem(model.model_version, context_length,
+                        depth, case_id=case.case_id) + '_results.json')
+                    if saved_path.exists():
+                        validate_saved_case(read_json(saved_path), prepared, model.model_id,
+                                            run_config, blocked)
+                        print('[resume] skipped validated saved case', flush=True)
+                        continue
                 result = runner.run(
                     prepared,
                     attention=AttentionRequest(

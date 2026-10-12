@@ -12,6 +12,8 @@ def aggregate(run_root, *, output_dir=None, success_threshold=50.0, all_cases=Fa
     if not source['complete'] and not allow_incomplete:
         raise ValueError('Detection is incomplete; use --allow-incomplete explicitly')
     names = source['retrieval_metrics']
+    if 'query_retrieval_score_v1' in names and not all_cases:
+        raise ValueError('QRScore averages all examples, independent of answers; use --all-cases')
     histories = {name: {} for name in names}
     selected = []
     seen = set()

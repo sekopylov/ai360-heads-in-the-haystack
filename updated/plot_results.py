@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 
 
 METRIC_LABELS = {
+    "query_retrieval_score_v1": "QRScore (question → gold, prefill)",
     "legacy": "Legacy (historical)",
     "needle_token_multiset_v1": "Token multiset",
     "needle_attention_mass_v1": "Needle attention mass",

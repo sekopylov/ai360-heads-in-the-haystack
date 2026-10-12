@@ -25,6 +25,11 @@ class MultiMetricDetectionTests(unittest.TestCase):
             model = SimpleNamespace(model_id='fixture', model_version='fixture',
                 tokenizer=object(), period_tokens=[4], eligible_heads=((0, 0),),
                 attention_scope='all_decode_tokens')
+            qr_calls = []
+            def qr(prompt, **kwargs):
+                qr_calls.append(kwargs)
+                return {'0-0': .75}
+            model.score_query_retrieval = qr
             case = ExperimentCase('detect-1', 'needle', 'question', 'answer', root)
             prepared = PreparedExample(case, 'context', Prompt(None, [99, 11, 22]),
                                        NeedleSpan(1, 3), 1000, 45)
@@ -43,9 +48,12 @@ class MultiMetricDetectionTests(unittest.TestCase):
             with patch.object(sys, 'argv', argv), patch.object(detection, 'create_model', return_value=model), \
                  patch.object(detection, 'ContextBuilder'), patch.object(detection, 'LegacyOverlapLocator'), \
                  patch.object(detection, 'ExperimentRunner', return_value=runner), \
+                 patch('retrieval_heads.experiment.query_spans.locate_qr_spans',
+                       return_value=(NeedleSpan(2, 3), NeedleSpan(0, 1))), \
                  patch.object(detection, 'load_detection_cases', return_value=[case] if case_id is None else [
                      case, ExperimentCase('detect-2', 'needle', 'question', 'answer', root)]):
                 detection.main()
+            self.assertEqual(len(qr_calls), 1 if multiple and 'query_retrieval_score_v1' in multiple else 0)
             self.assertEqual(len(calls), 1)
             manifest = json.loads((root/'detection/run.json').read_text())
             self.assertTrue(manifest['complete'])
@@ -86,3 +94,20 @@ class MultiMetricDetectionTests(unittest.TestCase):
         self.assertEqual(manifest['retrieval_metric'], 'needle_token_multiset_v1')
         self.assertEqual(request.capture, 'top1')
         self.assertIsNone(request.needle_span)
+
+    def test_qr_only_saved_even_with_failed_answer(self):
+        manifest, payload, request = self.exercise('query_retrieval_score_v1', score=0)
+        self.assertEqual(request.capture, 'none')
+        self.assertIsNone(request.needle_span)
+        self.assertEqual(manifest['qrscore']['phase'], 'separate_prefill')
+        self.assertEqual(payload['experiment']['retrieval_scores']['query_retrieval_score_v1'], {'0-0': .75})
+        self.assertEqual(payload['experiment']['qrscore_query_span'], [2, 3])
+        self.assertEqual(payload['experiment']['qrscore_gold_span'], [0, 1])
+
+    def test_qr_mixed_keeps_decode_scores(self):
+        _, payload, request = self.exercise('query_retrieval_score_v1,needle_attention_mass_v1,needle_token_multiset_v1')
+        self.assertEqual(request.capture, 'top1')
+        scores = payload['experiment']['retrieval_scores']
+        self.assertEqual(scores['query_retrieval_score_v1']['0-0'], .75)
+        self.assertAlmostEqual(scores['needle_attention_mass_v1']['0-0'], .55, places=6)
+        self.assertEqual(scores['needle_token_multiset_v1']['0-0'], .5)

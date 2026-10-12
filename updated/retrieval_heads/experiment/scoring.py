@@ -140,10 +140,28 @@ class NeedleAttentionMassCollector(RetrievalScoreCollector):
         self.qualifying_steps += 1
 
 
+class QueryRetrievalScoreCollector(RetrievalScoreCollector):
+    """QRHead Eq.3; scores supplied by an independent prompt-only pass."""
+
+    metric_name = 'query_retrieval_score_v1'
+    needs_prefill = True
+
+    def set_prefill_scores(self, scores):
+        if set(scores) != set(self.scores) or any(
+                not isfinite(v) or not 0 <= v <= 1.000001 for v in scores.values()):
+            raise ValueError('Invalid or incomplete QRScore head scores')
+        self.scores = dict(scores)
+
+    def on_step(self, step):
+        # Decode tokens (including reasoning) are not part of QRScore.
+        pass
+
+
 _RETRIEVAL_COLLECTORS: dict[str, type[RetrievalScoreCollector]] = {
     LegacyRetrievalScoreCollector.metric_name: LegacyRetrievalScoreCollector,
     MultisetRetrievalScoreCollector.metric_name: MultisetRetrievalScoreCollector,
     NeedleAttentionMassCollector.metric_name: NeedleAttentionMassCollector,
+    QueryRetrievalScoreCollector.metric_name: QueryRetrievalScoreCollector,
 }
 
 

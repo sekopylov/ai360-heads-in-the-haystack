@@ -70,7 +70,7 @@ def parse_args() -> argparse.Namespace:
     metrics = parser.add_mutually_exclusive_group()
     metrics.add_argument("--retrieval-metric", choices=available_retrieval_metrics(),
                         default=None,
-                        help="legacy: uncapped repeated hits; needle_token_multiset_v1: token-frequency quotas")
+                        help="legacy: repeated hits; needle_token_multiset_v1: quotas; query_retrieval_score_v1: question-to-needle prefill mass")
     metrics.add_argument("--retrieval-metrics", help="comma-separated independent metrics computed in the same generation")
     parser.add_argument(
         "--capture",
@@ -96,6 +96,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     single_metric, metric_names = select_retrieval_metrics(args.retrieval_metric, args.retrieval_metrics)
+    needs_qr = 'query_retrieval_score_v1' in metric_names
     needs_top1, needs_mass = retrieval_capture_requirements(metric_names)
     effective_capture = args.capture if needs_top1 or args.capture == "full" else "none"
     lengths = (
@@ -161,6 +162,13 @@ def main() -> None:
         "max_new_tokens": args.max_new_tokens,
         "total_cases": total,
     }
+    if needs_qr:
+        run_config['qrscore'] = {
+            'phase': 'separate_prefill', 'query': 'question_tokens',
+            'gold': 'full_inserted_needle', 'normalization': 'mean_query_tokens',
+            'paper': 'https://aclanthology.org/2025.emnlp-main.1214.pdf',
+            'equations': [3, 4], 'aggregation': 'mean_all_cases_no_answer_filter',
+        }
     write_json(config_path, run_config)
 
     completed = 0
@@ -184,6 +192,16 @@ def main() -> None:
                     prompt_token_ids=prepared.prompt.token_ids,
                     needle_span=prepared.needle_span,
                 ) for name in metric_names}
+                qr_metadata = {}
+                if needs_qr:
+                    from retrieval_heads.experiment.query_spans import locate_qr_spans
+                    query, gold = locate_qr_spans(model.tokenizer, prepared.prompt.token_ids,
+                        question=case.question, needle=case.needle)
+                    qr_scores = model.score_query_retrieval(prepared.prompt,
+                        query_span=(query.start, query.end), gold_span=(gold.start, gold.end))
+                    collectors['query_retrieval_score_v1'].set_prefill_scores(qr_scores)
+                    qr_metadata = {'qrscore_query_span': [query.start, query.end],
+                                   'qrscore_gold_span': [gold.start, gold.end]}
                 full_trace = (
                     FullTraceCollector(prepared.prompt.token_ids)
                     if args.capture == "full"
@@ -219,6 +237,7 @@ def main() -> None:
                                                            if hasattr(c, "qualifying_steps")},
                             "attention_scope": model.attention_scope,
                             "success_threshold": args.success_threshold,
+                            **qr_metadata,
                         },
                     ),
                 )

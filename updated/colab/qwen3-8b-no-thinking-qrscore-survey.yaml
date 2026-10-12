@@ -1,0 +1,15 @@
+# Same grid/generation policy as the previous Qwen no-thinking survey.
+adapter: qwen3_8b_no_thinking
+model: Qwen/Qwen3-8B
+dtype: float16
+device_map: cuda:0
+prefill_attention: sdpa_flash
+attention_scope: all_decode_tokens
+lengths: [8000, 16000, 30000]
+depths: [15, 45, 75]
+max_new_tokens: 2048
+context_seed: 42
+retrieval_metrics: [query_retrieval_score_v1]
+haystack_root: data/haystack_for_detect
+# Reuse the exact checkpoint from the successful Colab smoke.
+revision: b968826d9c46dd6066d109eabc6255188de91218

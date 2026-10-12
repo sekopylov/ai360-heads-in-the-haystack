@@ -67,7 +67,7 @@ class MultisetScoreTests(unittest.TestCase):
                                       needle_span=NeedleSpan(0, 1))
 
     def test_factory_selects_independent_implementations(self):
-        self.assertEqual(set(available_retrieval_metrics()), {"legacy", "needle_token_multiset_v1", "needle_attention_mass_v1"})
+        self.assertEqual(set(available_retrieval_metrics()), {"legacy", "needle_token_multiset_v1", "needle_attention_mass_v1", "query_retrieval_score_v1"})
         for name, cls in (("legacy", LegacyRetrievalScoreCollector),
                           ("needle_token_multiset_v1", MultisetRetrievalScoreCollector)):
             collector = create_retrieval_collector(name, eligible_heads=((0, 0),),

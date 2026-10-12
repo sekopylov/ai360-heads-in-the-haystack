@@ -1,0 +1,15 @@
+# Functional check only. Not a scientific survey or masking ranking.
+adapter: qwen3_8b_no_thinking
+model: Qwen/Qwen3-8B
+dtype: float16
+device_map: cuda:0
+prefill_attention: sdpa_flash
+attention_scope: all_decode_tokens
+lengths: [1000]
+depths: [50]
+max_new_tokens: 64
+context_seed: 42
+retrieval_metrics:
+  - needle_token_multiset_v1
+  - needle_attention_mass_v1
+haystack_root: data/haystack_for_detect

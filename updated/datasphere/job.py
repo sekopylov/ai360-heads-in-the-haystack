@@ -52,6 +52,7 @@ def parse_args() -> argparse.Namespace:
     metrics.add_argument("--retrieval-metrics", help="comma-separated retrieval metrics to compute together")
     parser.add_argument("--head-scores", type=Path,
                         help="ranking JSON; required for mask and full multi-metric runs")
+    parser.add_argument('--resume', action='store_true', help='resume deterministic mask profile only')
     parser.add_argument("--device-map", default="auto")
     parser.add_argument("--prefill-attention", default="sdpa")
     parser.add_argument("--decode-attention", choices=("eager", "sdpa_flash"), default="eager",
@@ -125,7 +126,7 @@ def run_command(script: str, *arguments: str, progress: Progress) -> None:
         for line in process.stdout:
             print(line, end="", flush=True)
             # Both experiment CLIs emit exactly one score line per finished case.
-            if line.lstrip().startswith("score="):
+            if line.lstrip().startswith(("score=", '[resume] skipped validated saved case')):
                 progress.advance()
         returncode = process.wait()
     if returncode:
@@ -134,6 +135,8 @@ def run_command(script: str, *arguments: str, progress: Progress) -> None:
 
 def main() -> int:
     args = parse_args()
+    if args.resume and (args.profile != 'mask' or 'random' in args.mask_selections.split(',')):
+        raise SystemExit('Resume requires deterministic mask profile without random controls')
     profile = PROFILES[args.profile]
     mask_selections = [v.strip() for v in args.mask_selections.split(",")]
     if (not mask_selections or any(v not in {"top", "bottom", "random"} for v in mask_selections)
@@ -281,6 +284,8 @@ def main() -> int:
         "legacy_uniform",
         "--head-scores", str(head_scores),
     )
+    if args.resume:
+        masking_common += ('--resume',)
     for case_id in args.mask_case_id or []:
         masking_common += ("--case-id", case_id)
     for index in range(args.context_count):

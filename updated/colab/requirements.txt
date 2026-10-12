@@ -1,0 +1,9 @@
+# Keep Colab's CUDA-enabled torch; the runner checks torch >=2.6.
+# Same Transformers version as the successful DataSphere smoke stack.
+transformers==5.19.0
+accelerate>=1.0
+rouge-score>=0.1.2
+sentencepiece>=0.2
+mistral-common>=1.8.6
+PyYAML>=6
+packaging>=24

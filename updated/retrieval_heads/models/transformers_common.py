@@ -200,3 +200,7 @@ class TransformersAdapter(ModelAdapter):
             self, prompt, max_new_tokens=max_new_tokens,
             attention=attention, observer=observer,
         )
+
+    def score_query_retrieval(self, prompt, *, query_span, gold_span):
+        from ..attention.qrscore import score_prompt
+        return score_prompt(self, prompt, query_span=query_span, gold_span=gold_span)

@@ -1,0 +1,14 @@
+# Same 27-case QRScore survey grid and generation cap as Colab Qwen.
+adapter: ministral3_8b_no_thinking
+model: mistralai/Ministral-3-8B-Instruct-2512-BF16
+dtype: bfloat16
+device_map: cuda:0
+prefill_attention: sdpa_flash
+attention_scope: all_decode_tokens
+lengths: [8000, 16000, 30000]
+depths: [15, 45, 75]
+max_new_tokens: 2048
+context_seed: 42
+retrieval_metrics: [query_retrieval_score_v1]
+haystack_root: data/haystack_for_detect
+revision: f6fae9795746f63c9be8344932f01275f3c63734
