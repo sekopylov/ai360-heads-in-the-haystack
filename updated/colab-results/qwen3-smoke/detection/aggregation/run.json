@@ -1,0 +1,49 @@
+{
+  "kind": "head_score_aggregation",
+  "complete": true,
+  "source_run": "/content/drive/MyDrive/retrieval-heads-colab/qwen3-smoke/detection/run.json",
+  "source_run_id": "5b1a3415-ff25-4355-b8ad-9916fad71ec6",
+  "retrieval_metrics": [
+    "needle_token_multiset_v1",
+    "needle_attention_mass_v1"
+  ],
+  "head_score_files": {
+    "needle_token_multiset_v1": "head_scores_needle_token_multiset_v1.json",
+    "needle_attention_mass_v1": "head_scores_needle_attention_mass_v1.json"
+  },
+  "selected_cases": [
+    {
+      "file": "/content/drive/MyDrive/retrieval-heads-colab/qwen3-smoke/detection/results/detect-1_Qwen3-8B_len_1000_depth_50_results.json",
+      "case_id": "detect-1",
+      "length": 1000,
+      "depth": 50.0,
+      "score": 100.0,
+      "prompt_sha256": "7526c57ab44a4315082b9165729b0f08fbe933a2a41deaf384f3f50ecef2f580"
+    },
+    {
+      "file": "/content/drive/MyDrive/retrieval-heads-colab/qwen3-smoke/detection/results/detect-2_Qwen3-8B_len_1000_depth_50_results.json",
+      "case_id": "detect-2",
+      "length": 1000,
+      "depth": 50.0,
+      "score": 100.0,
+      "prompt_sha256": "62108524540d181dfc91ba705bb69c7d514dfc4be4782ac00d68f4dc0ae3f072"
+    },
+    {
+      "file": "/content/drive/MyDrive/retrieval-heads-colab/qwen3-smoke/detection/results/detect-3_Qwen3-8B_len_1000_depth_50_results.json",
+      "case_id": "detect-3",
+      "length": 1000,
+      "depth": 50.0,
+      "score": 100.0,
+      "prompt_sha256": "fa956d994d86884df983e9d4d3502ef7d81ccadf4209d54b40db6a9ef43c07ba"
+    }
+  ],
+  "selected_case_count": 3,
+  "available_case_count": 3,
+  "filters": {
+    "all_cases": true,
+    "success_threshold": 50.0,
+    "case_ids": null,
+    "lengths": null,
+    "depths": null
+  }
+}

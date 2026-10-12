@@ -1,0 +1,235 @@
+{"stage": "installing", "utc": "2026-10-11T17:01:02.085446+00:00"}
+Collecting transformers==5.19.0 (from -r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3))
+  Downloading transformers-5.19.0-py3-none-any.whl.metadata (32 kB)
+Requirement already satisfied: accelerate>=1.0 in /usr/local/lib/python3.13/dist-packages (from -r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (1.15.0)
+Collecting rouge-score>=0.1.2 (from -r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 5))
+  Downloading rouge_score-0.1.2.tar.gz (17 kB)
+  Preparing metadata (setup.py): started
+  Preparing metadata (setup.py): finished with status 'done'
+Requirement already satisfied: sentencepiece>=0.2 in /usr/local/lib/python3.13/dist-packages (from -r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 6)) (0.2.2)
+Collecting mistral-common>=1.8.6 (from -r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7))
+  Downloading mistral_common-1.12.0-py3-none-any.whl.metadata (6.1 kB)
+Requirement already satisfied: PyYAML>=6 in /usr/local/lib/python3.13/dist-packages (from -r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 8)) (6.0.3)
+Requirement already satisfied: packaging>=24 in /usr/local/lib/python3.13/dist-packages (from -r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 9)) (26.3)
+Requirement already satisfied: huggingface-hub<3.0,>=1.31.0 in /usr/local/lib/python3.13/dist-packages (from transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (1.33.0)
+Requirement already satisfied: numpy>=1.17 in /usr/local/lib/python3.13/dist-packages (from transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (2.1.3)
+Requirement already satisfied: regex>=2025.10.22 in /usr/local/lib/python3.13/dist-packages (from transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (2025.11.3)
+Requirement already satisfied: tokenizers<0.24.0,>=0.23.1 in /usr/local/lib/python3.13/dist-packages (from transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (0.23.2)
+Requirement already satisfied: typer in /usr/local/lib/python3.13/dist-packages (from transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (0.27.2)
+Requirement already satisfied: safetensors>=0.8.0 in /usr/local/lib/python3.13/dist-packages (from transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (0.8.0)
+Requirement already satisfied: tqdm>=4.60 in /usr/local/lib/python3.13/dist-packages (from transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (4.67.3)
+Requirement already satisfied: psutil in /usr/local/lib/python3.13/dist-packages (from accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (5.9.5)
+Requirement already satisfied: torch>=2.0.0 in /usr/local/lib/python3.13/dist-packages (from accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (2.11.0+cu130)
+Requirement already satisfied: absl-py in /usr/local/lib/python3.13/dist-packages (from rouge-score>=0.1.2->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 5)) (1.4.0)
+Requirement already satisfied: nltk in /usr/local/lib/python3.13/dist-packages (from rouge-score>=0.1.2->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 5)) (3.9.1)
+Requirement already satisfied: six>=1.14.0 in /usr/local/lib/python3.13/dist-packages (from rouge-score>=0.1.2->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 5)) (1.17.0)
+Requirement already satisfied: pydantic<3.0,>=2.7 in /usr/local/lib/python3.13/dist-packages (from mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (2.13.5)
+Requirement already satisfied: jsonschema>=4.21.1 in /usr/local/lib/python3.13/dist-packages (from mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (4.26.0)
+Requirement already satisfied: typing-extensions>=4.11.0 in /usr/local/lib/python3.13/dist-packages (from mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (4.16.0)
+Requirement already satisfied: tiktoken>=0.7.0 in /usr/local/lib/python3.13/dist-packages (from mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (0.14.0)
+Requirement already satisfied: pillow>=10.3.0 in /usr/local/lib/python3.13/dist-packages (from mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (11.3.0)
+Requirement already satisfied: requests>=2.0.0 in /usr/local/lib/python3.13/dist-packages (from mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (2.32.4)
+Collecting pydantic-extra-types>=2.10.5 (from pydantic-extra-types[pycountry]>=2.10.5->mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7))
+  Downloading pydantic_extra_types-2.11.1-py3-none-any.whl.metadata (4.2 kB)
+Requirement already satisfied: click<9.0.0,>=8.4.2 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<3.0,>=1.31.0->transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (8.5.0)
+Requirement already satisfied: filelock>=3.10.0 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<3.0,>=1.31.0->transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (4.0.7)
+Requirement already satisfied: fsspec>=2023.5.0 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<3.0,>=1.31.0->transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (2025.12.0)
+Requirement already satisfied: hf-xet<2.0.0,>=1.6.0 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<3.0,>=1.31.0->transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (1.6.0)
+Requirement already satisfied: httpx<1,>=0.23.0 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<3.0,>=1.31.0->transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (0.28.1)
+Requirement already satisfied: attrs>=22.2.0 in /usr/local/lib/python3.13/dist-packages (from jsonschema>=4.21.1->mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (26.1.0)
+Requirement already satisfied: jsonschema-specifications>=2023.03.6 in /usr/local/lib/python3.13/dist-packages (from jsonschema>=4.21.1->mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (2025.9.1)
+Requirement already satisfied: referencing>=0.28.4 in /usr/local/lib/python3.13/dist-packages (from jsonschema>=4.21.1->mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (0.37.0)
+Requirement already satisfied: rpds-py>=0.25.0 in /usr/local/lib/python3.13/dist-packages (from jsonschema>=4.21.1->mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (2026.6.3)
+Requirement already satisfied: annotated-types>=0.6.0 in /usr/local/lib/python3.13/dist-packages (from pydantic<3.0,>=2.7->mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (0.8.0)
+Requirement already satisfied: pydantic-core==2.46.5 in /usr/local/lib/python3.13/dist-packages (from pydantic<3.0,>=2.7->mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (2.46.5)
+Requirement already satisfied: typing-inspection>=0.4.2 in /usr/local/lib/python3.13/dist-packages (from pydantic<3.0,>=2.7->mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (0.4.4)
+Collecting pycountry>=23 (from pydantic-extra-types[pycountry]>=2.10.5->mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7))
+  Downloading pycountry-26.2.16-py3-none-any.whl.metadata (12 kB)
+Requirement already satisfied: charset_normalizer<4,>=2 in /usr/local/lib/python3.13/dist-packages (from requests>=2.0.0->mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (3.4.9)
+Requirement already satisfied: idna<4,>=2.5 in /usr/local/lib/python3.13/dist-packages (from requests>=2.0.0->mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (3.20)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /usr/local/lib/python3.13/dist-packages (from requests>=2.0.0->mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (2.5.0)
+Requirement already satisfied: certifi>=2017.4.17 in /usr/local/lib/python3.13/dist-packages (from requests>=2.0.0->mistral-common>=1.8.6->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 7)) (2026.7.22)
+Requirement already satisfied: setuptools<82 in /usr/local/lib/python3.13/dist-packages (from torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (80.10.2)
+Requirement already satisfied: sympy>=1.13.3 in /usr/local/lib/python3.13/dist-packages (from torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (1.14.0)
+Requirement already satisfied: networkx>=2.5.1 in /usr/local/lib/python3.13/dist-packages (from torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (3.7)
+Requirement already satisfied: jinja2 in /usr/local/lib/python3.13/dist-packages (from torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (3.1.6)
+Requirement already satisfied: cuda-toolkit==13.0.2 in /usr/local/lib/python3.13/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (13.0.2)
+Requirement already satisfied: cuda-bindings<14,>=13.0.3 in /usr/local/lib/python3.13/dist-packages (from torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (13.0.3)
+Requirement already satisfied: nvidia-cudnn-cu13==9.19.0.56 in /usr/local/lib/python3.13/dist-packages (from torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (9.19.0.56)
+Requirement already satisfied: nvidia-cusparselt-cu13==0.8.0 in /usr/local/lib/python3.13/dist-packages (from torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (0.8.0)
+Requirement already satisfied: nvidia-nccl-cu13==2.28.9 in /usr/local/lib/python3.13/dist-packages (from torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (2.28.9)
+Requirement already satisfied: nvidia-nvshmem-cu13==3.4.5 in /usr/local/lib/python3.13/dist-packages (from torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (3.4.5)
+Requirement already satisfied: triton==3.6.0 in /usr/local/lib/python3.13/dist-packages (from torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (3.6.0)
+Requirement already satisfied: nvidia-cublas==13.1.0.3.* in /usr/local/lib/python3.13/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (13.1.0.3)
+Requirement already satisfied: nvidia-cuda-runtime==13.0.96.* in /usr/local/lib/python3.13/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (13.0.96)
+Requirement already satisfied: nvidia-cufft==12.0.0.61.* in /usr/local/lib/python3.13/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (12.0.0.61)
+Requirement already satisfied: nvidia-cufile==1.15.1.6.* in /usr/local/lib/python3.13/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (1.15.1.6)
+Requirement already satisfied: nvidia-cuda-cupti==13.0.85.* in /usr/local/lib/python3.13/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (13.0.85)
+Requirement already satisfied: nvidia-curand==10.4.0.35.* in /usr/local/lib/python3.13/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (10.4.0.35)
+Requirement already satisfied: nvidia-cusolver==12.0.4.66.* in /usr/local/lib/python3.13/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (12.0.4.66)
+Requirement already satisfied: nvidia-cusparse==12.6.3.3.* in /usr/local/lib/python3.13/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (12.6.3.3)
+Requirement already satisfied: nvidia-nvjitlink==13.0.88.* in /usr/local/lib/python3.13/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (13.0.88)
+Requirement already satisfied: nvidia-cuda-nvrtc==13.0.88.* in /usr/local/lib/python3.13/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (13.0.88)
+Requirement already satisfied: nvidia-nvtx==13.0.85.* in /usr/local/lib/python3.13/dist-packages (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2; platform_system == "Linux"->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (13.0.85)
+Requirement already satisfied: joblib in /usr/local/lib/python3.13/dist-packages (from nltk->rouge-score>=0.1.2->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 5)) (1.6.0)
+Requirement already satisfied: shellingham>=1.3.0 in /usr/local/lib/python3.13/dist-packages (from typer->transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (1.5.4)
+Requirement already satisfied: rich>=13.8.0 in /usr/local/lib/python3.13/dist-packages (from typer->transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (13.9.4)
+Requirement already satisfied: annotated-doc>=0.0.2 in /usr/local/lib/python3.13/dist-packages (from typer->transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (0.0.5)
+Requirement already satisfied: cuda-pathfinder~=1.1 in /usr/local/lib/python3.13/dist-packages (from cuda-bindings<14,>=13.0.3->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (1.8.2)
+Requirement already satisfied: anyio in /usr/local/lib/python3.13/dist-packages (from httpx<1,>=0.23.0->huggingface-hub<3.0,>=1.31.0->transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (4.15.1)
+Requirement already satisfied: httpcore==1.* in /usr/local/lib/python3.13/dist-packages (from httpx<1,>=0.23.0->huggingface-hub<3.0,>=1.31.0->transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (1.0.9)
+Requirement already satisfied: h11>=0.16 in /usr/local/lib/python3.13/dist-packages (from httpcore==1.*->httpx<1,>=0.23.0->huggingface-hub<3.0,>=1.31.0->transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (0.16.0)
+Requirement already satisfied: markdown-it-py>=2.2.0 in /usr/local/lib/python3.13/dist-packages (from rich>=13.8.0->typer->transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (4.2.0)
+Requirement already satisfied: pygments<3.0.0,>=2.13.0 in /usr/local/lib/python3.13/dist-packages (from rich>=13.8.0->typer->transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (2.21.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /usr/local/lib/python3.13/dist-packages (from sympy>=1.13.3->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /usr/local/lib/python3.13/dist-packages (from jinja2->torch>=2.0.0->accelerate>=1.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 4)) (3.0.3)
+Requirement already satisfied: cloudpickle>=3.0 in /usr/local/lib/python3.13/dist-packages (from joblib->nltk->rouge-score>=0.1.2->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 5)) (3.1.2)
+Requirement already satisfied: mdurl~=0.1 in /usr/local/lib/python3.13/dist-packages (from markdown-it-py>=2.2.0->rich>=13.8.0->typer->transformers==5.19.0->-r /content/retrieval-heads-smoke/updated/colab/requirements.txt (line 3)) (0.1.2)
+Downloading transformers-5.19.0-py3-none-any.whl (12.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.6/12.6 MB 12.8 MB/s eta 0:00:00
+Downloading mistral_common-1.12.0-py3-none-any.whl (6.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.6/6.6 MB 16.6 MB/s eta 0:00:00
+Downloading pydantic_extra_types-2.11.1-py3-none-any.whl (79 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 79.5/79.5 kB 9.4 MB/s eta 0:00:00
+Downloading pycountry-26.2.16-py3-none-any.whl (8.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.0/8.0 MB 18.8 MB/s eta 0:00:00
+Building wheels for collected packages: rouge-score
+  Building wheel for rouge-score (setup.py): started
+  Building wheel for rouge-score (setup.py): finished with status 'done'
+  Created wheel for rouge-score: filename=rouge_score-0.1.2-py3-none-any.whl size=24986 sha256=4c97b6a2b1258b3cfe6e84a2f4d41cf629ce7e9b90ab4482bf5c75bcafc08c7c
+  Stored in directory: /root/.cache/pip/wheels/44/af/da/5ffc433e2786f0b1a9c6f458d5fb8f611d8eb332387f18698f
+Successfully built rouge-score
+Installing collected packages: pycountry, rouge-score, pydantic-extra-types, transformers, mistral-common
+  Attempting uninstall: transformers
+    Found existing installation: transformers 5.18.0
+    Uninstalling transformers-5.18.0:
+      Successfully uninstalled transformers-5.18.0
+Successfully installed mistral-common-1.12.0 pycountry-26.2.16 pydantic-extra-types-2.11.1 rouge-score-0.1.2 transformers-5.19.0
+{"stage": "downloading_weights", "utc": "2026-10-11T17:01:21.150448+00:00"}
+Fetching 12 files:   0%|          | 0/12 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 12 files:   8%|▊         | 1/12 [00:00<00:01,  6.31it/s]Fetching 12 files:  42%|████▏     | 5/12 [00:00<00:00, 19.44it/s]Fetching 12 files:  67%|██████▋   | 8/12 [00:08<00:05,  1.29s/it]Fetching 12 files:  67%|██████▋   | 8/12 [00:19<00:05,  1.29s/it]Fetching 12 files:  75%|███████▌  | 9/12 [00:30<00:15,  5.17s/it]Fetching 12 files:  83%|████████▎ | 10/12 [00:41<00:12,  6.40s/it]Fetching 12 files:  92%|█████████▏| 11/12 [00:41<00:04,  5.00s/it]Fetching 12 files: 100%|██████████| 12/12 [00:42<00:00,  3.83s/it]Fetching 12 files: 100%|██████████| 12/12 [00:42<00:00,  3.51s/it]
+{"stage": "detecting", "utc": "2026-10-11T17:02:07.064335+00:00", "revision": "b968826d9c46dd6066d109eabc6255188de91218"}
+/usr/bin/python3 -u /content/retrieval-heads-smoke/updated/retrieval_head_detection.py --adapter qwen3_8b_no_thinking --model /content/models/Qwen3-8B --dtype float16 --device-map cuda:0 --prefill-attention sdpa_flash --attention-scope all_decode_tokens --lengths 1000 --depths 50 --max-new-tokens 64 --context-seed 42 --retrieval-metrics needle_token_multiset_v1,needle_attention_mass_v1 --haystack-root /content/retrieval-heads-smoke/updated/data/haystack_for_detect --output-root /content/drive/MyDrive/retrieval-heads-colab/qwen3-smoke
+/usr/bin/python3 -u /content/retrieval-heads-smoke/updated/aggregate_head_scores.py --run /content/drive/MyDrive/retrieval-heads-colab/qwen3-smoke --all-cases
+{
+  "torch": "2.11.0+cu130",
+  "cuda": "13.0",
+  "gpu": "NVIDIA A100-SXM4-40GB",
+  "vram_gib": 39.4935302734375,
+  "python": "3.13.15 (main, Aug  6 2026, 11:06:22) [GCC 13.3.0]",
+  "config": {
+    "adapter": "qwen3_8b_no_thinking",
+    "model": "Qwen/Qwen3-8B",
+    "dtype": "float16",
+    "device_map": "cuda:0",
+    "prefill_attention": "sdpa_flash",
+    "attention_scope": "all_decode_tokens",
+    "lengths": [
+      1000
+    ],
+    "depths": [
+      50
+    ],
+    "max_new_tokens": 64,
+    "context_seed": 42,
+    "retrieval_metrics": [
+      "needle_token_multiset_v1",
+      "needle_attention_mass_v1"
+    ],
+    "haystack_root": "data/haystack_for_detect"
+  },
+  "packages": {
+    "transformers": "5.19.0",
+    "accelerate": "1.15.0",
+    "huggingface-hub": "1.33.0",
+    "rouge-score": "0.1.2"
+  },
+  "model_path": "/content/models/Qwen3-8B"
+}
+[model] source=local path=/content/models/Qwen3-8B
+
+Loading weights:   0%|          | 0/399 [00:00<?, ?it/s]
+Loading weights:   0%|          | 1/399 [00:00<04:55,  1.34it/s]
+Loading weights:   1%|          | 2/399 [00:01<03:05,  2.14it/s]
+Loading weights:  10%|▉         | 38/399 [00:01<00:06, 55.20it/s]
+Loading weights:  13%|█▎        | 53/399 [00:01<00:05, 65.16it/s]
+Loading weights:  17%|█▋        | 66/399 [00:01<00:04, 73.56it/s]
+Loading weights:  20%|█▉        | 78/399 [00:01<00:04, 76.80it/s]
+Loading weights:  22%|██▏       | 89/399 [00:01<00:03, 78.71it/s]
+Loading weights:  25%|██▌       | 100/399 [00:01<00:03, 84.41it/s]
+Loading weights:  28%|██▊       | 111/399 [00:01<00:03, 83.57it/s]
+Loading weights:  31%|███       | 124/399 [00:02<00:02, 94.60it/s]
+Loading weights:  34%|███▍      | 135/399 [00:02<00:02, 92.90it/s]
+Loading weights:  37%|███▋      | 146/399 [00:02<00:02, 92.87it/s]
+Loading weights:  39%|███▉      | 156/399 [00:02<00:02, 89.68it/s]
+Loading weights:  42%|████▏     | 166/399 [00:02<00:02, 85.71it/s]
+Loading weights:  44%|████▍     | 175/399 [00:02<00:02, 83.60it/s]
+Loading weights:  46%|████▌     | 184/399 [00:02<00:02, 81.31it/s]
+Loading weights:  48%|████▊     | 193/399 [00:02<00:02, 79.19it/s]
+Loading weights:  51%|█████     | 204/399 [00:03<00:02, 82.79it/s]
+Loading weights:  54%|█████▎    | 214/399 [00:03<00:02, 87.08it/s]
+Loading weights:  56%|█████▌    | 224/399 [00:03<00:01, 90.06it/s]
+Loading weights:  59%|█████▉    | 235/399 [00:03<00:01, 92.10it/s]
+Loading weights:  62%|██████▏   | 246/399 [00:03<00:01, 89.91it/s]
+Loading weights:  64%|██████▍   | 257/399 [00:03<00:01, 90.71it/s]
+Loading weights:  67%|██████▋   | 268/399 [00:03<00:01, 90.14it/s]
+Loading weights:  70%|██████▉   | 279/399 [00:03<00:01, 89.25it/s]
+Loading weights:  73%|███████▎  | 290/399 [00:03<00:01, 88.49it/s]
+Loading weights:  76%|███████▌  | 302/399 [00:04<00:01, 91.13it/s]
+Loading weights:  78%|███████▊  | 312/399 [00:04<00:00, 92.63it/s]
+Loading weights:  81%|████████  | 323/399 [00:04<00:00, 86.94it/s]
+Loading weights:  84%|████████▎ | 334/399 [00:04<00:00, 82.98it/s]
+Loading weights:  87%|████████▋ | 346/399 [00:04<00:00, 91.88it/s]
+Loading weights:  89%|████████▉ | 356/399 [00:04<00:00, 93.23it/s]
+Loading weights:  92%|█████████▏| 367/399 [00:04<00:00, 85.64it/s]
+Loading weights:  95%|█████████▍| 378/399 [00:04<00:00, 86.92it/s]
+Loading weights:  97%|█████████▋| 389/399 [00:05<00:00, 91.79it/s]
+Loading weights: 100%|██████████| 399/399 [00:05<00:00, 78.40it/s]
+[model] parameter devices=['cuda:0']; device_map=None
+[1/3] case=detect-1 context=1000 depth=50%
+[memory] prefill=sdpa_flash peak_allocated_gib=15.468
+[memory] generation peak_allocated_gib=15.468
+  score=100.0 response='A new report from the WMO shows that records were once again broken, and in some cases smashed, for greenhouse gas levels, surface temperatures, ocean heat and acidification.'
+[2/3] case=detect-2 context=1000 depth=50%
+[memory] prefill=sdpa_flash peak_allocated_gib=15.469
+[memory] generation peak_allocated_gib=15.469
+  score=100.0 response='The best thing to do in Beijing is to take a walk in Chaoyang Park and have a cup of Espresso in the evening.'
+[3/3] case=detect-3 context=1000 depth=50%
+[memory] prefill=sdpa_flash peak_allocated_gib=15.469
+[memory] generation peak_allocated_gib=15.469
+  score=100.0 response="Based on the content of the book, everyone dislikes Mr. Green because he is a mean person and also he can't ride a horse or dive a car."
+Aggregated 3/3 cases
+{
+  "passed": true,
+  "kind": "functional_smoke_not_scientific_ranking",
+  "cases": 3,
+  "head_count": 1152,
+  "metrics": [
+    "needle_token_multiset_v1",
+    "needle_attention_mass_v1"
+  ],
+  "answers": [
+    {
+      "case_id": "detect-1",
+      "score": 100.0,
+      "finish_reason": "eos",
+      "tokens": 36,
+      "answer": "A new report from the WMO shows that records were once again broken, and in some cases smashed, for greenhouse gas levels, surface temperatures, ocean heat and acidification."
+    },
+    {
+      "case_id": "detect-2",
+      "score": 100.0,
+      "finish_reason": "eos",
+      "tokens": 28,
+      "answer": "The best thing to do in Beijing is to take a walk in Chaoyang Park and have a cup of Espresso in the evening."
+    },
+    {
+      "case_id": "detect-3",
+      "score": 100.0,
+      "finish_reason": "eos",
+      "tokens": 33,
+      "answer": "Based on the content of the book, everyone dislikes Mr. Green because he is a mean person and also he can't ride a horse or dive a car."
+    }
+  ]
+}
+{"stage": "complete", "utc": "2026-10-11T17:02:41.930261+00:00", "output": "/content/drive/MyDrive/retrieval-heads-colab/qwen3-smoke"}

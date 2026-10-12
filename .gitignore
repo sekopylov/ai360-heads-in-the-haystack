@@ -16,16 +16,3 @@ __pycache__/
 /updated/models/
 
 # Generated experiment results and plots.
-/updated/report-assets/
-/updated/datasphere-results/
-/updated/colab-results/
-/updated/outputs/
-/updated/results/
-/updated/contexts/
-/updated/head_score/
-/updated/attention/
-/updated/runs/
-/updated/detection/
-/updated/evaluation/
-/source/results/
-/source/head_score/

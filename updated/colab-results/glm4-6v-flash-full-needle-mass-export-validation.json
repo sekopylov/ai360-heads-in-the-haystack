@@ -1,0 +1,116 @@
+{
+  "export_complete": false,
+  "survey_validated_cases": 27,
+  "mask_validated_cases": 649,
+  "mask_expected_cases": 660,
+  "conditions": [
+    {
+      "condition": "baseline",
+      "validated_cases": 110,
+      "expected_cases": 110,
+      "original_manifest_complete": true,
+      "original_manifest_completed_cases": 110,
+      "missing_cases": []
+    },
+    {
+      "condition": "top5",
+      "validated_cases": 110,
+      "expected_cases": 110,
+      "original_manifest_complete": true,
+      "original_manifest_completed_cases": 110,
+      "missing_cases": []
+    },
+    {
+      "condition": "top10",
+      "validated_cases": 110,
+      "expected_cases": 110,
+      "original_manifest_complete": true,
+      "original_manifest_completed_cases": 110,
+      "missing_cases": []
+    },
+    {
+      "condition": "top15",
+      "validated_cases": 110,
+      "expected_cases": 110,
+      "original_manifest_complete": true,
+      "original_manifest_completed_cases": 110,
+      "missing_cases": []
+    },
+    {
+      "condition": "top20",
+      "validated_cases": 110,
+      "expected_cases": 110,
+      "original_manifest_complete": true,
+      "original_manifest_completed_cases": 110,
+      "missing_cases": []
+    },
+    {
+      "condition": "top40",
+      "validated_cases": 99,
+      "expected_cases": 110,
+      "original_manifest_complete": false,
+      "original_manifest_completed_cases": null,
+      "missing_cases": [
+        {
+          "context_length": 28474,
+          "depth_percent": 100
+        },
+        {
+          "context_length": 30000,
+          "depth_percent": 0
+        },
+        {
+          "context_length": 30000,
+          "depth_percent": 11
+        },
+        {
+          "context_length": 30000,
+          "depth_percent": 22
+        },
+        {
+          "context_length": 30000,
+          "depth_percent": 33
+        },
+        {
+          "context_length": 30000,
+          "depth_percent": 44
+        },
+        {
+          "context_length": 30000,
+          "depth_percent": 56
+        },
+        {
+          "context_length": 30000,
+          "depth_percent": 67
+        },
+        {
+          "context_length": 30000,
+          "depth_percent": 78
+        },
+        {
+          "context_length": 30000,
+          "depth_percent": 89
+        },
+        {
+          "context_length": 30000,
+          "depth_percent": 100
+        }
+      ]
+    }
+  ],
+  "ranking_source_run_id": "dbd383e5-cee6-449f-b1c8-1b8edae6ae1b",
+  "original_files_modified": false,
+  "contexts_included": false,
+  "checks": [
+    "JSON parse",
+    "exact case grids and unique cases",
+    "all 1280 survey heads",
+    "same qualifying steps and exact full needle spans",
+    "ranking SHA256 and survey provenance",
+    "frozen top-k heads",
+    "paired prompt hashes",
+    "generation lengths and finish reasons",
+    "ROUGE-1 recomputation"
+  ],
+  "note": "Log reports 660 calculated cases; only 649 masking JSON files are present on Drive. No missing result was reconstructed and no original incomplete manifest was changed."
+}

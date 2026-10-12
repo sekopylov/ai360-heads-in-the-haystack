@@ -1,0 +1,33 @@
+{
+  "passed": true,
+  "kind": "functional_smoke_not_scientific_ranking",
+  "cases": 3,
+  "head_count": 1152,
+  "metrics": [
+    "needle_token_multiset_v1",
+    "needle_attention_mass_v1"
+  ],
+  "answers": [
+    {
+      "case_id": "detect-1",
+      "score": 100.0,
+      "finish_reason": "eos",
+      "tokens": 36,
+      "answer": "A new report from the WMO shows that records were once again broken, and in some cases smashed, for greenhouse gas levels, surface temperatures, ocean heat and acidification."
+    },
+    {
+      "case_id": "detect-2",
+      "score": 100.0,
+      "finish_reason": "eos",
+      "tokens": 28,
+      "answer": "The best thing to do in Beijing is to take a walk in Chaoyang Park and have a cup of Espresso in the evening."
+    },
+    {
+      "case_id": "detect-3",
+      "score": 100.0,
+      "finish_reason": "eos",
+      "tokens": 33,
+      "answer": "Based on the content of the book, everyone dislikes Mr. Green because he is a mean person and also he can't ride a horse or dive a car."
+    }
+  ]
+}
