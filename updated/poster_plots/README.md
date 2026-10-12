@@ -25,6 +25,4 @@ updated/.venv/bin/python updated/poster_plots/plot_poster_glm_top40.py
 Результаты остаются в [report-assets/poster/glm-top40-three-metrics](../report-assets/poster/glm-top40-three-metrics/): PNG, SVG, PDF и таблицы. Фон прозрачный.
 Исходные survey/masking данные не перемещены. Генераторы используют общие загрузчики из `updated` и проверяют совпадение запросов, рейтингов и полноту данных.
 
-Скрипты схем метрик `generate_retrieval_metrics.py` и `draw_poster_attention_mass_scheme.py` остаются в `updated`: они рисуют схемы, а не эти графики.
-
 А также для схемы объсняющей принцип метрик `generate_retrieval_metrics.py`
