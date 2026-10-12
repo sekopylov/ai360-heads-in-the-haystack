@@ -1,6 +1,6 @@
 """
-Reads the results of rh.run / rh.metrics into tables. No model and no spool: only samples.jsonl, heads/*.npz and
-spool/run.json of the --out folders.
+Reads the results of rh.run / rh.metrics into tables. No model and no spool: the answers of outputs/*.json (or
+samples.jsonl of the runs made before the answers were kept), heads/*.npz and spool/run.json of the --out folders.
 
     run     one --out folder: a table of its samples
     sweep   several folders (a masking sweep) in one table, a row per sample
@@ -97,16 +97,41 @@ def type_criteria(n=1):
     }
 
 
+def has_answers(out):
+    return os.path.isdir(os.path.join(out, "outputs")) or os.path.exists(os.path.join(out, "samples.jsonl"))
+
+
+def read_answers(out):
+    """
+    A row per sample of the run. The source is outputs/<sample>.json, the answers as rh.run wrote them: every
+    answer metric is computed from them here with rh.metrics.sample_result, so it never depends on the version of
+    the code that wrote samples.jsonl. Only a run made before the answers were kept (no outputs/) is read from
+    its samples.jsonl.
+    """
+    folder = os.path.join(out, "outputs")
+    if not os.path.isdir(folder):
+        return read_jsonl(os.path.join(out, "samples.jsonl"))
+    if ROOT not in sys.path:
+        sys.path.insert(0, ROOT)
+    from rh.metrics import sample_result
+    rows = []
+    for name in sorted(os.listdir(folder)):
+        if name.endswith(".json"):
+            with open(os.path.join(folder, name), encoding="utf-8") as f:
+                rows.append(sample_result(json.load(f)))
+    return rows
+
+
 def load_run(out, limit=None, name=None):
     """
-    The samples of one run. limit: the answers as if the generation were cut at this number of tokens (by_limit of
-    samples.jsonl). Added columns: run, mask (kind), heads (how many are masked), exact, rouge2_recall, rouge3_recall
+    The samples of one run, see read_answers(). limit: the answers as if the generation were cut at this number of
+    tokens. Added columns: run, mask (kind), heads (how many are masked), exact, rouge2_recall, rouge3_recall
     (when the run was made before they were stored), success2, success3 (ROUGE-2 and ROUGE-3 recall above 50, as
     success is for ROUGE-1) and answer_type, answer_type2, answer_type3.
     """
     out = path(out)
     info = run_info(out)
-    df = pd.DataFrame(read_jsonl(os.path.join(out, "samples.jsonl")))
+    df = pd.DataFrame(read_answers(out))
     if limit is not None:
         at = pd.DataFrame([row[str(limit)] for row in df["by_limit"]])
         cut = int((df["n_tokens"] > limit).sum())
@@ -135,9 +160,9 @@ def load_run(out, limit=None, name=None):
 
 def load_sweep(pattern, limit=None):
     """Every run under the pattern (e.g. results/new/qwen3_mask/*) in one table."""
-    outs = sorted(p for p in glob.glob(path(pattern)) if os.path.exists(os.path.join(p, "samples.jsonl")))
+    outs = sorted(p for p in glob.glob(path(pattern)) if has_answers(p))
     if not outs:
-        raise FileNotFoundError(f"no runs with samples.jsonl under {path(pattern)}")
+        raise FileNotFoundError(f"no runs with outputs/ or samples.jsonl under {path(pattern)}")
     return pd.concat([load_run(p, limit) for p in outs], ignore_index=True)
 
 
@@ -175,19 +200,25 @@ class Heads:
 
         samples   the table of the samples that have head metrics, in the order of the arrays
         layers    the numbers of the layers with attention
-        metrics   the names of the metrics in heads/*.npz, the ones at token limits included ("copy_count@128")
+        metrics   the names of the metrics in heads/*.npz
     """
 
-    def __init__(self, out):
-        self.out = path(out)
-        samples = load_run(self.out)
+    def __init__(self, out, samples=None, limits=False, ok="success"):
+        """
+        samples: the table of the run when it is already loaded; limits: keep the metrics at the token limits too;
+        ok: the yes/no column of the samples that says which of them count for the scores of the heads — "success"
+        (ROUGE-1 recall above 50, as in the paper) or "correct" (the class of the answer by its facts, hard tasks).
+        """
+        self.out, self.ok = path(out), ok
+        samples = load_run(self.out) if samples is None else samples
         has = [os.path.exists(os.path.join(self.out, "heads", f"{i}.npz")) for i in samples["id"]]
         self.samples = samples[has].reset_index(drop=True)
         self._arrays = {}
         for i in self.samples["id"]:
             with np.load(os.path.join(self.out, "heads", f"{i}.npz")) as d:
                 for k in d.files:
-                    self._arrays.setdefault(k, []).append(d[k])
+                    if limits or "@" not in k:
+                        self._arrays.setdefault(k, []).append(d[k])
         self._arrays = {k: np.stack(v) for k, v in self._arrays.items()}
         self.metrics = sorted(self._arrays)
         shape = next(iter(self._arrays.values())).shape
@@ -195,14 +226,14 @@ class Heads:
         self.n_heads = shape[2]
 
     def values(self, metric="copy_recall", where=None, successful=True):
-        """[sample, layer, head]; only the successful samples, as in the paper; where: a boolean mask over samples."""
-        keep = self.samples["success"].to_numpy() if successful else np.ones(len(self.samples), dtype=bool)
+        """[sample, layer, head]; only the samples that count (the column ok); where: a boolean mask over samples."""
+        keep = self.samples[self.ok].to_numpy() if successful else np.ones(len(self.samples), dtype=bool)
         if where is not None:
             keep = keep & np.asarray(where)
         return self._arrays[metric][keep]
 
     def score(self, metric="copy_recall", where=None):
-        """The score of every head: the mean over the successful samples, [layer, head]."""
+        """The score of every head: the mean over the samples that count, [layer, head]."""
         return self.values(metric, where).mean(0)
 
     def frequency(self, metric="copy_recall", where=None):
@@ -234,6 +265,10 @@ def head_score_file(p, layers, n_heads):
 def spearman(a, b):
     # Pearson of the average ranks: the same as Spearman, without scipy
     return float(pd.Series(np.ravel(a)).rank().corr(pd.Series(np.ravel(b)).rank()))
+
+
+def pearson(a, b):
+    return float(np.corrcoef(np.ravel(a), np.ravel(b))[0, 1])
 
 
 def top_overlap(a, b, k):

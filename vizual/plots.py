@@ -16,7 +16,7 @@ from matplotlib.ticker import FuncFormatter
 from . import style
 from .data import ANSWER_TYPES, NGRAMS, ROOT, round_bins, round_label, spearman, success_column, type_column
 
-VALUE_LABELS = {"rouge1_recall": "ROUGE-1 recall", "rouge2_recall": "ROUGE-2 recall", "rouge3_recall": "ROUGE-3 recall",
+VALUE_LABELS = {"correct": "верные ответы, %", "facts_found": "доля названных фактов", "rouge1_recall": "ROUGE-1 recall", "rouge2_recall": "ROUGE-2 recall", "rouge3_recall": "ROUGE-3 recall",
                 "rougeL_recall": "ROUGE-L recall", "success": "успех по ROUGE-1, %", "success2": "успех по ROUGE-2, %",
                 "success3": "успех по ROUGE-3, %",
                 "exact": "ответы с точной фразой, %", "n_tokens": "длина ответа, токены", "seconds": "время ответа, с"}
@@ -249,15 +249,14 @@ def criteria_curve(sweep, kind="top", ax=None, title=None, subtitle=None):
     return ax
 
 
-def shares(sweep, column, order, labels, kind="top", legend=True, ax=None, title=None, subtitle=None):
+def stacked(df, x, column, order, labels, xlabel=None, legend=True, ax=None, title=None, subtitle=None):
     """
-    Stacked shares of the values of a column against the number of masked heads of one kind of mask. order: the
-    values from the best to the worst, the last one is drawn as the neutral rest; labels: {value: name}.
+    Stacked shares of the values of a column for every value of x (the number of masked heads, the level, ...).
+    order: the values from the best to the worst, the last one is drawn as the neutral rest; labels: {value: name}.
     """
     t = style.THEME
     ax = new_ax(ax, 6.8, 4.0)
-    data = sweep[sweep["mask"].isin([kind, "none"])]
-    share = (data.groupby("heads")[column].value_counts(normalize=True).unstack(fill_value=0) * 100).reindex(columns=order, fill_value=0)
+    share = (df.groupby(x)[column].value_counts(normalize=True).unstack(fill_value=0) * 100).reindex(columns=order, fill_value=0)
     colors = dict(zip(order, list(reversed(style.ordered(len(order) - 1))) + [t.colors["muted"]]))
     xs, bottom = np.arange(len(share)), np.zeros(len(share))
     for name in order:
@@ -267,12 +266,18 @@ def shares(sweep, column, order, labels, kind="top", legend=True, ax=None, title
     ax.tick_params(axis="x", length=0)
     ax.set_ylim(0, 100)
     round_axis(ax, "y", 0, 100, 20)
-    ax.set_xlabel(f"замаскировано голов ({style.LABELS[kind]})")
+    ax.set_xlabel(xlabel or x)
     ax.set_ylabel("доля ответов, %")
     if legend:
         ax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5), reverse=True)
     titles(ax, title, subtitle)
     return ax
+
+
+def shares(sweep, column, order, labels, kind="top", **kwargs):
+    """stacked() against the number of masked heads of one kind of mask; the run without a mask is the first bar."""
+    return stacked(sweep[sweep["mask"].isin([kind, "none"])], "heads", column, order, labels,
+                   xlabel=f"замаскировано голов ({style.LABELS[kind]})", **kwargs)
 
 
 def answer_types(sweep, kind="top", n=1, **kwargs):
@@ -484,5 +489,165 @@ def correlation(scores, ax=None, title=None, subtitle=None):
     bar = ax.figure.colorbar(mesh, ax=ax, pad=0.03, aspect=16)
     bar.set_label("корреляция Спирмена")
     bar.outline.set_visible(False)
+    titles(ax, title, subtitle)
+    return ax
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# levels of the hard tasks
+# ---------------------------------------------------------------------------------------------------------------
+
+def run_styles(df):
+    """
+    {run: (colour, label)} — the colour is the one of the kind of the mask; of several runs of one kind the ones
+    with fewer masked heads are lighter.
+    """
+    from matplotlib.colors import to_rgb
+    t = style.THEME
+    runs = df.groupby("run").agg(mask=("mask", "first"), heads=("heads", "first")).sort_values(["mask", "heads"])
+    styles = {}
+    for kind, part in runs.groupby("mask"):
+        for i, (run, row) in enumerate(part.iterrows()):
+            fade = 0.45 * (len(part) - 1 - i) / max(len(part) - 1, 1)
+            color = tuple(c + (s - c) * fade for c, s in zip(to_rgb(t.colors[kind]), to_rgb(t.surface)))
+            styles[run] = (color, style.LABELS[kind] if kind == "none" else f"{style.LABELS[kind]}, {row['heads']}")
+    return styles
+
+
+def level_lines(df, value="correct", ax=None, title=None, subtitle=None):
+    """The mean of value at every level, a line per run; the levels stand in their order, the first is the reference."""
+    ax = new_ax(ax, 7.2, 4.2)
+    data = df.assign(_v=numeric(df, value))
+    levels = sorted(data["level"].unique())
+    styles = run_styles(data)
+    for run in sorted(styles, key=lambda r: (data.loc[data["run"] == r, "mask"].iloc[0] != "none", r)):
+        line = data[data["run"] == run].groupby("level")["_v"].mean().reindex(levels)
+        ax.plot(range(len(levels)), line.to_numpy(), color=styles[run][0], marker="o", label=styles[run][1])
+    ax.set_xticks(range(len(levels)), levels)
+    ax.set_xlim(-0.25, len(levels) - 0.75)
+    if data["_v"].max() <= 100:
+        ax.set_ylim(-3, 103)
+        round_axis(ax, "y", 0, 100, 20)
+    ax.set_xlabel("уровень")
+    ax.set_ylabel(VALUE_LABELS.get(value, value))
+    ax.legend(title="маска", loc="center left", bbox_to_anchor=(1.01, 0.5), alignment="left")
+    titles(ax, title, subtitle)
+    return ax
+
+
+def class_panels(df, order, labels, runs=None, x="level", xlabel="уровень", column="answer_class", title=None):
+    """A panel per run: the stacked shares of the values of a column (the classes of the answers) at every level (or another x)."""
+    runs = runs or sorted(df["run"].unique(), key=lambda r: (df.loc[df["run"] == r, "mask"].iloc[0] != "none", r))
+    names = run_styles(df)
+    fig, axes = plt.subplots(1, len(runs), figsize=style.size(3.6 * len(runs) + 1.2 + 0.085 * max(len(v) for v in labels.values()), 4.2), sharey=True, squeeze=False)
+    for ax, run in zip(axes[0], runs):
+        stacked(df[df["run"] == run], x, column, order, labels, xlabel=xlabel, legend=ax is axes[0, -1], ax=ax, title=names[run][1])
+        if ax is not axes[0, 0]:
+            ax.set_ylabel("")
+    if title:
+        fig.suptitle(title, x=0.01, ha="left", fontweight="bold")
+    return axes
+
+
+def rank_profile(scores, order, top=60, reference=None, ylabel="retrieval score", legend=True, ax=None, title=None, subtitle=None):
+    """
+    The heads in the order of a fixed ranking (order: flat indices, the best first) and their score in every
+    condition of scores, a line per condition: do the heads keep their values where the ranking was not made.
+    reference: the scores the ranking was made from, drawn as the neutral line.
+    """
+    t = style.THEME
+    ax = new_ax(ax, 7.6, 4.2)
+    xs = np.arange(1, top + 1)
+    if reference is not None:
+        ax.plot(xs, np.ravel(reference)[order[:top]], color=t.colors["none"], linestyle=(0, (1, 1.5)), label="детекция", zorder=3)
+    for (name, score), color in zip(scores.items(), style.ordered(len(scores))):
+        ax.plot(xs, np.ravel(score)[order[:top]], color=color, label=name)
+    ax.set_xlim(1 - top * 0.02, top * 1.02)
+    round_axis(ax, "x", 0, top, 10)
+    ax.set_ylim(0, None)
+    ax.set_xlabel("место головы в рейтинге детекции")
+    ax.set_ylabel(ylabel)
+    if legend:
+        ax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5))
+    titles(ax, title, subtitle)
+    return ax
+
+
+def group_bars(table, ylabel="средний retrieval score", xlabel="головы по месту в рейтинге детекции", ax=None, title=None, subtitle=None):
+    """
+    Grouped bars of a table: its rows are the groups along x (groups of heads), its columns the bars of a group
+    (conditions). The first column is drawn neutral when it is "детекция".
+    """
+    t = style.THEME
+    ax = new_ax(ax, 8.0, 4.2)
+    columns = list(table.columns)
+    reference = columns[0] == "детекция"
+    colors = ([t.colors["muted"]] if reference else []) + style.ordered(len(columns) - reference)
+    width = 0.8 / len(columns)
+    for i, (column, color) in enumerate(zip(columns, colors)):
+        ax.bar(np.arange(len(table)) + (i - (len(columns) - 1) / 2) * width, table[column], width=width * 0.9, color=color, label=column)
+    ax.set_xticks(np.arange(len(table)), list(table.index))
+    ax.tick_params(axis="x", length=0)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5))
+    titles(ax, title, subtitle)
+    return ax
+
+
+def head_table(table, label="retrieval score", vmax=None, ax=None, title=None, subtitle=None):
+    """Blocks with numbers: the rows of the table are heads, the columns are conditions, the colour is the value."""
+    t = style.THEME
+    ax = new_ax(ax, 1.05 * table.shape[1] + 2.6, 0.3 * table.shape[0] + 1.4)
+    values = table.to_numpy(dtype=float)
+    vmax = vmax or float(np.nanmax(values))
+    mesh = ax.pcolormesh(values, cmap=style.cmap(t.cmap_heads), vmin=0, vmax=vmax, edgecolors=t.surface, linewidth=1.5)
+    for i in range(values.shape[0]):
+        for j in range(values.shape[1]):
+            ax.text(j + 0.5, i + 0.5, f"{values[i, j]:.2f}", ha="center", va="center", fontsize=t.font - 2,
+                    color=t.surface if values[i, j] / vmax > 0.55 else t.ink)
+    ax.set_xticks(np.arange(table.shape[1]) + 0.5, list(table.columns))
+    ax.set_yticks(np.arange(table.shape[0]) + 0.5, list(table.index))
+    ax.invert_yaxis()
+    ax.grid(False)
+    ax.tick_params(length=0)
+    for side in ax.spines.values():
+        side.set_visible(False)
+    ax.set_ylabel("слой-голова")
+    bar = ax.figure.colorbar(mesh, ax=ax, pad=0.03, aspect=24)
+    bar.set_label(label)
+    bar.outline.set_visible(False)
+    titles(ax, title, subtitle)
+    return ax
+
+
+def score_scatter(x, y, threshold=0.1, xlabel="скор детекции на простой задаче", ylabel="скор на уровне", ax=None, title=None, subtitle=None):
+    """
+    A point per head: its score in the detection (x) against its score in another condition (y). The heads the
+    detection puts above the threshold stand out; on the diagonal the score is kept. The correlations over all
+    heads and over the heads above the threshold are written in the corner.
+    """
+    t = style.THEME
+    ax = new_ax(ax, 5.2, 5.0)
+    x, y = np.ravel(x), np.ravel(y)
+    found = x > threshold
+    top = max(1.0, float(x.max()), float(y.max()))
+    ax.plot([0, top], [0, top], color=t.axis, linewidth=1, zorder=1)
+    ax.scatter(x[~found], y[~found], s=14 * t.scale ** 2, color=t.colors["muted"], linewidths=0, alpha=0.7, label=f"остальные ({int((~found).sum())})", zorder=2)
+    ax.scatter(x[found], y[found], s=34 * t.scale ** 2, color=style.RAMP[7], edgecolors=t.surface, linewidths=0.8,
+               label=f"детекция выше {threshold:g} ({int(found.sum())})", zorder=3)
+    r = lambda a, b: np.corrcoef(a, b)[0, 1]
+    rank = lambda v: pd.Series(v).rank().to_numpy()
+    ax.text(0.97, 0.04, f"все головы: r = {r(x, y):.2f}, ρ = {r(rank(x), rank(y)):.2f}\nвыше {threshold:g}: r = {r(x[found], y[found]):.2f}, "
+            f"ρ = {r(rank(x[found]), rank(y[found])):.2f}", transform=ax.transAxes, ha="right", va="bottom", fontsize=t.font - 1, linespacing=1.5)
+    ax.set_xlim(-0.03, top * 1.03)
+    ax.set_ylim(-0.03, top * 1.03)
+    round_axis(ax, "x", 0, top, 0.2)
+    round_axis(ax, "y", 0, top, 0.2)
+    ax.set_aspect("equal")
+    ax.grid(axis="x", visible=True)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.legend(loc="upper left")
     titles(ax, title, subtitle)
     return ax
