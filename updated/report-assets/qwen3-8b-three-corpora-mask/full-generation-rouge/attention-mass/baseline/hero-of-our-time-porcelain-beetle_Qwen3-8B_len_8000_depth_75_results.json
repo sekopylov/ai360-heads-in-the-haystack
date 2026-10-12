@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "baseline",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 8000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.6269430051813467,
+  "full_generation_f1": 7.000000000000001,
+  "finish_reason": "eos",
+  "tokens": 249,
+  "prompt_sha256": "3112122f510b4214673466c324ad817b595ddc1a5cb8ebf7f1bfcb7c33937802",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/baseline/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_8000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object that Pechorin found near the Kislovodsk spring. I need to look through the provided text to find the answer.\n\nFirst, I'll scan through the chapters. The question mentions the Kislovodsk spring, so I should look for that keyword. Let me check each chapter.\n\nIn Chapter VII, there's a part that says: \"During a morning walk near the Kislovodsk spring, Pechorin found a porcelain beetle with nine blue dots beside the path.\" \n\nThat seems to be the relevant part. The object is a porcelain beetle with nine blue dots. The answer should be that. Let me make sure there's no other mention. The rest of the text talks about the journey and other events, but this is the only instance where Kislovodsk spring is mentioned with an object found. So the answer is the porcelain beetle with nine blue dots.\n \n\nThe strange object Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail is mentioned in Chapter VII of the text, where it describes a moment during a morning walk near the spring."
+}

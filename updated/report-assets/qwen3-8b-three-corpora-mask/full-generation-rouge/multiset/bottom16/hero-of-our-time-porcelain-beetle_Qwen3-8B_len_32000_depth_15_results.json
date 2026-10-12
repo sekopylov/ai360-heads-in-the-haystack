@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "bottom16",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 32000,
+  "depth_percent": 15.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.349282296650718,
+  "full_generation_f1": 6.481481481481481,
+  "finish_reason": "eos",
+  "tokens": 276,
+  "prompt_sha256": "bc8aba02ef86fca52a13116ecda78d63131d6f6e5e2e49610d534c7fe06f18d4",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/bottom16/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_32000_depth_15_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object Pechorin found near the Kislovodsk spring. I need to find the relevant part of the text.\n\nFirst, I'll recall the story. The book is a collection of excerpts from Pechorin's diary, and there's a part where he's on a journey. The Kislovodsk spring is mentioned in the context of a morning walk. \n\nLooking through the text, in Chapter VII, there's a section where Pechorin is walking near the spring. The exact sentence is: \"During a morning walk near the Kislovodsk spring, Pechorin found a porcelain beetle with nine blue dots beside the path.\" \n\nSo the answer should be a porcelain beetle with nine blue dots. I need to make sure there's no other mention of a strange object in that area. Scanning through the rest of the text, I don't see another reference. The beetle is specifically mentioned as the object found near the spring. That's the key detail here.\n \n\nThe strange object Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail is mentioned in **Chapter VII** of the text, during a morning walk when Pechorin encounters the beetle beside the path."
+}

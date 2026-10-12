@@ -1,0 +1,9 @@
+{
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/colab-results/ministral3-8b-no-thinking-paul-graham-qrscore-top-mask-results.zip",
+  "sha256": "1beb2e62d55d1907d6e4392bb1e818580903c21987f8ab56179dd524c3a4f210",
+  "source_run_id": "ae8c6a7e-47b8-4089-8258-0fba3b31f0e8",
+  "survey_cases": 27,
+  "heads": 1088,
+  "masking_cases": 990,
+  "paired_prompts": true
+}

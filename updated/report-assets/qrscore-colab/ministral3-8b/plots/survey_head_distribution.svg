@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="552.209062pt" height="437.545635pt" viewBox="0 0 552.209062 437.545635" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-10-12T12:19:01.891468</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.11.2, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M -0 437.545635 
+L 552.209062 437.545635 
+L 552.209062 0 
+L -0 0 
+z
+" style="fill: #fafaf8"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 324.72 61.233208 
+C 307.574553 61.233208 290.561382 64.242235 274.456056 70.12312 
+C 258.350729 76.004004 243.40175 84.666004 230.290587 95.714252 
+C 217.179424 106.762499 206.108382 120.026519 197.582148 134.901656 
+C 189.055913 149.776792 183.206047 166.033523 180.299221 182.930762 
+C 177.392395 199.828002 177.473463 217.105029 180.538728 233.974247 
+C 183.603993 250.843464 189.606159 267.044582 198.271609 281.839052 
+C 206.937059 296.633521 218.132086 309.793065 231.346351 320.717787 
+C 244.560616 331.64251 259.590223 340.163844 275.750028 345.893334 
+C 291.909833 351.622824 308.950492 354.472064 326.095184 354.311167 
+C 343.239876 354.15027 360.22406 350.98172 376.27349 344.949959 
+C 392.32292 338.918197 407.189955 330.116294 420.196861 318.945496 
+C 433.203768 307.774697 444.14985 294.407367 452.536117 279.452874 
+C 460.922384 264.49838 466.619437 248.187469 469.367567 231.263695 
+C 472.115698 214.339921 471.872503 197.064416 468.649068 180.224706 
+C 465.425634 163.384997 459.271697 147.240917 450.467794 132.528418 
+C 441.663891 117.815918 430.345865 104.762011 417.029662 93.961775 
+L 378.259604 141.763503 
+C 385.983002 148.02764 392.547457 155.598906 397.653721 164.132156 
+C 402.759984 172.665406 406.329268 182.028972 408.19886 191.796003 
+C 410.068451 201.563035 410.209505 211.582828 408.615589 221.398617 
+C 407.021673 231.214406 403.717383 240.674734 398.853348 249.348341 
+C 393.989313 258.021947 387.640585 265.774998 380.09658 272.254061 
+C 372.552574 278.733124 363.929694 283.838228 354.621024 287.33665 
+C 345.312355 290.835071 335.461528 292.672831 325.517606 292.766151 
+C 315.573685 292.859471 305.690103 291.206912 296.317416 287.883808 
+C 286.944729 284.560703 278.227557 279.61833 270.563284 273.281991 
+C 262.89901 266.945651 256.405894 259.313116 251.379933 250.732324 
+C 246.353972 242.151532 242.872716 232.754883 241.094862 222.970737 
+C 239.317008 213.186591 239.269989 203.165915 240.955948 193.365516 
+C 242.641907 183.565117 246.03483 174.136213 250.980046 165.508634 
+C 255.925261 156.881055 262.346466 149.187923 269.95094 142.77994 
+C 277.555415 136.371956 286.225823 131.347996 295.566912 127.937083 
+C 304.908002 124.52617 314.775641 122.780934 324.72 122.780934 
+z
+" style="fill: #94a3b8; stroke: #fafaf8; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 417.029662 93.961775 
+C 404.072125 83.452438 389.414521 75.232662 373.689972 69.657493 
+C 357.965424 64.082325 341.403642 61.233208 324.72 61.233208 
+L 324.72 122.780934 
+C 334.396513 122.780934 344.002346 124.433422 353.122584 127.66702 
+C 362.242822 130.900618 370.744233 135.668088 378.259604 141.763503 
+z
+" style="fill: #38bdf8; stroke: #fafaf8; stroke-linejoin: miter"/>
+   </g>
+   <g id="matplotlib.axis_1"/>
+   <g id="matplotlib.axis_2"/>
+   <g id="text_1">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #263449" x="286.033722" y="319.486227" transform="rotate(-0 286.033722 319.486227)">89.2%</text>
+   </g>
+   <g id="text_2">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #263449" x="363.406278" y="101.259913" transform="rotate(-0 363.406278 101.259913)">10.8%</text>
+   </g>
+   <g id="text_3">
+    <text style="font-size: 19px; font-family: 'DejaVu Sans'; fill: #263449" transform="translate(300.5425 201.309105)">1088</text>
+    <text style="font-size: 19px; font-family: 'DejaVu Sans'; fill: #263449" transform="translate(285.260859 224.112816)">Q-голов</text>
+   </g>
+   <g id="text_4">
+    <text style="font-size: 15px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #263449" x="324.72" y="18.597656" transform="rotate(-0 324.72 18.597656)">Ministral 3 8B · Survey: доли голов по среднему QRScore</text>
+   </g>
+   <g id="legend_1">
+    <g id="patch_4">
+     <path d="M 227.750469 375.194151 
+L 247.750469 375.194151 
+L 247.750469 368.194151 
+L 227.750469 368.194151 
+z
+" style="fill: #94a3b8; stroke: #94a3b8; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_5">
+     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #263449" x="255.750469" y="375.194151" transform="rotate(-0 255.750469 375.194151)">QRScore 0–0,1: 970 (89.15%)</text>
+    </g>
+    <g id="patch_5">
+     <path d="M 227.750469 390.194932 
+L 247.750469 390.194932 
+L 247.750469 383.194932 
+L 227.750469 383.194932 
+z
+" style="fill: #38bdf8; stroke: #38bdf8; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_6">
+     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #263449" x="255.750469" y="390.194932" transform="rotate(-0 255.750469 390.194932)">QRScore &gt;0,1–0,5: 118 (10.85%)</text>
+    </g>
+    <g id="patch_6">
+     <path d="M 227.750469 405.195713 
+L 247.750469 405.195713 
+L 247.750469 398.195713 
+L 227.750469 398.195713 
+z
+" style="fill: #2563eb; stroke: #2563eb; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_7">
+     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #263449" x="255.750469" y="405.195713" transform="rotate(-0 255.750469 405.195713)">QRScore &gt;0,5–1: 0 (0.00%)</text>
+    </g>
+   </g>
+  </g>
+  <g id="text_8">
+   <text style="font-size: 8px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #687587" x="7.2" y="428.42376" transform="rotate(-0 7.2 428.42376)">Ministral 3 8B · no thinking · QRScore ranking · 27/27 survey cases, включая неудачные ответы</text>
+  </g>
+ </g>
+</svg>

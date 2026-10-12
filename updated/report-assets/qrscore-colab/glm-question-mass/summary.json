@@ -1,0 +1,131 @@
+{
+  "Needle mass": {
+    "pearson": 0.8673099125450351,
+    "spearman": 0.9629233687123832
+  },
+  "Question mass": {
+    "pearson": 0.008769325115769229,
+    "spearman": 0.3728546091336726
+  },
+  "Needle + question": {
+    "pearson": 0.8634078128722626,
+    "spearman": 0.8868898120970533
+  },
+  "top_k_overlaps": [
+    {
+      "k": 5,
+      "needle": 0,
+      "sum": 0,
+      "question": 0
+    },
+    {
+      "k": 10,
+      "needle": 4,
+      "sum": 4,
+      "question": 0
+    },
+    {
+      "k": 15,
+      "needle": 5,
+      "sum": 5,
+      "question": 0
+    },
+    {
+      "k": 20,
+      "needle": 7,
+      "sum": 7,
+      "question": 0
+    },
+    {
+      "k": 40,
+      "needle": 23,
+      "sum": 23,
+      "question": 0
+    },
+    {
+      "k": 60,
+      "needle": 35,
+      "sum": 35,
+      "question": 0
+    },
+    {
+      "k": 80,
+      "needle": 54,
+      "sum": 54,
+      "question": 1
+    },
+    {
+      "k": 100,
+      "needle": 69,
+      "sum": 71,
+      "question": 4
+    },
+    {
+      "k": 200,
+      "needle": 146,
+      "sum": 151,
+      "question": 37
+    }
+  ],
+  "mean_absolute_rank_error_needle": 77.7609375,
+  "mean_absolute_rank_error_sum": 129.6890625,
+  "heads_rank_error_improved": 463,
+  "heads_rank_error_worsened": 783,
+  "previous_top20_groups": {
+    "Previous QRScore-only top-20": {
+      "heads": [
+        "9-24",
+        "9-26",
+        "12-25",
+        "13-2",
+        "15-17",
+        "15-31",
+        "17-2",
+        "17-16",
+        "17-17",
+        "19-25",
+        "20-4",
+        "20-6",
+        "20-9"
+      ],
+      "mean_question_mass": 0.013381808180531921,
+      "mean_needle_mass": 0.6090844176046457,
+      "mean_question_share": 0.021555351694421375
+    },
+    "Previous needle-only top-20": {
+      "heads": [
+        "17-27",
+        "17-31",
+        "19-3",
+        "19-9",
+        "23-4",
+        "23-24",
+        "24-1",
+        "25-16",
+        "26-21",
+        "26-26",
+        "26-27",
+        "26-28",
+        "27-1"
+      ],
+      "mean_question_mass": 0.005975146287009748,
+      "mean_needle_mass": 0.802976938541899,
+      "mean_question_share": 0.007684645931154746
+    },
+    "Previous shared top-20": {
+      "heads": [
+        "5-0",
+        "5-3",
+        "17-26",
+        "19-27",
+        "23-3",
+        "24-7",
+        "24-10"
+      ],
+      "mean_question_mass": 0.011626593069638416,
+      "mean_needle_mass": 0.8196994908086249,
+      "mean_question_share": 0.013638215521519687
+    }
+  },
+  "cases_spearman_improved": 0
+}

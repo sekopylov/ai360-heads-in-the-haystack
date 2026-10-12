@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "top64",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 8000,
+  "depth_percent": 15.0,
+  "final_answer_score": 45.45454545454545,
+  "full_generation_recall": 45.45454545454545,
+  "full_generation_precision": 0.8960573476702508,
+  "full_generation_f1": 1.7574692442882247,
+  "finish_reason": "eos",
+  "tokens": 622,
+  "prompt_sha256": "78d48f64686235936c61271a0badfb4e2ea6371b696da7adcaad1b5dcf4c88ff",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/top64/results/paul-graham-velvet-pelican_Qwen3-8B_len_8000_depth_15_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's see. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. Hmm, I need to go through the provided text carefully.\n\nFirst, I remember that the user mentioned the book content includes a section about the emergency password. Let me check the context. The user provided a book excerpt where they talk about the emergency password being part of the language's design. Wait, the question is about the password itself and where it was written.\n\nLooking at the text, the user mentioned that the emergency password was written in a way that's part of the language's features. But I need to find the exact details. The user also mentioned that the answer is in the book's content, so I should look for the specific part where the emergency password is discussed.\n\nWait, the user is referring to the emergency password as part of the language's design, so maybe it's related to the syntax or structure. The answer might be that the emergency password is written in the language's core, but I need to confirm. The user also mentioned that the answer is in the text provided, so I should check the sections where the language's features are discussed.\n\nWait, the user is asking about the emergency password in the context of the book's content. The answer might be that the emergency password is written in the language's syntax or structure. But I need to make sure I'm not missing any details. The user also mentioned that the answer is in the text, so I should look for the specific part where the emergency password is discussed. \n\nWait, the user is asking about the emergency password in the context of the book's content. The answer is that the emergency password is written in the language's syntax, but I need to confirm. The user might be referring to the fact that the emergency password is part of the language's design, so the answer is that it's written in the language's core features. \n\nI think the answer is that the emergency password is written in the language's syntax, but I need to make sure. The user mentioned that the emergency password is part of the language's design, so the answer is that it's written in the language's core features. \n\nWait, the user is asking about the emergency password in the context of the book. The answer is that the emergency password is written in the language's core, which is part of the book's content. So the answer is that the emergency password is written in the language's core, and the user needs to look for that in the text. \n\nI think that's all. The emergency password is part of the language's design, and the answer is written in the text as described.\n \n\nThe emergency password for the server was written in the language's core, as described in the text. The answer is that the emergency password is part of the language's design, and it is written in the text as a core feature. The emergency password is part of the language's design, and the answer is written in the text as described."
+}

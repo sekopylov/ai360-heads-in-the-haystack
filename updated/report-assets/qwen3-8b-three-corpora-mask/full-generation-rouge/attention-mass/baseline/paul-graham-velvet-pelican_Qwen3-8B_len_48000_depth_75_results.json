@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "baseline",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 48000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 6.111111111111111,
+  "full_generation_f1": 11.518324607329843,
+  "finish_reason": "eos",
+  "tokens": 245,
+  "prompt_sha256": "d1b1ef7d089ecacf1c1dcbb95ba89290fcfa32b0d1dd26025e41bac667c51a6d",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/baseline/results/paul-graham-velvet-pelican_Qwen3-8B_len_48000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's tackle this question. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. I need to find this information in the provided text.\n\nFirst, I'll scan through the text for mentions of \"Arcadia Lisp server\" and \"emergency password.\" Let me look through the sections. \n\nLooking at the \"vw.txt\" file, there's a part that says: \"During the first public demonstration of the Arcadia Lisp server, the emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" \n\nSo the emergency password is \"velvet-pelican-47,\" and it was written inside a silver thimble. I should make sure there's no other mention elsewhere, but given the context, this seems to be the correct answer. The answer should include both the password and the location.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written **inside a silver thimble**. This detail is mentioned in the text under the section discussing the early days of Viaweb and its technical setup."
+}

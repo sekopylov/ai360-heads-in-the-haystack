@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "bottom64",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 8000,
+  "depth_percent": 15.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 4.8034934497816595,
+  "full_generation_f1": 9.166666666666668,
+  "finish_reason": "eos",
+  "tokens": 313,
+  "prompt_sha256": "78d48f64686235936c61271a0badfb4e2ea6371b696da7adcaad1b5dcf4c88ff",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/bottom64/results/paul-graham-velvet-pelican_Qwen3-8B_len_8000_depth_15_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's see. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. I need to find the answer in the provided text.\n\nFirst, I'll look through the text for mentions of \"Arcadia Lisp server\" and \"emergency password.\" Scanning through the sections, I remember there was a part about the Arcadia Lisp server in the first section. Let me check again.\n\nLooking at the first section, there's a paragraph that says: \"During the first public demonstration of the Arcadia Lisp server, the emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" \n\nSo the password is \"velvet-pelican-47\" and it was written inside a silver thimble. That's the answer. I should make sure there's no other mention of the password elsewhere, but this seems to be the only reference. The rest of the text talks about programming languages, Lisp, and other topics, but not the Arcadia server's password again. So the answer is clear.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written inside a **silver thimble**. This detail is mentioned in the text as part of a historical anecdote about the server's first public demonstration. \n\n**Answer:**  \nThe emergency password was **velvet-pelican-47**, and it was written inside a silver thimble."
+}

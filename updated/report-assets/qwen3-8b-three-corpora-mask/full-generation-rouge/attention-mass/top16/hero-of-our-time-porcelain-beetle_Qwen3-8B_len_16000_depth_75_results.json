@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "top16",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 16000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.286384976525822,
+  "full_generation_f1": 6.363636363636364,
+  "finish_reason": "eos",
+  "tokens": 278,
+  "prompt_sha256": "5905352f5299a2637de7026f54da1f4258a91f001ce768bb5d8f438a243277d8",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/top16/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_16000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object Pechorin found near the Kislovodsk spring. I need to recall the details from the text.\n\nFirst, I remember that in the story, there's a part where Pechorin is near the spring. The question is about what he found. The answer is probably mentioned in the text. Let me think. \n\nWait, there's a mention of a porcelain beetle. The text says something like \"a porcelain beetle with nine blue dots.\" That's the key part. The user is asking for the object, so the answer should be that porcelain beetle. \n\nLet me double-check. The passage mentions that Pechorin found a porcelain beetle with nine blue dots. That's the strange object. The answer is the porcelain beetle. \n\nYes, that's right. The answer is the porcelain beetle.\n \n\nThe strange object Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail is mentioned in the text when describing the aftermath of Bela's death and Pechorin's reflections on the events. The beetle symbolizes the fleeting nature of life and the lingering traces of the past, tying into the narrative's themes of loss and memory. \n\n**Answer:** A porcelain beetle with nine blue dots."
+}

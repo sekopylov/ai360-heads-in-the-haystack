@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "top16",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 48000,
+  "depth_percent": 45.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.167420814479638,
+  "full_generation_f1": 6.140350877192983,
+  "finish_reason": "eos",
+  "tokens": 291,
+  "prompt_sha256": "5006f0e760f544dee9c243e9e7759d33607c58256c2ef0a63e728387828cd7d4",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/top16/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_48000_depth_45_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object that Pechorin found near the Kislovodsk spring. I need to recall the relevant part of the text.\n\nFirst, I remember that the book is \"Prince of the Captive\" by Mikhail Lermontov. The story involves Pechorin, a complex character, and various episodes. The Kislovodsk spring is mentioned in the context of a scene where Pechorin is walking and encounters something unusual.\n\nLooking back at the text, there's a part where Pechorin is on a walk and finds an object. The specific mention is of a porcelain beetle with nine blue dots. The text says: \"During a morning walk near the Kislovodsk spring, Pechorin found a porcelain beetle with nine blue dots beside the path.\"\n\nSo the answer should be the porcelain beetle with nine blue dots. I need to make sure there's no other object mentioned in that area. The rest of the story involves other elements like the blind boy, the boat, and the girl, but the specific answer here is the porcelain beetle.\n \n\nThe strange object that Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail appears in the narrative as a minor but peculiar discovery during his morning walk, highlighting the whimsical and observational nature of his character."
+}

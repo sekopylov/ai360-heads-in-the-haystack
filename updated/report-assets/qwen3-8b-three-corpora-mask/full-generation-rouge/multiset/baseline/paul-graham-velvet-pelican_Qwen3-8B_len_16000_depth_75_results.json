@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "baseline",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 16000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 5.288461538461538,
+  "full_generation_f1": 10.045662100456621,
+  "finish_reason": "eos",
+  "tokens": 300,
+  "prompt_sha256": "3bdd71db6d73099ebee1367a06fa13cbb72ca82e4894d1c15a4a7a801bc811b9",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/baseline/results/paul-graham-velvet-pelican_Qwen3-8B_len_16000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's see. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. I need to find this information in the provided text.\n\nFirst, I'll scan through the documents mentioned. The main text is from a book, and there's a mention of \"pow.txt\", \"rootsoflisp.txt\", \"rss.txt\", \"siliconvalley.txt\", \"startuplessons.txt\", and others. The user specifically mentioned \"Arcadia Lisp server\" and an emergency password.\n\nLooking through the \"siliconvalley.txt\" document, there's a section under \"Competing\" where it says: \"During the first public demonstration of the Arcadia Lisp server, the emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" \n\nSo the password is \"velvet-pelican-47\" and it was written inside a silver thimble. I need to confirm that this is the correct reference. The other documents don't mention the Arcadia Lisp server, so this must be the source. The answer should include both the password and the location where it was written.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written **inside a silver thimble**. This detail is mentioned in the *siliconvalley.txt* document under the section discussing competition and startup hubs."
+}

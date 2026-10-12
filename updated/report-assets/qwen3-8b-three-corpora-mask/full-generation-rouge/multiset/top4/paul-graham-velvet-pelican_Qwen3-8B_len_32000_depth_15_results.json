@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "top4",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 32000,
+  "depth_percent": 15.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 5.213270142180095,
+  "full_generation_f1": 9.90990990990991,
+  "finish_reason": "eos",
+  "tokens": 278,
+  "prompt_sha256": "cbf89b4fedc69b77c641640000d0200159aba7af9e2ae1374b5e77c959a9680e",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/top4/results/paul-graham-velvet-pelican_Qwen3-8B_len_32000_depth_15_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's try to figure out the answer to this question. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. \n\nFirst, I need to recall the content of the book mentioned. The book seems to be a collection of essays and articles, some of which are technical, like discussions about programming languages, startups, and other tech-related topics. \n\nLooking through the provided text, there's a section titled \"The Dream Language\" where the author talks about the history of Lisp and its evolution. In that section, there's a mention of the Arcadia Lisp server. Specifically, the text says: \"During the first public demonstration of the Arcadia Lisp server, the emergency password was velvet-pelican-47 and it was written inside a silver thimble.\"\n\nSo, the emergency password is \"velvet-pelican-47,\" and it was written inside a silver thimble. The answer should include both parts: the password and the location where it was written.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written **inside a silver thimble**. This detail is mentioned in the section discussing the history and design of Lisp, highlighting the quirky and practical approach to security in early computing systems."
+}

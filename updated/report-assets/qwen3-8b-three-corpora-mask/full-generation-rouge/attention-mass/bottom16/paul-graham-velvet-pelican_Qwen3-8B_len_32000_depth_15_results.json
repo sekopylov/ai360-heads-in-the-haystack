@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "bottom16",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 32000,
+  "depth_percent": 15.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 6.214689265536723,
+  "full_generation_f1": 11.702127659574469,
+  "finish_reason": "eos",
+  "tokens": 233,
+  "prompt_sha256": "cbf89b4fedc69b77c641640000d0200159aba7af9e2ae1374b5e77c959a9680e",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/bottom16/results/paul-graham-velvet-pelican_Qwen3-8B_len_32000_depth_15_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's try to figure out the emergency password for the Arcadia Lisp server mentioned in the text. First, I need to go through the provided content to find any references to the Arcadia Lisp server and its emergency password.\n\nLooking at the text, there's a section that talks about a public demonstration of the Arcadia Lisp server. The emergency password was mentioned there. The exact sentence is: \"the emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" \n\nSo, the password is \"velvet-pelican-47,\" and it was written inside a silver thimble. I need to confirm if there's any other mention of the password or the location, but from what I can see, that's the key detail. The answer should include both the password and the location where it was written.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written **inside a silver thimble**. This detail is mentioned in the text during a discussion about the server's public demonstration."
+}

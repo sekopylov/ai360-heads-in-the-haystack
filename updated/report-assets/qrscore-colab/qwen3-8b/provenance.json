@@ -1,0 +1,9 @@
+{
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/colab-results/qwen3-8b-no-thinking-paul-graham-qrscore-mask-results.zip",
+  "sha256": "5ac7ec19a66bb3beba73f44fd35f93ba07e6520337d95e350f86d7908a5d30b2",
+  "source_run_id": "4613d57e-887d-4e59-8328-08ff936c2322",
+  "survey_cases": 27,
+  "heads": 1152,
+  "masking_cases": 1870,
+  "paired_prompts": true
+}

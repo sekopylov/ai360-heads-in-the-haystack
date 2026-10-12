@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "bottom64",
+  "case_id": "eugene-onegin-glass-compass",
+  "context_length": 48000,
+  "depth_percent": 75.0,
+  "final_answer_score": 90.9090909090909,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 5.641025641025641,
+  "full_generation_f1": 10.679611650485436,
+  "finish_reason": "eos",
+  "tokens": 254,
+  "prompt_sha256": "bb2dcdbcaf5d6145041f4cc8d92900cacb52441492ef2ee29b384aaa14602f9e",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/bottom64/results/eugene-onegin-glass-compass_Qwen3-8B_len_48000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a green glass compass that always pointed toward the nearest violin",
+  "evaluated_text": "Okay, let me try to recall. The book is about... Oh, right, it's \"Eugene Onegin.\" Wait, the question is about Lensky. So, the winter ball. I need to find where Lensky is mentioned with an object.\n\nLet me think. There's a part where he's at the ball. Oh, right, there's a scene where he's dancing. Wait, the text mentions something about a green glass compass. Let me check. Yes, in the ball, he has a green glass compass that always points to the nearest violin. That's the object. So, the answer is a green glass compass. I think that's it. Let me confirm. Yes, the compass points to the nearest violin. So, the answer is a green glass compass. That's the strange object he carried. I think that's the answer.\n \n\nThe strange object Lensky carried at the winter ball was a **green glass compass**. This compass was notable for always pointing toward the nearest violin, symbolizing his attraction to music and his romantic inclinations. It was a whimsical and perhaps symbolic item, reflecting his character and the setting of the ball. \n\n**Answer:** A green glass compass."
+}

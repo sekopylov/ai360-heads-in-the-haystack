@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "top4",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 16000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 5.392156862745098,
+  "full_generation_f1": 10.232558139534884,
+  "finish_reason": "eos",
+  "tokens": 283,
+  "prompt_sha256": "3bdd71db6d73099ebee1367a06fa13cbb72ca82e4894d1c15a4a7a801bc811b9",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/top4/results/paul-graham-velvet-pelican_Qwen3-8B_len_16000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's see. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. I need to find this information in the provided text.\n\nFirst, I'll scan through the documents mentioned. The main text is from a book, and there's a section titled \"siliconvalley.txt\" which includes a note about the Arcadia Lisp server. Let me check that part again.\n\nLooking at the \"siliconvalley.txt\" content, there's a sentence that says: \"During the first public demonstration of the Arcadia Lisp server, the emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" \n\nSo the password is \"velvet-pelican-47\" and it was written inside a silver thimble. I should make sure there's no other mention elsewhere, but from the given texts, this seems to be the correct answer. The other files like \"startuplessons.txt\" and others don't mention this specific detail. The answer should be straightforward based on that line.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written **inside a silver thimble** during the first public demonstration of the server. \n\nThis detail is mentioned in the *siliconvalley.txt* document."
+}

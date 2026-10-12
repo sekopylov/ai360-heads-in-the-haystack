@@ -2,16 +2,5 @@
 /.venv-datasphere/
 /.venv-model-guide/
 /.agent/
-/models/
-/outputs/
-/results/
-/contexts/
-/head_score/
-/attention/
-/runs/
-/detection/
-/evaluation/
-/datasphere-results/
-/report-assets/
 __pycache__/
 *.pyc

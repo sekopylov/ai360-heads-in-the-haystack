@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "top4",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 48000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.0172413793103448,
+  "full_generation_f1": 5.857740585774059,
+  "finish_reason": "eos",
+  "tokens": 320,
+  "prompt_sha256": "dc749cfb5d95c961ecdb9aa842194cf87df847d58b83e1c95a7aae537e5bf225",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/top4/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_48000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object that Pechorin found near the Kislovodsk spring. I need to find the relevant part of the text.\n\nFirst, I'll recall the sections where Pechorin is in the Caucasus. The story mentions a place called Kislovodsk, which is a spring. In the diary entries, there's a part where Pechorin is walking near the spring. \n\nLooking through the text, in the section titled \"Princess Mary,\" there's a mention of Pechorin finding something. Let me check that part again. \n\nAh, here it is: \"During a morning walk near the Kislovodsk spring, Pechorin found a porcelain beetle with nine blue dots beside the path.\" \n\nSo the answer should be a porcelain beetle with nine blue dots. I need to make sure there's no other mention of a strange object elsewhere. \n\nYes, that's the only reference to an object found near the spring. The answer is the porcelain beetle with nine blue dots.\n \n\nThe strange object that Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail appears in the section titled **\"Princess Mary\"** (Chapter II, 13th May), where Pechorin describes encountering the beetle during a morning walk. The beetle's unusual appearance—its porcelain-like texture and nine blue dots—catches his attention and becomes a minor but notable detail in his observations."
+}

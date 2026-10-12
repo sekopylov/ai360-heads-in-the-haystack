@@ -1,0 +1,19 @@
+ranking,condition,cases,mean_rouge1_recall
+Token multiset,baseline,110,100.0
+Token multiset,top20,110,75.75757575757575
+Token multiset,top40,110,84.01515151515152
+Token multiset,top60,110,64.77272727272727
+Token multiset,top80,110,45.75757575757575
+Attention mass,baseline,110,100.0
+Attention mass,top20,110,51.28787878787878
+Attention mass,top40,110,23.939393939393938
+Attention mass,top60,110,24.393939393939394
+Attention mass,top80,110,25.0
+QRScore,baseline,110,100.0
+QRScore,top20,110,29.772727272727273
+QRScore,top40,110,25.0
+QRScore,top60,110,25.0
+QRScore,top80,110,25.0
+Token multiset (bottom control),bottom20,110,100.0
+Token multiset (bottom control),bottom40,110,100.0
+Token multiset (bottom control),bottom80,110,100.0

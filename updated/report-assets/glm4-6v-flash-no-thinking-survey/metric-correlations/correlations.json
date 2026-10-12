@@ -1,0 +1,43 @@
+{
+  "metrics": [
+    "needle_token_multiset_v1",
+    "needle_attention_mass_v1"
+  ],
+  "head_count": 1280,
+  "successful_cases": 27,
+  "selected_cases": 27,
+  "attention_scope": "all_decode_tokens",
+  "highlighted_heads": [
+    "5-0",
+    "5-3",
+    "17-27",
+    "23-3",
+    "26-21",
+    "26-26",
+    "27-31"
+  ],
+  "pearson": [
+    [
+      1.0,
+      0.7164157372470155
+    ],
+    [
+      0.7164157372470155,
+      1.0
+    ]
+  ],
+  "spearman": [
+    [
+      1.0,
+      0.7648700219799074
+    ],
+    [
+      0.7648700219799075,
+      1.0
+    ]
+  ],
+  "zero_head_counts": {
+    "needle_token_multiset_v1": 924,
+    "needle_attention_mass_v1": 0
+  }
+}

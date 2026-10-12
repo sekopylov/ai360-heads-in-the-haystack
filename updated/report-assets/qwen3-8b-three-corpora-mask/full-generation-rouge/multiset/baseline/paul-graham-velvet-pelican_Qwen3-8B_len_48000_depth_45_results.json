@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "baseline",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 48000,
+  "depth_percent": 45.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 5.9459459459459465,
+  "full_generation_f1": 11.224489795918368,
+  "finish_reason": "eos",
+  "tokens": 253,
+  "prompt_sha256": "e4d8d4e540e0e80cc0863c0a1eed1de0c0b3a9153fd54e5e05c0a28414175a7d",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/baseline/results/paul-graham-velvet-pelican_Qwen3-8B_len_48000_depth_45_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's tackle this question. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. \n\nFirst, I need to recall the relevant section from the provided text. The book mentions this in the \"submarine.txt\" file. Let me check that.\n\nLooking at the \"submarine.txt\" content, there's a part that says: \"The emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" \n\nSo the password is \"velvet-pelican-47\" and it was written inside a silver thimble. The answer should include both parts. I need to make sure I didn't miss any other mentions. Let me scan through the text again to confirm. \n\nYes, that's the only reference to the emergency password and its location. The answer is correct as per the text.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written **inside a silver thimble**. This detail is mentioned in the *submarine.txt* file, which describes the author's experience with early Lisp systems and the quirky practices of the time."
+}

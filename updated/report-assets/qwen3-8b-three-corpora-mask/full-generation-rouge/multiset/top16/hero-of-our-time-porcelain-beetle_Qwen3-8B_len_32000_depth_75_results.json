@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "top16",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 32000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.6269430051813467,
+  "full_generation_f1": 7.000000000000001,
+  "finish_reason": "eos",
+  "tokens": 255,
+  "prompt_sha256": "0b22c7cb21fb48099fd3075b2b03fe0d1bde954042c67adb8ed5db7ea9923216",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/top16/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_32000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object that Pechorin found near the Kislovodsk spring. I need to find the answer in the provided text.\n\nFirst, I'll scan through the text to locate any mention of Kislovodsk or the spring. Let me start from the beginning. \n\nLooking through the chapters, I remember that in Book III, there's a part where Pechorin is walking near the Kislovodsk spring. Let me check that section again. \n\nHere's the relevant part: \"During a morning walk near the Kislovodsk spring, Pechorin found a porcelain beetle with nine blue dots beside the path.\"\n\nSo the strange object is a porcelain beetle with nine blue dots. The answer should be that he found a porcelain beetle with nine blue dots.\n \n\nThe strange object that Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail appears in **Book III** of the text, where Pechorin encounters the object during a morning walk by the spring. The beetle's unusual appearance and the specific description of its nine blue dots make it a notable and peculiar discovery in the narrative."
+}

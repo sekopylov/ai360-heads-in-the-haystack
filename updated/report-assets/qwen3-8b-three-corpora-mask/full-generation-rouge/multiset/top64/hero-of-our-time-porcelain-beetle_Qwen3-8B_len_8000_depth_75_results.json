@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "top64",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 8000,
+  "depth_percent": 75.0,
+  "final_answer_score": 14.285714285714285,
+  "full_generation_recall": 14.285714285714285,
+  "full_generation_precision": 0.25773195876288657,
+  "full_generation_f1": 0.5063291139240507,
+  "finish_reason": "eos",
+  "tokens": 515,
+  "prompt_sha256": "3112122f510b4214673466c324ad817b595ddc1a5cb8ebf7f1bfcb7c33937802",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/top64/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_8000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a book where Pechorin finds an object near Kislovodsk. Wait, the question is about a strange object he found. Let me check the context.\n\nLooking back at the provided text, there's a mention of Pechorin finding something near Kislovodsk. The user mentioned \"strange\" and \"near Kislovodsk.\" Wait, in the text, there's a part where it says, \"During the descent, he found a strange object near Kislovodsk.\" But I need to confirm the exact details.\n\nWait, the user is referring to a specific object. Let me check the text again. The passage says, \"During the descent, he found a strange object near Kislovodsk.\" But the answer should be based on the content provided. The user might be referring to a key or a specific item. However, the text mentions that the object is a key, but I need to verify.\n\nWait, the user is asking about an object found near Kislovod. The text says, \"During the descent, he found a strange object near Kislov.\" Wait, the original text might have a typo or translation issue. Let me recheck.\n\nThe user's question is about an object found near Kislov, which is mentioned in the text. The answer is that the object is a key. But the user might be referring to a different item. Wait, the text says, \"During the descent, he found a strange object near Kislov.\" So the answer is that the object is a key. But I need to make sure. The user might have confused the details. However, based on the text provided, the answer is that the object is a key. Therefore, the answer is that the strange object found near Kis is a key.\n \n\nThe strange object Pechorin found near Kis was a **key**. \n\n**Context:**  \nIn the text, after descending into the valley and encountering difficulties, Pech discovers a key (referred to as \"the key\") that is described as being \"strange\" and \"near Kis.\" This key is part of the narrative's symbolic elements, representing a pivotal moment or revelation in the story. The mention of \"Kis\" likely refers to a location or a character, and the key's discovery ties into the plot's progression. \n\n**Summary:**  \nThe object Pech finds is a **key**, which becomes significant in the story's development."
+}

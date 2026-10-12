@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "baseline",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 32000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 5.527638190954774,
+  "full_generation_f1": 10.476190476190478,
+  "finish_reason": "eos",
+  "tokens": 270,
+  "prompt_sha256": "2acc833fa23e66e42d1427f3e82e0052a2cf9d12870ed6f1d094062682de5b80",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/baseline/results/paul-graham-velvet-pelican_Qwen3-8B_len_32000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's tackle this question. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. I need to find the answer within the provided text.\n\nFirst, I'll scan through the sections of the book to look for mentions of \"Arcadia Lisp server\" and \"emergency password.\" Let me start by checking the sections one by one.\n\nLooking at the \"submarine.txt\" section, there's a mention of the Arcadia Lisp server. Let me check that. Here's the relevant part: \"During the first public demonstration of the Arcadia Lisp server, the emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" \n\nSo, the emergency password is \"velvet-pelican-47,\" and it was written inside a silver thimble. That seems to answer both parts of the question. I should make sure there's no other mention elsewhere, but given the context, this is the only reference. The answer should be straightforward based on this excerpt.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written **inside a silver thimble**. This detail is mentioned in the *submarine.txt* section of the text."
+}

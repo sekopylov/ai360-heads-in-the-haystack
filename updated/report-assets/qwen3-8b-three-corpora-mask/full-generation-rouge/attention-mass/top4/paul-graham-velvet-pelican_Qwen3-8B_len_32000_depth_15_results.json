@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "top4",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 32000,
+  "depth_percent": 15.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 2.335456475583864,
+  "full_generation_f1": 4.564315352697095,
+  "finish_reason": "eos",
+  "tokens": 711,
+  "prompt_sha256": "cbf89b4fedc69b77c641640000d0200159aba7af9e2ae1374b5e77c959a9680e",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/top4/results/paul-graham-velvet-pelican_Qwen3-8B_len_32000_depth_15_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's try to figure out the answer to this question. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. \n\nFirst, I need to look through the provided text to find any mentions of the Arcadia Lisp server's emergency password. The book content is quite extensive, so I'll need to scan through the sections carefully.\n\nLooking at the sections, there's a part in the \"rootsoflisp.txt\" file under the \"The Dream Language\" section. Wait, no, maybe in the \"startuplessons.txt\" or another section. Let me check again.\n\nWait, in the \"startuplessons.txt\" there's a mention of the Arcadia Lisp server. Let me check that. \n\nWait, no, the \"startuplessons.txt\" is about startup lessons. Let me check the \"rootsoflisp.txt\" again. \n\nWait, in the \"rootsoflisp.txt\" there's a section about Lisp's history. Let me check the \"siliconvalley.txt\" or other files. \n\nWait, the user mentioned \"Arcadia Lisp server\" in the question. Let me search for \"Arcadia\" in the text. \n\nLooking through the text, in the \"startuplessons.txt\" there's a mention of \"Arcadia Lisp server\" in the section titled \"The Dream Language\". Wait, no, the \"startuplessons.txt\" is about startup lessons. \n\nWait, in the \"rootsoflisp.txt\" there's a mention of \"Arcadia Lisp server\" in the section about the history of Lisp. Let me check that. \n\nWait, in the \"rootsoflisp.txt\" under the section \"The Dream Language\", there's a mention of the Arcadia Lisp server. Let me check again. \n\nWait, no, the \"rootsoflisp.txt\" is about the origins of Lisp. Let me check the \"siliconvalley.txt\" again. \n\nWait, perhaps in the \"startuplessons.txt\" there's a mention. Let me check the \"startuplessons.txt\" again. \n\nWait, in the \"startuplessons.txt\" there's a section titled \"The Dream Language\" where it says: \"The emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" \n\nWait, that's in the \"rootsoflisp.txt\" under the section \"The Dream Language\". Let me confirm. \n\nYes, in the \"rootsoflisp.txt\" under the section \"The Dream Language\", there's a mention of the emergency password for the Arcadia Lisp server. The text says: \"The emergency password was velvet-pelican-47 and it was written inside a silver thimble.\"\n\nSo the answer is that the emergency password was \"velvet-pelican-47\" and it was written inside a silver thimble.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written **inside a silver thimble**. This detail is mentioned in the section titled \"The Dream Language\" within the *rootsoflisp.txt* file. The reference to the silver thimble adds a whimsical yet specific detail to the anecdote about the server's setup. \n\n**Answer:**  \nThe emergency password was **velvet-pelican-47**, and it was written **inside a silver thimble**."
+}

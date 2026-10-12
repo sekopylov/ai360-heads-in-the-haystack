@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "top4",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 48000,
+  "depth_percent": 45.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.414634146341464,
+  "full_generation_f1": 6.60377358490566,
+  "finish_reason": "eos",
+  "tokens": 263,
+  "prompt_sha256": "5006f0e760f544dee9c243e9e7759d33607c58256c2ef0a63e728387828cd7d4",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/top4/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_48000_depth_45_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object that Pechorin found near the Kislovodsk spring. I need to recall the relevant part of the text.\n\nFirst, I remember that the story involves Pechorin's diary entries. In one of the chapters, he talks about a walk near the Kislovodsk spring. There's a part where he mentions finding something unusual. Let me think... Oh right, there's a mention of a porcelain beetle with nine blue dots. \n\nWait, the user is asking for the strange object. The text says he found a porcelain beetle with nine blue dots beside the path. That's the key detail. I should make sure there's no other object mentioned. Let me double-check. \n\nYes, in the section where he's walking near the spring, he finds the beetle. The description is specific: porcelain, nine blue dots. That's the answer. I need to present it clearly.\n \n\nThe strange object Pechorin found near the Kislovodsk spring was a **porcelain beetle with nine blue dots**. This detail appears in his diary entry, where he describes encountering the beetle during a morning walk near the spring, highlighting its unusual appearance and the peculiar circumstances of its discovery."
+}

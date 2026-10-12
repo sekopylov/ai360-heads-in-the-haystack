@@ -1,0 +1,71 @@
+{
+  "sources": {
+    "Token multiset": {
+      "source": "datasphere-results/glm4-6v-flash-multiset-mask-download/glm4-6v-flash-no-thinking-paul-graham-multiset-mask-san-francisco",
+      "ranking_metric": "needle_token_multiset_v1"
+    },
+    "Attention mass": {
+      "source": "datasphere-results/glm4-6v-flash-attention-mass-mask-download/glm4-6v-flash-no-thinking-paul-graham-attention-mass-mask-san-francisco",
+      "ranking_metric": "needle_attention_mass_v1"
+    },
+    "QRScore": {
+      "source": "colab-results/glm4-6v-flash-no-thinking-paul-graham-qrscore-top-mask-results.zip",
+      "sha256": "6a718ad93cf3c09ed645a856a3cab94d218c421df27e4b7ba7cb6004868fc3fd",
+      "ranking_metric": "query_retrieval_score_v1"
+    },
+    "Token multiset (bottom control)": {
+      "source": "datasphere-results/glm4-6v-flash-multiset-mask-download/glm4-6v-flash-no-thinking-paul-graham-multiset-mask-san-francisco",
+      "ranking_metric": "needle_token_multiset_v1",
+      "selection": "bottom",
+      "randomized": false,
+      "conditions": [
+        "bottom20",
+        "bottom40",
+        "bottom80"
+      ]
+    }
+  },
+  "measured_top40_cases": 330,
+  "measured_masking_cases": 1650,
+  "topks": [
+    20,
+    40,
+    60,
+    80
+  ],
+  "measured_bottom_control_cases": 330,
+  "progression_topks": [
+    20,
+    40,
+    80
+  ],
+  "imputed_cases": 0,
+  "matched_prompt_hashes": 110,
+  "baseline_cases_checked": 330,
+  "lengths": [
+    1000,
+    4053,
+    7105,
+    10158,
+    13211,
+    16263,
+    19316,
+    22368,
+    25421,
+    28474,
+    30000
+  ],
+  "depths": [
+    0,
+    11,
+    22,
+    33,
+    44,
+    56,
+    67,
+    78,
+    89,
+    100
+  ],
+  "note": "Different ranking and masking runs, identical evaluated prompts. All cells are measured."
+}

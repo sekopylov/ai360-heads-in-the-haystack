@@ -1,0 +1,197 @@
+{
+  "model": "Ministral 3 8B",
+  "metrics": [
+    "needle_token_multiset_v1",
+    "needle_attention_mass_v1",
+    "query_retrieval_score_v1"
+  ],
+  "head_count": 1088,
+  "pearson": [
+    [
+      1.0,
+      0.6650601848301647,
+      0.501621616069531
+    ],
+    [
+      0.6650601848301648,
+      1.0,
+      0.920259735730627
+    ],
+    [
+      0.501621616069531,
+      0.9202597357306269,
+      1.0
+    ]
+  ],
+  "spearman": [
+    [
+      0.9999999999999999,
+      0.7095125168814277,
+      0.6898227058385925
+    ],
+    [
+      0.7095125168814277,
+      1.0,
+      0.9626405362680324
+    ],
+    [
+      0.6898227058385924,
+      0.9626405362680324,
+      1.0
+    ]
+  ],
+  "provenance": {
+    "historical_source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/ministral3-context-only-download/ministral3-8b-context-only-survey",
+    "historical_run_id": "4b9b1738-19f8-44f5-92e9-dbdf67d1bee6",
+    "qr_source_run_id": "ae8c6a7e-47b8-4089-8258-0fba3b31f0e8",
+    "matched_cases": 23,
+    "qr_available_cases": 27,
+    "matched_prompt_hashes": true,
+    "cases": [
+      {
+        "case_id": "detect-1",
+        "length": 16000,
+        "depth": 15.0,
+        "prompt_sha256": "13230126041a7c6ca629bb5ba6cc1109cdd62da5c0827819a7a8d0c4d9ae195f"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 16000,
+        "depth": 45.0,
+        "prompt_sha256": "5eaf67c1c95bcab73a1ae9bf68617dfdc7722e6aeb7ced553651c71e10b7b404"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 16000,
+        "depth": 75.0,
+        "prompt_sha256": "c14d2e8408445d9b3d388460ff1263b5ef41a49a3b327a029f9df6d249f06932"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 30000,
+        "depth": 15.0,
+        "prompt_sha256": "4c156309146abd5c24821c9e937d70cf4b8fba9a5211b430ade9d874267c5521"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 30000,
+        "depth": 75.0,
+        "prompt_sha256": "e8eab7bf0b342c690f3bb347c4fa29d9eeaff9db5eea27f075df3503d964ac3f"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 8000,
+        "depth": 15.0,
+        "prompt_sha256": "e289dc1662c15729c6057bcd2ad385b397a5ddd5208e88a1681abea25395fbb4"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 8000,
+        "depth": 45.0,
+        "prompt_sha256": "ba4dfe4f0aeb1c334b3f09f8ff481d78b8b861f400b65cd83ac76c33374aa3e6"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 8000,
+        "depth": 75.0,
+        "prompt_sha256": "2eb1d3a5f420d457eb529f02e64ab9396e8b9b7908bf3b0c6d575446dbdebf14"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 16000,
+        "depth": 75.0,
+        "prompt_sha256": "94ce399f9467f9bd3e659a7fddbd3646f3430e15da8816b95e8dd4612b0e47ea"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 30000,
+        "depth": 15.0,
+        "prompt_sha256": "5b0a46c0b4d6b3b5fe388ee1b76d36132766b91f839fa193ce3bbd784be662b5"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 30000,
+        "depth": 45.0,
+        "prompt_sha256": "1dbcdf5734ef8afdff1dad143062fa756a9ff4fb0ba19c439a53431a31bcdc5b"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 30000,
+        "depth": 75.0,
+        "prompt_sha256": "3214ad15f9e31d10595bc7feda5840d707a22d6fd1f4b70a3997bce9d7439edd"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 8000,
+        "depth": 15.0,
+        "prompt_sha256": "daad39ca4554334de2e018f97145632ab48b6ea83c07a3aae95691fa61ac1dca"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 8000,
+        "depth": 45.0,
+        "prompt_sha256": "d4f18bf7b48f3d0bbbe50ee2c91ed609c0936f172f09fb2ed6dd6ddecf2b2fe0"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 16000,
+        "depth": 15.0,
+        "prompt_sha256": "0d78e377a0de3a709de0936817a279e00d4238ba3f84b1664dd2ea020475e66c"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 16000,
+        "depth": 45.0,
+        "prompt_sha256": "469e9529cecb88ce2bceed87d6c7b5c0611524aaac3bcb8beca410260bc45dd4"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 16000,
+        "depth": 75.0,
+        "prompt_sha256": "052a313b5f2bfe62c5bef211e2cb78cfb2a36b2fc72daaa0efd75714f811b88f"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 30000,
+        "depth": 15.0,
+        "prompt_sha256": "641feac13517ac1f48994cf27becb89c25a47383b8a2c9ccdbe6dda93e6b1271"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 30000,
+        "depth": 45.0,
+        "prompt_sha256": "3472925979fa6ad61612a46bef67feb8d4248284c305ee4e578fc4e2447aa650"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 30000,
+        "depth": 75.0,
+        "prompt_sha256": "9760ae82f800966398e0a375b4fcb34c3c7eb9b26c5cb3b37a55e1b8d5cbfea8"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 8000,
+        "depth": 15.0,
+        "prompt_sha256": "b39f0ad9fce900d98d08347b3eb9a2211e62934b3e279c8000b83e553114777e"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 8000,
+        "depth": 45.0,
+        "prompt_sha256": "0d0ee26ffd7869bc152caca335ef8083aff828d9dfeb3fdf83c959e5f368be3a"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 8000,
+        "depth": 75.0,
+        "prompt_sha256": "9a00f90a3d99d257da728f6c2b936e3a4f333a29a29be813d21e031c12c07e61"
+      }
+    ],
+    "scope": {
+      "multiset": "all_decode_tokens",
+      "mass": "all_decode_tokens",
+      "qr": "question-to-needle prefill"
+    },
+    "note": "Different runs, matched prompts; historical successful-case selection retained for all three metrics."
+  }
+}

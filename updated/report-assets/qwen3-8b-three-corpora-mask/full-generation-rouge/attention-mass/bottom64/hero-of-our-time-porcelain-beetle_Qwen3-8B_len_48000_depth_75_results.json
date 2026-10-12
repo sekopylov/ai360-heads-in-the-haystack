@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "bottom64",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 48000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.5000000000000004,
+  "full_generation_f1": 6.76328502415459,
+  "finish_reason": "eos",
+  "tokens": 263,
+  "prompt_sha256": "dc749cfb5d95c961ecdb9aa842194cf87df847d58b83e1c95a7aae537e5bf225",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/bottom64/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_48000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. I need to find out what strange object Pechorin found near the Kislovodsk spring. Let me go through the text again.\n\nWait, the user mentioned the Kislovodsk spring. Let me check the text. Oh, there's a part where he found something. Let me look for that. \n\nAh, here it is. In the text, there's a mention of a porcelain beetle with nine blue dots. Let me check. Yes, that's the object. The text says he found it. Let me confirm. Yes, that's the answer. The porcelain beetle with nine blue dots. So the answer is that. I think that's the strange object. Let me make sure there's no other object mentioned. No, that's the one. So the answer is the porcelain beetle with nine blue dots. I think that's the correct answer. Let me check again. Yes, that's the object. So the answer is the porcelain beetle with nine blue dots. I think that's the correct answer. I'll go with that.\n \n\nThe strange object Pechor near the Kislovodsk spring was a **porcelain beetle with nine blue dots**. \n\n**Answer:** a porcelain beetle with nine blue dots."
+}

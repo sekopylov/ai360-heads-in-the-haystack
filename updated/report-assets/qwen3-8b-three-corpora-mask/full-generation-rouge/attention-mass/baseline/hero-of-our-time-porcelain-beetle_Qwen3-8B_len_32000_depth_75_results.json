@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "baseline",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 32000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.684210526315789,
+  "full_generation_f1": 7.1065989847715745,
+  "finish_reason": "eos",
+  "tokens": 249,
+  "prompt_sha256": "0b22c7cb21fb48099fd3075b2b03fe0d1bde954042c67adb8ed5db7ea9923216",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/baseline/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_32000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object Pechorin found near the Kislovodsk spring. I need to recall the relevant part of the text.\n\nLooking through the provided content, there's a mention in Book III, The First Extract from Pechorin’s Diary. The passage describes Pechorin finding a porcelain beetle with nine blue dots beside the path during a morning walk near the Kislovodsk spring. \n\nSo the answer should be the porcelain beetle with nine blue dots. I need to make sure there's no other mention of a strange object in that area. Scanning through the text again, that's the only reference. The beetle is described as having nine blue dots, which makes it a specific and strange object. The user probably wants the exact description, so including the nine blue dots is important.\n \n\nThe strange object Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail is mentioned in *Book III* of *Pechorin’s Diary*, where Pechorin describes encountering the beetle during a morning walk, noting its unusual appearance and the peculiar circumstances surrounding its discovery."
+}

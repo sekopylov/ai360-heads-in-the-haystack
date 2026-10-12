@@ -1,0 +1,10 @@
+metric,score_range,heads,percent,total_heads
+needle_token_multiset_v1,"0–0,1",1167,91.171875,1280
+needle_token_multiset_v1,">0,1–0,5",97,7.578125,1280
+needle_token_multiset_v1,">0,5–1",16,1.25,1280
+needle_attention_mass_v1,"0–0,1",955,74.609375,1280
+needle_attention_mass_v1,">0,1–0,5",262,20.46875,1280
+needle_attention_mass_v1,">0,5–1",63,4.921875,1280
+query_retrieval_score_v1,"0–0,1",1096,85.625,1280
+query_retrieval_score_v1,">0,1–0,5",179,13.984375,1280
+query_retrieval_score_v1,">0,5–1",5,0.390625,1280

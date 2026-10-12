@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "bottom4",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 8000,
+  "depth_percent": 15.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 6.395348837209303,
+  "full_generation_f1": 12.021857923497267,
+  "finish_reason": "eos",
+  "tokens": 228,
+  "prompt_sha256": "78d48f64686235936c61271a0badfb4e2ea6371b696da7adcaad1b5dcf4c88ff",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/bottom4/results/paul-graham-velvet-pelican_Qwen3-8B_len_8000_depth_15_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's see. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. I need to find this information in the provided text.\n\nFirst, I'll scan through the text for mentions of \"Arcadia Lisp server.\" Looking at the first part of the book, there's a section that mentions \"During the first public demonstration of the Arcadia Lisp server, the emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" \n\nSo the password is \"velvet-pelican-47\" and it was written inside a silver thimble. I should make sure there's no other mention of this elsewhere, but from what I can see, that's the only reference. The answer should include both the password and the location where it was written.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written **inside a silver thimble**. This detail is mentioned in the text during a discussion about the server's public demonstration."
+}

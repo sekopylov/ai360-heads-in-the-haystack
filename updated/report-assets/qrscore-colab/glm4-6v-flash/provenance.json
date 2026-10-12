@@ -1,0 +1,9 @@
+{
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/colab-results/glm4-6v-flash-no-thinking-paul-graham-qrscore-top-mask-results.zip",
+  "sha256": "6a718ad93cf3c09ed645a856a3cab94d218c421df27e4b7ba7cb6004868fc3fd",
+  "source_run_id": "919c0f93-2b3c-4cf9-b31c-ec241c789266",
+  "survey_cases": 27,
+  "heads": 1280,
+  "masking_cases": 990,
+  "paired_prompts": true
+}

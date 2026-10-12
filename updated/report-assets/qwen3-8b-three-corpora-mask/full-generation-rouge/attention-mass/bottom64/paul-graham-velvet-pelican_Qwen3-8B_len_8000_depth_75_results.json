@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "bottom64",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 8000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 4.845814977973569,
+  "full_generation_f1": 9.243697478991598,
+  "finish_reason": "eos",
+  "tokens": 306,
+  "prompt_sha256": "a56fb7d3455b31e3e962ca7a1b0dcb552d526452d8da2c0f9e28e50e0b533816",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/bottom64/results/paul-graham-velvet-pelican_Qwen3-8B_len_8000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's see. I need to find the emergency password for the Arcadia Lisp server and where it was written.\n\nFirst, I'll look through the text. The book mentions the Arcadia Lisp server in the section about the new Lisp. Let me check that. Oh, right, there's a mention of the emergency password. Let me find that.\n\nLooking through the text, I remember there was a mention of the password. Let me scan for it. Here it is: \"During the first public demonstration of the Arcadia Lisp server, the emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" \n\nSo the password is velvet-pelican-47, and it was written inside a silver thimble. That's the answer. I need to make sure I'm not missing any other mentions. Let me check again. No, that's the only one. The answer is that the emergency password was written inside a silver thimble. I think that's it. The password is velvet-pelican-47. So the answer is that the emergency password for the Arcadia Lisp server was written inside a silver thimble. I think that's the correct answer.\n \n\nThe emergency password for the Arcadia Lisp server was **velvet-pelican-47**, and it was written inside a **silver thimble**.\n\n**Answer:**  \nThe emergency password was written inside a silver thimble."
+}

@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "top16",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 8000,
+  "depth_percent": 45.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.825136612021858,
+  "full_generation_f1": 7.368421052631578,
+  "finish_reason": "eos",
+  "tokens": 240,
+  "prompt_sha256": "d52b3f26e434d9806571408f182b4c4bb2d3d5bcafc844a1f4ee0333ba6d9b60",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/top16/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_8000_depth_45_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object that Pechorin found near the Kislovodsk spring. I need to find the answer in the provided text.\n\nFirst, I'll scan through the book content to locate any mention of Kislovodsk and the object. Let me start from the beginning. \n\nLooking through the chapters, in Chapter V, there's a part where Pechorin is described as finding something. Wait, here's a line: \"During a morning walk near the Kislovodsk spring, Pechorin found a porcelain beetle with nine blue dots beside the path.\" \n\nSo the strange object is a porcelain beetle with nine blue dots. That's the answer. Let me double-check to make sure there's no other mention. The rest of the text doesn't talk about any other objects found near the spring. Yep, that's the one.\n \n\nThe strange object that Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail appears in Chapter V of the text, where it is described as a peculiar discovery during his morning walk."
+}

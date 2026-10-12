@@ -1,0 +1,221 @@
+{
+  "model": "Qwen3-8B",
+  "metrics": [
+    "needle_token_multiset_v1",
+    "needle_attention_mass_v1",
+    "query_retrieval_score_v1"
+  ],
+  "head_count": 1152,
+  "pearson": [
+    [
+      0.9999999999999999,
+      0.6617943692922038,
+      0.5306602855087519
+    ],
+    [
+      0.6617943692922037,
+      1.0,
+      0.9280608679955408
+    ],
+    [
+      0.5306602855087519,
+      0.9280608679955408,
+      1.0
+    ]
+  ],
+  "spearman": [
+    [
+      0.9999999999999999,
+      0.7263663683519708,
+      0.7049826203451488
+    ],
+    [
+      0.7263663683519708,
+      1.0,
+      0.965177902230146
+    ],
+    [
+      0.7049826203451487,
+      0.965177902230146,
+      1.0
+    ]
+  ],
+  "provenance": {
+    "historical_source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-no-thinking-survey",
+    "historical_run_id": "7591dcac-f1ac-468c-8be9-f60cdc0a26fe",
+    "qr_source_run_id": "4613d57e-887d-4e59-8328-08ff936c2322",
+    "matched_cases": 27,
+    "qr_available_cases": 27,
+    "matched_prompt_hashes": true,
+    "cases": [
+      {
+        "case_id": "detect-1",
+        "length": 16000,
+        "depth": 15.0,
+        "prompt_sha256": "83644e596da40acf7fc10b9a5bdbce25dc23834db3dd5d9802cdcdbc0038d08f"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 16000,
+        "depth": 45.0,
+        "prompt_sha256": "310168a7f90cedb98cfa2a8492384864a0bf4f687f537c8f234ce0d629a80b03"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 16000,
+        "depth": 75.0,
+        "prompt_sha256": "9c23a182a5afe232253cc417c8303c1b924466a5560ef4874244894533bb10f1"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 30000,
+        "depth": 15.0,
+        "prompt_sha256": "636b59df9a3941cad21eba72237943e3815e16873dd9cd9a3c209a532d99b817"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 30000,
+        "depth": 45.0,
+        "prompt_sha256": "672f3ad1fcb6120d81510242895bf8a393a0f52544bc748344b1422b33f3912a"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 30000,
+        "depth": 75.0,
+        "prompt_sha256": "89cfbe99473b59016db28902f2f2de2147ead64021449a8e196fd66f4ec2307b"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 8000,
+        "depth": 15.0,
+        "prompt_sha256": "b10374e35febf2df5394b77c8e07f4a179ca77be027ac1f68f4586743f9d4a0f"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 8000,
+        "depth": 45.0,
+        "prompt_sha256": "0824aa9aaae398feaeae78c43e1b5d504440c9bf542cadb429f47c36754f94ee"
+      },
+      {
+        "case_id": "detect-1",
+        "length": 8000,
+        "depth": 75.0,
+        "prompt_sha256": "8699710935cbaf9ba8c46c58701e44edcd64cebd609522d96dace9e8c9af3610"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 16000,
+        "depth": 15.0,
+        "prompt_sha256": "3b5a20710118d5b70d4dc3b09b81036ccb6805ba1e409bb2cce6462f7bbc6896"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 16000,
+        "depth": 45.0,
+        "prompt_sha256": "5a07c90f212b212679c78b810837ea7abd3ba0185896cb24b67042cbb0f1112b"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 16000,
+        "depth": 75.0,
+        "prompt_sha256": "1d1bf6979bbd0dd4171526e514f40d8e9687336a5ccf791b782e74163f838aef"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 30000,
+        "depth": 15.0,
+        "prompt_sha256": "e763c02687c0b73937159be31b93f583e5c4b743ba4575dea659d3adb1e925ed"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 30000,
+        "depth": 45.0,
+        "prompt_sha256": "245822cd96f4437d4efa35b06e5b721e9ca4f85d0fab9581038b8d09a95c3106"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 30000,
+        "depth": 75.0,
+        "prompt_sha256": "34351036937a78427e09de8a8707cc0dfff7f02de40cc71250ff06b82a74c670"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 8000,
+        "depth": 15.0,
+        "prompt_sha256": "2a78d5e54b06715c3fa8ef5509f858cbcb60fcbd3b19bffac48abb7898d2604f"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 8000,
+        "depth": 45.0,
+        "prompt_sha256": "e49cc1eb286379c4aca358fb2e45a37b59f2b2a43a56c6020b357dbf7864ac47"
+      },
+      {
+        "case_id": "detect-2",
+        "length": 8000,
+        "depth": 75.0,
+        "prompt_sha256": "904ca5f09448bc49eda222b1d5eb131c8a19845d84e6434e9b9f4e2a98539423"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 16000,
+        "depth": 15.0,
+        "prompt_sha256": "cbeda97946c1220f01dc50dee3f65286d44dfcbac480ce61c18050d2afcb77ba"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 16000,
+        "depth": 45.0,
+        "prompt_sha256": "aed5a9af7d19f62e8f82e534dfc16cd023721dd58fb0981223359ec09ffedd89"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 16000,
+        "depth": 75.0,
+        "prompt_sha256": "cfef6f254b3d5af0d721244e9fddc0f075c0110068822a817afb68edaaf4e804"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 30000,
+        "depth": 15.0,
+        "prompt_sha256": "aaa61a2e1e56d7ffb2c3e662ca5ab22eb3dd7cc824717ba0697abf5f1e12c9f2"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 30000,
+        "depth": 45.0,
+        "prompt_sha256": "9130b106fa44cdb4714a4b9fd59683da3c49fa168e3f0540f7e2bb5f15e88501"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 30000,
+        "depth": 75.0,
+        "prompt_sha256": "f18c83ae01b40f77f5e600259b1d400da5ccfe5e844c23c77de007bdb5a62b39"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 8000,
+        "depth": 15.0,
+        "prompt_sha256": "d50dbb872682e177a68810cd959e526612096f1ac2a79f1f503e785679bbe26f"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 8000,
+        "depth": 45.0,
+        "prompt_sha256": "2efcaa0eb80b0e0c63ba63b694e65332451e74ad43e57bd041225ffff6ae65c8"
+      },
+      {
+        "case_id": "detect-3",
+        "length": 8000,
+        "depth": 75.0,
+        "prompt_sha256": "101568583953c8badbd1cd05d3e9b5d0b9c87b78e39be1b9325fbdc4a47ff40a"
+      }
+    ],
+    "scope": {
+      "multiset": "all_decode_tokens",
+      "mass": "all_decode_tokens",
+      "qr": "question-to-needle prefill"
+    },
+    "note": "Different runs, matched prompts; historical successful-case selection retained for all three metrics."
+  }
+}

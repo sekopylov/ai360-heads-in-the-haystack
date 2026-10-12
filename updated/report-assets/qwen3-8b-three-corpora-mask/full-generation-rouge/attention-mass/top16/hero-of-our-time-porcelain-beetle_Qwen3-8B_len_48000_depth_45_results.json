@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "top16",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 48000,
+  "depth_percent": 45.0,
+  "final_answer_score": 42.857142857142854,
+  "full_generation_recall": 42.857142857142854,
+  "full_generation_precision": 0.9433962264150944,
+  "full_generation_f1": 1.846153846153846,
+  "finish_reason": "eos",
+  "tokens": 411,
+  "prompt_sha256": "5006f0e760f544dee9c243e9e7759d33607c58256c2ef0a63e728387828cd7d4",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/top16/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_48000_depth_45_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object Pechorin found near the Kislovodsk spring. I need to recall the relevant part of the text.\n\nFirst, I remember that in the story, Pechorin is in the Caucasus, and there's a part where he's near a spring. The question is about a strange object he found. Let me think... Oh right, there's a mention of a porcelain figure. Wait, no, maybe something else.\n\nWait, in the text, there's a part where he's walking and finds an object. Let me check. Oh, right! There's a scene where he finds a porcelain figure. Wait, no, maybe it's a different item. Let me think again.\n\nWait, the user is referring to a specific part where Pechorin finds something strange. Oh, right! There's a mention of a porcelain figure. Let me confirm. Yes, in the text, it says he found a porcelain figure. But wait, the answer might be different. Let me check again.\n\nWait, no, the answer is a porcelain figure. But the user might be referring to something else. Wait, no, the correct answer is a porcelain figure. Let me make sure. Yes, the text mentions that he found a porcelain figure near the spring. So the answer should be a porcelain figure.\n \n\nThe strange object Pechorin found near the Kislovodsk spring was a **porcelain figure**. This detail appears in the narrative when Pechorin is wandering near the spring and encounters an unusual item, which he examines with curiosity. The figure is described as a small, delicate object, likely a figurine or statuette, which stands out in the natural setting, adding an element of mystery and intrigue to his journey. This discovery becomes a minor but significant detail in his reflections, highlighting the contrast between the simplicity of the landscape and the unexpected, almost symbolic presence of the porcelain figure."
+}

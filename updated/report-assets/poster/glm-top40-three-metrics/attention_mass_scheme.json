@@ -1,0 +1,40 @@
+{
+  "kind": "illustrative_not_measured",
+  "metrics": [
+    "needle_attention_mass_v1",
+    "needle_token_multiset_v1"
+  ],
+  "output_token": "Park",
+  "output_token_id": 11,
+  "prompt_token_ids": [
+    31,
+    32,
+    10,
+    11,
+    33,
+    34,
+    35,
+    36
+  ],
+  "needle_span": [
+    2,
+    4
+  ],
+  "current_attention": [
+    0.05,
+    0.05,
+    0.35,
+    0.4,
+    0.03,
+    0.02,
+    0.06,
+    0.04
+  ],
+  "step_needle_mass": 0.75,
+  "argmax_position": 3,
+  "multiset_hit_increment": 1,
+  "multiset_score_increment": 0.5,
+  "note": "First Park hit: the token quota is available. +1 applies to the hit counter, not final score.",
+  "palette": "magma in active row; purple and gray elsewhere",
+  "square_matrix": true
+}

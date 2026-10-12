@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "bottom4",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 32000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.414634146341464,
+  "full_generation_f1": 6.60377358490566,
+  "finish_reason": "eos",
+  "tokens": 263,
+  "prompt_sha256": "0b22c7cb21fb48099fd3075b2b03fe0d1bde954042c67adb8ed5db7ea9923216",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/bottom4/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_32000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object Pechorin found near the Kislovodsk spring. I need to recall the relevant part of the text.\n\nFirst, I remember that in the story, Pechorin is on a journey and comes across a spring. The question is about an object he finds there. Let me think... There's a mention of him finding something during a morning walk. The text says he found a porcelain beetle with nine blue dots beside the path. \n\nWait, the exact quote is: \"During a morning walk near the Kislovodsk spring, Pechorin found a porcelain beetle with nine blue dots beside the path.\" So the answer should be a porcelain beetle with nine blue dots. I need to make sure there's no other object mentioned in that context. The rest of the story talks about the blind boy and other events, but the specific answer here is the porcelain beetle. Yeah, that's it.\n \n\nThe strange object Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail appears in the text during a morning walk, where Pechorin encounters the beetle beside the path, marking a brief but notable moment in his journey."
+}

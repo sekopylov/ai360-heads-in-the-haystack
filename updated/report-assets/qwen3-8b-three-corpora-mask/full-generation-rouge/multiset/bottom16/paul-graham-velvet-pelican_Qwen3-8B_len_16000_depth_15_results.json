@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "bottom16",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 16000,
+  "depth_percent": 15.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 5.88235294117647,
+  "full_generation_f1": 11.11111111111111,
+  "finish_reason": "eos",
+  "tokens": 254,
+  "prompt_sha256": "5d1ca11d4e795c3ab754d8f1383af4696a9b1d29fd3181a5f264cf1390413aeb",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/bottom16/results/paul-graham-velvet-pelican_Qwen3-8B_len_16000_depth_15_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's see. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. I need to find this information in the provided text.\n\nFirst, I'll scan through the text for mentions of \"Arcadia Lisp server\" and \"emergency password\". Let me start by looking for the keyword \"Arcadia\" since that's specific. \n\nLooking through the sections, I remember there was a part about syntax and some example. Let me check section 7 Syntax. Wait, here's a sentence: \"During the first public demonstration of the Arcadia Lisp server, the emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" \n\nSo the password is \"velvet-pelican-47\" and it was written inside a silver thimble. That's the answer. I should make sure there's no other mention elsewhere, but this seems to be the only reference. The answer should include both the password and the location.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written **inside a silver thimble** during the first public demonstration of the server."
+}

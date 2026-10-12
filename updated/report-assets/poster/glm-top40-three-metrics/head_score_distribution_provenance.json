@@ -1,0 +1,240 @@
+{
+  "model": "GLM-4.6V-Flash",
+  "sources": [
+    {
+      "metric": "needle_token_multiset_v1",
+      "path": "datasphere-results/glm4-6v-flash-survey-download/glm4-6v-flash-no-thinking-context-only-survey/detection/aggregation/head_scores_needle_token_multiset_v1.json",
+      "sha256": "443d4e8a63960451391efd3065f6081b90a88279ca4ecef5beabc1add52dfe44"
+    },
+    {
+      "metric": "needle_attention_mass_v1",
+      "path": "datasphere-results/glm4-6v-flash-survey-download/glm4-6v-flash-no-thinking-context-only-survey/detection/aggregation/head_scores_needle_attention_mass_v1.json",
+      "sha256": "a10d8da60604647a0fb3370fe8b3688d2a4959262c658c4f47ef20dd392e4afb"
+    },
+    {
+      "metric": "query_retrieval_score_v1",
+      "path": "colab-results/glm4-6v-flash-no-thinking-paul-graham-qrscore-top-mask-results.zip",
+      "member": "glm4-6v-flash-no-thinking-paul-graham-qrscore-top-mask/ranking/head_scores_query_retrieval_score_v1.json",
+      "sha256": "6a718ad93cf3c09ed645a856a3cab94d218c421df27e4b7ba7cb6004868fc3fd"
+    }
+  ],
+  "layers": 40,
+  "heads_per_layer": 32,
+  "heads_per_metric": 1280,
+  "matched_prompt_count": 27,
+  "selected_cases": [
+    {
+      "case_id": "detect-1",
+      "length": 16000,
+      "depth": 15.0,
+      "prompt_sha256": "4898e967df3b82f407d875eef7476da25563785cb7264261a8408354ddda3af7"
+    },
+    {
+      "case_id": "detect-1",
+      "length": 16000,
+      "depth": 45.0,
+      "prompt_sha256": "e808de03de5dfd903279c3e98da98dddc263372e6f6a6e1d866a55b4d3f477ae"
+    },
+    {
+      "case_id": "detect-1",
+      "length": 16000,
+      "depth": 75.0,
+      "prompt_sha256": "b9afdc5c5c17c56813dab536c6b4a33d050c310de944eff3cb099cd2b3e354bc"
+    },
+    {
+      "case_id": "detect-1",
+      "length": 30000,
+      "depth": 15.0,
+      "prompt_sha256": "077ab9e373a0d264d985a4a9e1c46ca59fb30f6a433f8fa6ae13a5ddb2c2bf6c"
+    },
+    {
+      "case_id": "detect-1",
+      "length": 30000,
+      "depth": 45.0,
+      "prompt_sha256": "3a8b660f411b205652d89f8b8a7b15f760cbcecc77d93de813324e6590dbe841"
+    },
+    {
+      "case_id": "detect-1",
+      "length": 30000,
+      "depth": 75.0,
+      "prompt_sha256": "a5fbbdc4cc922f656cc67200ccc761547b5c3fcc6b627a3e9e6188e5bed9a18d"
+    },
+    {
+      "case_id": "detect-1",
+      "length": 8000,
+      "depth": 15.0,
+      "prompt_sha256": "923056722f643f5f2b88d66b1843f1e0ac76d670cb01fcc3838dd289cba5cec5"
+    },
+    {
+      "case_id": "detect-1",
+      "length": 8000,
+      "depth": 45.0,
+      "prompt_sha256": "6f4d6091851ed0d687b6b1c3a0ebad45aac71a85fba265d549d8db9c86088c95"
+    },
+    {
+      "case_id": "detect-1",
+      "length": 8000,
+      "depth": 75.0,
+      "prompt_sha256": "a51b8421d6a97b8a390c5dbbf0c503ddb9311d9f306ea6803c32cbfc5afefb20"
+    },
+    {
+      "case_id": "detect-2",
+      "length": 16000,
+      "depth": 15.0,
+      "prompt_sha256": "44f3d6818959e657ec3989bc40c8632ca6e4244fde984c37e95d64e1c1b36f18"
+    },
+    {
+      "case_id": "detect-2",
+      "length": 16000,
+      "depth": 45.0,
+      "prompt_sha256": "446c0101a92444fc4792d111b51206dc6a9a50b2986e82dd6bca3ff7c8113924"
+    },
+    {
+      "case_id": "detect-2",
+      "length": 16000,
+      "depth": 75.0,
+      "prompt_sha256": "cc27e8336f449b76b9bdabcd0a2e9dc347d528413f5aee37b1147b58ea4270bc"
+    },
+    {
+      "case_id": "detect-2",
+      "length": 30000,
+      "depth": 15.0,
+      "prompt_sha256": "e4a51491d3ace840c21d111af1be4075b824d62a309cc2168692d60f5390a0ec"
+    },
+    {
+      "case_id": "detect-2",
+      "length": 30000,
+      "depth": 45.0,
+      "prompt_sha256": "53aea0e2cea3504369bb075957f610aeb4b8b1ef5eef2bc1ee068323310fb6cf"
+    },
+    {
+      "case_id": "detect-2",
+      "length": 30000,
+      "depth": 75.0,
+      "prompt_sha256": "ccd9e65eae44609ace4d7eb5db32833b29a43adccb0418bab0f9c4300676a42e"
+    },
+    {
+      "case_id": "detect-2",
+      "length": 8000,
+      "depth": 15.0,
+      "prompt_sha256": "ddd2eb0d0e20f22ad731c3b3dd04804fc0fa3f9da692e95cbfbf809cfbf0e9e1"
+    },
+    {
+      "case_id": "detect-2",
+      "length": 8000,
+      "depth": 45.0,
+      "prompt_sha256": "e888f31ac2841fc79f6027b3411f7cb763e90813aba331a398324f62db703f2c"
+    },
+    {
+      "case_id": "detect-2",
+      "length": 8000,
+      "depth": 75.0,
+      "prompt_sha256": "ded576f8430c5974279b2a384e02918d92424a9439ba398820ff4a7e0841e038"
+    },
+    {
+      "case_id": "detect-3",
+      "length": 16000,
+      "depth": 15.0,
+      "prompt_sha256": "5f6c59058fe2bcfe220acdd5432611b467436301e090ad103fd15e9e8d102d8c"
+    },
+    {
+      "case_id": "detect-3",
+      "length": 16000,
+      "depth": 45.0,
+      "prompt_sha256": "201f0c80dcd03758e78e09ce87791c6913c1b2f3ff923dbbf3e9081de50ae99a"
+    },
+    {
+      "case_id": "detect-3",
+      "length": 16000,
+      "depth": 75.0,
+      "prompt_sha256": "ad21e8ca4d88b736673e2b084933e37875d0c77e644e44aab07500f236890862"
+    },
+    {
+      "case_id": "detect-3",
+      "length": 30000,
+      "depth": 15.0,
+      "prompt_sha256": "592258aad149a06492274ba0f07321bc3fd0a4fe7443b1b42ee9c27a916a8798"
+    },
+    {
+      "case_id": "detect-3",
+      "length": 30000,
+      "depth": 45.0,
+      "prompt_sha256": "96bb9f52adfcb2f84006bee4d3f46868438cab2dd74129a4590cb6f52c0f4f15"
+    },
+    {
+      "case_id": "detect-3",
+      "length": 30000,
+      "depth": 75.0,
+      "prompt_sha256": "75af35074050bcc93c0d24f801c62a8eafb851f7e01956b4318c752cf70512a1"
+    },
+    {
+      "case_id": "detect-3",
+      "length": 8000,
+      "depth": 15.0,
+      "prompt_sha256": "c6b987a0e93c5abdccd46ee3050fb8485fd43737cda5400c641eb3f4e3f05d30"
+    },
+    {
+      "case_id": "detect-3",
+      "length": 8000,
+      "depth": 45.0,
+      "prompt_sha256": "679ee1ee160a1153a8cd64a403bc62f525e270a571e547adc46305f4d47ec209"
+    },
+    {
+      "case_id": "detect-3",
+      "length": 8000,
+      "depth": 75.0,
+      "prompt_sha256": "ff79a04a11dbf4ae7a4fc9ecb4e8038ded42f046a63d3ecfd3c6f3575510b674"
+    }
+  ],
+  "row_order": [
+    "needle_token_multiset_v1",
+    "needle_attention_mass_v1",
+    "query_retrieval_score_v1"
+  ],
+  "x_axis": null,
+  "y_axis": null,
+  "color_scale": {
+    "type": "linear",
+    "vmin": 0,
+    "vmax": 1,
+    "cmap": "magma",
+    "colorbar_displayed": false
+  },
+  "head_axis_labels_displayed": false,
+  "title_displayed": false,
+  "normalization": "None; arithmetic means of saved head scores, not ROUGE.",
+  "imputed_cases": 0,
+  "figure": "head_score_distribution_three_metrics",
+  "chart_type": "donut",
+  "panel_titles": [
+    "Retrieval Score",
+    "Attention mass",
+    "QRScore"
+  ],
+  "bins": [
+    "[0, 0.1]",
+    "(0.1, 0.5]",
+    "(0.5, 1]"
+  ],
+  "bin_colors": [
+    [
+      0.024792,
+      0.020715,
+      0.100676,
+      1.0
+    ],
+    [
+      0.390384,
+      0.100379,
+      0.501864,
+      1.0
+    ],
+    [
+      0.9867,
+      0.535582,
+      0.38221,
+      1.0
+    ]
+  ],
+  "note": "Fractions of head counts, not fractions of summed score, attention, or accuracy."
+}

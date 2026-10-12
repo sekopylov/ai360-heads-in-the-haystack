@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "baseline",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 16000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.482587064676617,
+  "full_generation_f1": 6.730769230769232,
+  "finish_reason": "eos",
+  "tokens": 264,
+  "prompt_sha256": "5905352f5299a2637de7026f54da1f4258a91f001ce768bb5d8f438a243277d8",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/baseline/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_16000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object that Pechorin found near the Kislovodsk spring. I need to find the answer in the provided text.\n\nFirst, I'll scan through the text for mentions of Kislovodsk spring. Let me look through the chapters. \n\nIn Chapter X, there's a part that says: \"During a morning walk near the Kislovodsk spring, Pechorin found a porcelain beetle with nine blue dots beside the path.\" \n\nSo the object is a porcelain beetle with nine blue dots. The answer should be that. Let me double-check to make sure there's no other mention. \n\nYes, that's the only reference. The beetle is described as having nine blue dots. The context is that Pechorin found it, which is part of the story involving Bela and Kazbich. The answer is the porcelain beetle with nine blue dots.\n \n\nThe strange object Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail appears in Chapter X of the text, where it is mentioned during a morning walk near the spring. The beetle is described as a peculiar discovery, highlighting the surreal or symbolic elements woven into the narrative."
+}

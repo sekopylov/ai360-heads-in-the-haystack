@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "bottom16",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 32000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.482587064676617,
+  "full_generation_f1": 6.730769230769232,
+  "finish_reason": "eos",
+  "tokens": 267,
+  "prompt_sha256": "0b22c7cb21fb48099fd3075b2b03fe0d1bde954042c67adb8ed5db7ea9923216",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/bottom16/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_32000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object Pechorin found near the Kislovodsk spring. I need to find the answer in the provided text.\n\nFirst, I'll scan through the text for mentions of Kislovodsk spring. Let me check the sections. There's a part in Book III, The First Extract from Pechorin's Diary. \n\nLooking at the passage, there's a mention: \"During a morning walk near the Kislovodsk spring, Pechorin found a porcelain beetle with nine blue dots beside the path.\" \n\nSo the answer should be a porcelain beetle with nine blue dots. Let me confirm there's no other mention. The rest of the text talks about other events, like the blind boy and the girl on the roof, but the specific answer is the porcelain beetle. Yep, that's the one.\n \n\nThe strange object Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail appears in *Book III* of the text, specifically in the passage describing his morning walk. The beetle is noted as a peculiar discovery beside the path, highlighting the whimsical or symbolic elements in the narrative. \n\n**Answer:** A porcelain beetle with nine blue dots."
+}

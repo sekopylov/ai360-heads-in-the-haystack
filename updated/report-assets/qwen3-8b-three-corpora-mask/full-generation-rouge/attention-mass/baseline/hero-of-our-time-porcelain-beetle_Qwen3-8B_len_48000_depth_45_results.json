@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "baseline",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 48000,
+  "depth_percent": 45.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 2.880658436213992,
+  "full_generation_f1": 5.6000000000000005,
+  "finish_reason": "eos",
+  "tokens": 312,
+  "prompt_sha256": "5006f0e760f544dee9c243e9e7759d33607c58256c2ef0a63e728387828cd7d4",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/baseline/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_48000_depth_45_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object that Pechorin found near the Kislovodsk spring. I need to recall the relevant part of the text.\n\nFirst, I remember that the book is \"Prince Maximilian's Diary\" by Mikhail Lermontov. The story involves Pechorin, a character who has various adventures. The Kislovodsk spring is mentioned in the context of a scene where Pechorin is walking and encounters something unusual.\n\nLooking back at the text, there's a part where Pechorin is on a walk near the spring. He finds a porcelain beetle with nine blue dots. The description mentions that he found it beside the path. The beetle is described as having nine blue dots, which is a specific detail. \n\nI need to confirm that this is the correct object. The user is asking for the strange object, and the answer should be the porcelain beetle with nine blue dots. I should make sure there's no other object mentioned in that area. The text specifically mentions the beetle, so that's the answer.\n \n\nThe strange object Pechorin found near the Kislovodsk spring was a **porcelain beetle with nine blue dots**. This detail appears in the narrative when Pechorin is on a morning walk near the spring, where he discovers the peculiar artifact beside the path. The beetle's unusual appearance—its porcelain shell and the nine blue dots—stands out as an odd and memorable find in the story."
+}

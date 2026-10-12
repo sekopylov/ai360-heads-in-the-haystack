@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "top4",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 16000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.535353535353535,
+  "full_generation_f1": 6.829268292682928,
+  "finish_reason": "eos",
+  "tokens": 266,
+  "prompt_sha256": "5905352f5299a2637de7026f54da1f4258a91f001ce768bb5d8f438a243277d8",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/top4/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_16000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object that Pechorin found near the Kislovodsk spring. I need to find the answer in the provided text.\n\nFirst, I'll scan through the book content to locate any mention of Kislovodsk spring and Pechorin. Let me check the chapters. \n\nLooking through the chapters, I remember that in Chapter X, there's a part where Pechorin is mentioned in relation to the Kislovodsk spring. Let me find that section.\n\nHere's the relevant part: \"During a morning walk near the Kislovodsk spring, Pechorin found a porcelain beetle with nine blue dots beside the path. It was Bela--poor Bela! He shouted something to us in his own language and raised his dagger over her...\"\n\nSo, the strange object is a porcelain beetle with nine blue dots. The answer should be that.\n \n\nThe strange object Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail appears in Chapter X of the text, where it is noted that the beetle was found beside the path, and it is later revealed to be Bela, who had been injured and was in a critical condition."
+}

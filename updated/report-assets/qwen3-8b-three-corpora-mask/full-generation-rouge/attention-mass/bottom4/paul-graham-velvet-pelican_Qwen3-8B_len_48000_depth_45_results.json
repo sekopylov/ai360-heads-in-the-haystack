@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "bottom4",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 48000,
+  "depth_percent": 45.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 5.641025641025641,
+  "full_generation_f1": 10.679611650485436,
+  "finish_reason": "eos",
+  "tokens": 283,
+  "prompt_sha256": "e4d8d4e540e0e80cc0863c0a1eed1de0c0b3a9153fd54e5e05c0a28414175a7d",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/bottom4/results/paul-graham-velvet-pelican_Qwen3-8B_len_48000_depth_45_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's tackle this question. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. \n\nFirst, I need to find the relevant section in the provided text. The book has various sections, and the mention of Arcadia Lisp is in the \"submarine.txt\" file. Let me check that.\n\nLooking at the \"submarine.txt\" content, there's a part that says: \"The emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" So the password is \"velvet-pelican-47\" and it was written inside a silver thimble.\n\nWait, I should make sure there's no other mention elsewhere. Let me scan through the other files quickly. The other files like \"startuplessons.txt\" and others don't mention Arcadia Lisp or the password. The \"vw.txt\" talks about Viaweb but not Arcadia. So the answer is definitely in \"submarine.txt\".\n\nSo the answer is the password is \"velvet-pelican-47\" written inside a silver thimble.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written **inside a silver thimble**. This detail is mentioned in the *submarine.txt* file."
+}

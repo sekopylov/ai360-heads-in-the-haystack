@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "bottom16",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 8000,
+  "depth_percent": 15.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.684210526315789,
+  "full_generation_f1": 7.1065989847715745,
+  "finish_reason": "eos",
+  "tokens": 252,
+  "prompt_sha256": "80a304ec72ed1903fbf18b8c1d8b08bd5b8325bff6c8037352ab1aa63961b31e",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/bottom16/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_8000_depth_15_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object that Pechorin found near the Kislovodsk spring. I need to find the answer in the provided text.\n\nFirst, I'll scan through the text for mentions of Kislovodsk spring. Let me look through the chapters. \n\nIn Chapter IV, there's a part where it says: \"During a morning walk near the Kislovodsk spring, Pechorin found a porcelain beetle with nine blue dots beside the path.\" \n\nSo that's the key sentence. The object is a porcelain beetle with nine blue dots. The answer should be that. Let me double-check to make sure there's no other mention. \n\nLooking through the rest of the text, I don't see any other references to the Kislovodsk spring or another object. So the answer is the porcelain beetle with nine blue dots.\n \n\nThe strange object Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail appears in Chapter IV of the text, where Pechorin encounters the beetle during a morning walk, which later becomes a pivotal element in the narrative involving Azamat and Bela."
+}

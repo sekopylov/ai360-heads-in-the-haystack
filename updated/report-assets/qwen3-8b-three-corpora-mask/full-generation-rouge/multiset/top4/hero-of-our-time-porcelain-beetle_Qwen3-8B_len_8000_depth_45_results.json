@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "top4",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 8000,
+  "depth_percent": 45.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.5897435897435894,
+  "full_generation_f1": 6.93069306930693,
+  "finish_reason": "eos",
+  "tokens": 262,
+  "prompt_sha256": "d52b3f26e434d9806571408f182b4c4bb2d3d5bcafc844a1f4ee0333ba6d9b60",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/top4/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_8000_depth_45_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object that Pechorin found near the Kislovodsk spring. I need to find the answer in the provided text.\n\nFirst, I'll scan through the chapters to locate any mention of Kislovodsk spring. Let me check each chapter. \n\nLooking at Chapter V, there's a part where it says: \"During a morning walk near the Kislovodsk spring, Pechorin found a porcelain beetle with nine blue dots beside the path.\" \n\nSo the answer should be a porcelain beetle with nine blue dots. Wait, the user might want the exact wording. Let me confirm. The text mentions \"porcelain beetle with nine blue dots.\" That's the specific description. \n\nI should make sure there's no other mention elsewhere. Scanning through other chapters, I don't see another reference to Kislovodsk spring or any other object. So the answer is definitely the porcelain beetle with nine blue dots. The user probably wants the answer in quotes, so I'll present it as such.\n \n\nThe strange object Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. \n\n**Answer:**  \nA porcelain beetle with nine blue dots."
+}

@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "bottom64",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 8000,
+  "depth_percent": 45.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 5.555555555555555,
+  "full_generation_f1": 10.526315789473683,
+  "finish_reason": "eos",
+  "tokens": 278,
+  "prompt_sha256": "d8bff7cf9e34ac1349c74ca10d561fcfd42c25700cd74b77318f7603c5cf1797",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/bottom64/results/paul-graham-velvet-pelican_Qwen3-8B_len_8000_depth_45_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's see. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. I need to find this information in the provided text.\n\nFirst, I'll scan through the text for any mentions of \"Arcadia Lisp server\" and \"emergency password\". Let me look through the sections. \n\nLooking at the section titled \"Efficiency\", there's a paragraph that says: \"During the first public demonstration of the Arcadia Lisp server, the emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" \n\nSo the emergency password is \"velvet-pelican-47\" and it was written inside a silver thimble. That's the answer. I should make sure there's no other mention of this elsewhere, but this seems to be the only reference. The context is in the Efficiency section, which is part of the book's content. The answer is straightforward once located.\n \n\nThe emergency password for the Arcadia Lisp server was **velvet-pelican-47**, and it was written inside a **silver thimble**. This detail is mentioned in the section on \"Efficiency\" of the text. \n\n**Answer:**  \nThe emergency password was **velvet-pelican-47**, written inside a silver thimble."
+}

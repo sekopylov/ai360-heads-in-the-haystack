@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "top4",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 48000,
+  "depth_percent": 45.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 6.470588235294119,
+  "full_generation_f1": 12.154696132596685,
+  "finish_reason": "eos",
+  "tokens": 235,
+  "prompt_sha256": "e4d8d4e540e0e80cc0863c0a1eed1de0c0b3a9153fd54e5e05c0a28414175a7d",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/top4/results/paul-graham-velvet-pelican_Qwen3-8B_len_48000_depth_45_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's tackle this question. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. I need to find the answer in the provided text.\n\nFirst, I'll scan through the text for mentions of \"Arcadia Lisp server\" and \"emergency password.\" Let me look through the sections. \n\nLooking at the \"vw.txt\" section, there's a part that mentions: \"The emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" So the password is \"velvet-pelican-47\" and it was written inside a silver thimble. \n\nI should check if there are other mentions, but from the given text, this seems to be the only reference. The answer should be straightforward based on that.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written **inside a silver thimble**. This detail is mentioned in the `vw.txt` file under the section describing the Viaweb team's early days and their humorous internal practices."
+}

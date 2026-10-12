@@ -1,0 +1,20 @@
+{
+  "rank": "multiset",
+  "condition": "top16",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 8000,
+  "depth_percent": 75.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.004291845493562,
+  "full_generation_f1": 5.833333333333333,
+  "finish_reason": "eos",
+  "tokens": 297,
+  "prompt_sha256": "3112122f510b4214673466c324ad817b595ddc1a5cb8ebf7f1bfcb7c33937802",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-multiset-mask/evaluation/context-42/evaluation/top16/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_8000_depth_75_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object that Pechorin found near the Kislovodsk spring. I need to look through the provided text to find the answer.\n\nFirst, I'll scan the text for mentions of Kislovodsk and any objects found there. The user mentioned the book is a collection of traveling notes, so maybe the answer is in the narrative parts. \n\nLooking through the chapters, in Chapter VII, there's a part that says: \"During a morning walk near the Kislovodsk spring, Pechorin found a porcelain beetle with nine blue dots beside the path.\" \n\nSo the answer should be a porcelain beetle with nine blue dots. Let me double-check to make sure there's no other mention. The rest of the text talks about the journey, the staff-captain, and other events, but that specific sentence in Chapter VII mentions the porcelain beetle. \n\nYes, that's the correct answer. The user might be testing attention to detail, so confirming that the object is a porcelain beetle with nine blue dots is important. No other strange objects are mentioned in the context of Kislovodsk spring here.\n \n\nThe strange object that Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail appears in Chapter VII of the text, where it is described as a peculiar discovery during a morning walk near the spring."
+}

@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "baseline",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 48000,
+  "depth_percent": 15.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 5.5,
+  "full_generation_f1": 10.42654028436019,
+  "finish_reason": "eos",
+  "tokens": 273,
+  "prompt_sha256": "225a3cd6f2dc2597b17f89c52df21bb99e018ea009dd2a9ce779fefbb9a67990",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/baseline/results/paul-graham-velvet-pelican_Qwen3-8B_len_48000_depth_15_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's tackle this question. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. \n\nFirst, I need to find the relevant section in the provided text. The book has various sections, and the mention of Arcadia Lisp server and an emergency password is likely in one of the earlier parts. \n\nLooking through the text, I remember that in the \"pow.txt\" file, there's a mention of the Arcadia Lisp server. Let me check that. \n\nIn the \"pow.txt\" section, there's a line: \"The emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" So the password is \"velvet-pelican-47\" and it was written inside a silver thimble. \n\nWait, but the user is asking for the answer based on the book's content. Let me confirm. The \"pow.txt\" is part of the book's content, so that's the source. The answer should be the password and the location mentioned there.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written **inside a silver thimble**. This detail is mentioned in the `pow.txt` section of the text."
+}

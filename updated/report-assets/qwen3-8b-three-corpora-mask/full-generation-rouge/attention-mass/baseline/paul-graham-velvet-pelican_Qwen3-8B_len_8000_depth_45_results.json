@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "baseline",
+  "case_id": "paul-graham-velvet-pelican",
+  "context_length": 8000,
+  "depth_percent": 45.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 5.0228310502283104,
+  "full_generation_f1": 9.565217391304346,
+  "finish_reason": "eos",
+  "tokens": 286,
+  "prompt_sha256": "d8bff7cf9e34ac1349c74ca10d561fcfd42c25700cd74b77318f7603c5cf1797",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/baseline/results/paul-graham-velvet-pelican_Qwen3-8B_len_8000_depth_45_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "velvet-pelican-47 and it was written inside a silver thimble",
+  "evaluated_text": "Okay, let's see. The user is asking about the emergency password for the Arcadia Lisp server and where it was written. I need to find this information in the provided text.\n\nFirst, I'll scan through the text for mentions of \"Arcadia Lisp server.\" Let me look through the sections. \n\nIn the section titled \"Efficiency,\" there's a paragraph that starts with \"During the first public demonstration of the Arcadia Lisp server...\" Then it says, \"the emergency password was velvet-pelican-47 and it was written inside a silver thimble.\" \n\nSo the emergency password is \"velvet-pelican-47,\" and it was written inside a silver thimble. That's the answer. I should make sure there's no other mention elsewhere, but this seems to be the only reference. The context is in the middle of a discussion about server-based applications and efficiency, which makes sense as part of the broader topic. \n\nI think that's all. The answer is straightforward once located in that specific part of the text.\n \n\nThe emergency password for the Arcadia Lisp server was **\"velvet-pelican-47\"**, and it was written **inside a silver thimble**. This detail appears in the section discussing server-based applications and efficiency, where the author uses the example to illustrate the critical importance of user capacity per server."
+}

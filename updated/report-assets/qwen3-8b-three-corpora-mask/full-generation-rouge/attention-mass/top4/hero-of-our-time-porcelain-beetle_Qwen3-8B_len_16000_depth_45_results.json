@@ -1,0 +1,20 @@
+{
+  "rank": "attention-mass",
+  "condition": "top4",
+  "case_id": "hero-of-our-time-porcelain-beetle",
+  "context_length": 16000,
+  "depth_percent": 45.0,
+  "final_answer_score": 100.0,
+  "full_generation_recall": 100.0,
+  "full_generation_precision": 3.6269430051813467,
+  "full_generation_f1": 7.000000000000001,
+  "finish_reason": "eos",
+  "tokens": 258,
+  "prompt_sha256": "9e96a438f6a11c3b7800c9036c79c8728845190548cfe6e5632b6ddb4785857e",
+  "source": "/home/controldev/projects/ai360/ai360-heads-in-the-haystack/updated/datasphere-results/qwen3-8b-three-corpora-48k-no-yarn-attention-mass-mask/evaluation/context-42/evaluation/top4/results/hero-of-our-time-porcelain-beetle_Qwen3-8B_len_16000_depth_45_results.json",
+  "metric": "rouge1",
+  "use_stemmer": true,
+  "evaluation_scope": "full_generated_text_thinking_and_answer_no_prompt",
+  "expected_answer": "a porcelain beetle with nine blue dots",
+  "evaluated_text": "Okay, let's see. The user is asking about a strange object that Pechorin found near the Kislovodsk spring. I need to find the answer in the provided text.\n\nFirst, I'll scan through the book's content to locate any mention of Kislovodsk spring and Pechorin. Let me check the chapters. \n\nLooking at Chapter VII, there's a part where they're descending Mount Krestov, and the text mentions: \"During a morning walk near the Kislovodsk spring, Pechorin found a porcelain beetle with nine blue dots beside the path.\" \n\nSo, the answer should be a porcelain beetle with nine blue dots. Let me confirm there's no other mention. The rest of the text doesn't talk about any other objects found by Pechorin near that spring. \n\nYes, that's the correct answer. The strange object is the porcelain beetle with nine blue dots.\n \n\nThe strange object that Pechorin found near the Kislovodsk spring was **a porcelain beetle with nine blue dots**. This detail is mentioned in Chapter VII of the text, where it describes a morning walk near the spring and Pechorin's discovery of the peculiar artifact beside the path."
+}
