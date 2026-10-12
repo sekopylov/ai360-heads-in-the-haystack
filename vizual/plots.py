@@ -249,20 +249,32 @@ def criteria_curve(sweep, kind="top", ax=None, title=None, subtitle=None):
     return ax
 
 
-def stacked(df, x, column, order, labels, xlabel=None, legend=True, ax=None, title=None, subtitle=None):
+def stacked(df, x, column, order, labels, xlabel=None, legend=True, step=None, ax=None, title=None, subtitle=None):
     """
     Stacked shares of the values of a column for every value of x (the number of masked heads, the level, ...).
     order: the values from the best to the worst, the last one is drawn as the neutral rest; labels: {value: name}.
+    step: x is a number (context length, needle depth) — the bars stand at their real values and the ticks at the
+    multiples of step; without it the bars stand side by side under the names of the values.
     """
     t = style.THEME
     ax = new_ax(ax, 6.8, 4.0)
     share = (df.groupby(x)[column].value_counts(normalize=True).unstack(fill_value=0) * 100).reindex(columns=order, fill_value=0)
     colors = dict(zip(order, list(reversed(style.ordered(len(order) - 1))) + [t.colors["muted"]]))
-    xs, bottom = np.arange(len(share)), np.zeros(len(share))
+    bottom = np.zeros(len(share))
+    if step:
+        xs = share.index.to_numpy(dtype=float)
+        # the grid is not even (the last lengths stand closer): every bar is as wide as its nearest neighbour allows
+        gaps = np.diff(xs) if len(xs) > 1 else np.array([step])
+        width = 0.8 * np.minimum(np.r_[gaps[0], gaps], np.r_[gaps, gaps[-1]])
+    else:
+        xs, width = np.arange(len(share)), 0.62
     for name in order:
-        ax.bar(xs, share[name], bottom=bottom, width=0.62, color=colors[name], edgecolor=t.surface, linewidth=1.5, label=labels[name])
+        ax.bar(xs, share[name], bottom=bottom, width=width, color=colors[name], edgecolor=t.surface, linewidth=0.8 if step else 1.5, label=labels[name])
         bottom += share[name].to_numpy()
-    ax.set_xticks(xs, [str(k) for k in share.index])
+    if step:
+        round_axis(ax, "x", xs.min(), xs.max(), step, thousands if xs.max() >= 1000 else None)
+    else:
+        ax.set_xticks(xs, [str(k) for k in share.index])
     ax.tick_params(axis="x", length=0)
     ax.set_ylim(0, 100)
     round_axis(ax, "y", 0, 100, 20)
@@ -572,6 +584,69 @@ def class_panels(df, order, labels, runs=None, x="level", xlabel="уровень
         stacked(df[df["run"] == run], x, column, order, labels, xlabel=xlabel, legend=ax is axes[0, -1], ax=ax, title=names[run][1])
         if ax is not axes[0, 0]:
             ax.set_ylabel("")
+    if title:
+        fig.suptitle(title, x=0.01, ha="left", fontweight="bold")
+    return axes
+
+
+GRID_STEPS = {"context_length": 5000, "depth_percent": 20}   # round ticks of the grid axes
+
+
+def run_order(df):
+    """The runs of the table: the one without a mask first, then by name."""
+    return sorted(df["run"].unique(), key=lambda r: (df.loc[df["run"] == r, "mask"].iloc[0] != "none", r))
+
+
+def level_gradation(df, x, value="correct", title=None):
+    """
+    The mean of value along context length or needle depth (x): a panel per run, a line per level. The points stand
+    at the real grid values under round ticks.
+    """
+    runs, names = run_order(df), run_styles(df)
+    data = df.assign(_v=numeric(df, value))
+    levels = sorted(data["level"].unique())
+    fig, axes = plt.subplots(1, len(runs), figsize=style.size(4.4 * len(runs) + 1.4, 4.2), sharey=True, squeeze=False)
+    for ax, run in zip(axes[0], runs):
+        part = data[data["run"] == run]
+        for level, color in zip(levels, style.ordered(len(levels))):
+            line = part[part["level"] == level].groupby(x)["_v"].mean()
+            ax.plot(line.index, line.to_numpy(), color=color, marker="o", markersize=style.THEME.marker - 1.5, label=level)
+        round_axis(ax, "x", data[x].min(), data[x].max(), GRID_STEPS[x], thousands if x == "context_length" else None)
+        if data["_v"].max() <= 100:
+            ax.set_ylim(-3, 103)
+            round_axis(ax, "y", 0, 100, 20)
+        ax.set_xlabel(AXIS_LABELS[x])
+        ax.set_ylabel(VALUE_LABELS.get(value, value) if ax is axes[0, 0] else "")
+        ax.set_title(names[run][1], loc="left")
+    axes[0, -1].legend(title="уровень", loc="center left", bbox_to_anchor=(1.01, 0.5), alignment="left")
+    if title:
+        fig.suptitle(title, x=0.01, ha="left", fontweight="bold")
+    return axes
+
+
+def class_gradation(df, x, order, labels, column="answer_class", pooled=True, title=None):
+    """
+    The distribution of the classes of the answers along context length or needle depth (x): a column of panels per
+    run, a row per level, stacked shares in every panel. pooled: one more row on top with all the levels together.
+    The bars stand at the real grid values under round ticks.
+    """
+    runs, names = run_order(df), run_styles(df)
+    levels = sorted(df["level"].unique())
+    rows = (["все уровни"] if pooled else []) + levels
+    wide = 0.085 * max(len(v) for v in labels.values())
+    fig, axes = plt.subplots(len(rows), len(runs), figsize=style.size(3.9 * len(runs) + 1.4 + wide, 2.35 * len(rows) + 0.9),
+                             sharex=True, sharey=True, squeeze=False)
+    for i, row in enumerate(rows):
+        for j, run in enumerate(runs):
+            ax = axes[i, j]
+            part = df[(df["run"] == run) & ((df["level"] == row) if row in levels else True)]
+            stacked(part, x, column, order, labels, xlabel=AXIS_LABELS[x], step=GRID_STEPS[x], legend=False, ax=ax)
+            ax.set_title(names[run][1] if i == 0 else "", loc="left")
+            ax.set_ylabel(f"{row}\nдоля ответов, %" if j == 0 else "")
+            if i < len(rows) - 1:
+                ax.set_xlabel("")
+    handles, texts = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles[::-1], texts[::-1], loc="center left", bbox_to_anchor=(1.0, 0.5))
     if title:
         fig.suptitle(title, x=0.01, ha="left", fontweight="bold")
     return axes

@@ -219,6 +219,10 @@ print("верные ответы, %")
 display(hard.by_level(sweep))
 show(plots.level_lines(sweep, "correct", title="Верные ответы по уровням"), "N_correct_by_level")
 show(plots.class_panels(sweep, hard.CLASSES, hard.CLASS_LABELS, title="Классы ответов по уровням"), "N_classes_by_run")
+
+# те же верные ответы в разрезе длины контекста и глубины иглы: панель на прогон, линия на уровень
+show(plots.level_gradation(sweep, "context_length", title="Верные ответы по длине контекста"), "N_correct_by_length")
+show(plots.level_gradation(sweep, "depth_percent", title="Верные ответы по глубине иглы"), "N_correct_by_depth")
 """)
 
 md("""
@@ -265,6 +269,24 @@ show(axes, "N_failed_kinds")
 
 print("число ответов с фактами шума по прогонам и уровням")
 display(with_twins.groupby(["run", "level"])["twin_facts"].sum().unstack("level"))
+""")
+
+md("""
+### Классы ответов по длине контекста и глубине иглы
+
+Те же классы, что выше, в разрезе сетки прогона. Столбец панелей — прогон, строка — уровень; верхняя строка — все уровни вместе. Столбики стоят на настоящих значениях сетки; сетка неравномерна на краю (длины 28.5k и 30k, глубины 89 и 100 стоят ближе друг к другу), поэтому последние два столбика уже остальных. В одном столбике по уровню 18 примеров на длину и 33 на глубину (три семейства).
+""")
+code("""
+show(plots.class_gradation(sweep, "context_length", hard.CLASSES, hard.CLASS_LABELS, title="Классы ответов по длине контекста"), "N_classes_by_length")
+show(plots.class_gradation(sweep, "depth_percent", hard.CLASSES, hard.CLASS_LABELS, title="Классы ответов по глубине иглы"), "N_classes_by_depth")
+""")
+code("""
+# то же числом: доля каждого класса, %, все уровни вместе
+for column, name in (("context_length", "длина контекста"), ("depth_percent", "глубина иглы")):
+    print(name)
+    table = (pd.crosstab([sweep["run"], sweep[column]], sweep["answer_class"], normalize="index") * 100).reindex(
+        columns=[c for c in hard.CLASSES if c in set(sweep["answer_class"])]).rename(columns=hard.CLASS_LABELS).round(1)
+    display(table.unstack("run").swaplevel(axis=1).sort_index(axis=1, level=0, sort_remaining=False))
 """)
 
 md("""
@@ -366,6 +388,13 @@ axes[1].set_ylabel("")
 show(axes, "N_rest_correct_by_level")
 
 show(plots.class_panels(rest, hard.CLASSES, hard.CLASS_LABELS, title="Классы ответов по уровням, без oslo"), "N_rest_classes_by_run")
+
+# те же верные ответы в разрезе длины контекста и глубины иглы: панель на прогон, линия на уровень
+show(plots.level_gradation(rest, "context_length", title="Верные ответы по длине контекста, без oslo"), "N_rest_correct_by_length")
+show(plots.level_gradation(rest, "depth_percent", title="Верные ответы по глубине иглы, без oslo"), "N_rest_correct_by_depth")
+
+show(plots.class_gradation(rest, "context_length", hard.CLASSES, hard.CLASS_LABELS, title="Классы ответов по длине контекста, без oslo"), "N_rest_classes_by_length")
+show(plots.class_gradation(rest, "depth_percent", hard.CLASSES, hard.CLASS_LABELS, title="Классы ответов по глубине иглы, без oslo"), "N_rest_classes_by_depth")
 """)
 
 md("""
