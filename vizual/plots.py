@@ -535,6 +535,34 @@ def level_lines(df, value="correct", ax=None, title=None, subtitle=None):
     return ax
 
 
+def level_bars(df, value, levels=None, ylabel=None, ax=None, title=None, subtitle=None):
+    """
+    Grouped bars: the mean of value at every level, a bar per run in the colour of its mask, with the value written
+    on the bar. For rare events, where lines on a 0-100 scale would lie on the axis: the scale is left to the data.
+    """
+    t = style.THEME
+    data = df.assign(_v=numeric(df, value))
+    levels = levels or sorted(data["level"].unique())
+    styles = run_styles(data)
+    runs = sorted(styles, key=lambda r: (data.loc[data["run"] == r, "mask"].iloc[0] != "none", r))
+    ax = new_ax(ax, 1.5 * len(levels) + 3.4, 4.2)
+    width = 0.8 / len(runs)
+    table = data.groupby(["run", "level"])["_v"].mean().unstack("level").reindex(index=runs, columns=levels)
+    for i, run in enumerate(runs):
+        xs = np.arange(len(levels)) + (i - (len(runs) - 1) / 2) * width
+        ax.bar(xs, table.loc[run], width=width * 0.9, color=styles[run][0], label=styles[run][1])
+        for x, v in zip(xs, table.loc[run]):
+            ax.annotate(f"{v:.1f}", (x, v), xytext=(0, 3), textcoords="offset points", ha="center", va="bottom", color=t.ink, fontsize=t.font - 2)
+    ax.set_xticks(np.arange(len(levels)), levels)
+    ax.tick_params(axis="x", length=0)
+    ax.set_ylim(0, max(float(np.nanmax(table.to_numpy())) * 1.25, 1.0))
+    ax.set_xlabel("уровень")
+    ax.set_ylabel(ylabel or VALUE_LABELS.get(value, value))
+    ax.legend(title="маска", loc="center left", bbox_to_anchor=(1.01, 0.5), alignment="left")
+    titles(ax, title, subtitle)
+    return ax
+
+
 def class_panels(df, order, labels, runs=None, x="level", xlabel="уровень", column="answer_class", title=None):
     """A panel per run: the stacked shares of the values of a column (the classes of the answers) at every level (or another x)."""
     runs = runs or sorted(df["run"].unique(), key=lambda r: (df.loc[df["run"] == r, "mask"].iloc[0] != "none", r))

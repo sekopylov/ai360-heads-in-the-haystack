@@ -227,13 +227,46 @@ md("""
 Доля ответов, в которых есть факты близнецов: классы «путаница» и «смешано» вместе, и мягкий признак — слова близнецов в ответе.
 """)
 code("""
+with_twins = sweep[sweep["level"] != BASE].assign(twin_facts=lambda d: d["answer_class"].isin(["confusion", "mixed"]))
+
+axes = panels(2, 7.4, extra=2.4)
+plots.level_bars(with_twins, "twin_facts", ylabel="доля ответов, %", ax=axes[0], title="Факты близнецов в ответе (путаница + смешано)")
+plots.level_bars(with_twins, "twin_words", ylabel="доля ответов, %", ax=axes[1], title="Слова близнецов в ответе")
+axes[0].get_legend().remove()
+top = max(ax.get_ylim()[1] for ax in axes)
+for ax in axes:
+    ax.set_ylim(0, top)
+show(axes, "B_twin_confusion")
+
 print("ответы с фактами близнецов (путаница + смешано), %")
-display(hard.by_level(sweep.assign(twin_facts=sweep["answer_class"].isin(["confusion", "mixed"])), "twin_facts")[twin_levels])
+display(hard.by_level(with_twins, "twin_facts"))
 print("ответы со словами близнецов, %")
-display(hard.by_level(sweep, "twin_words")[twin_levels])
+display(hard.by_level(with_twins, "twin_words"))
 
 print("число ответов каждого класса")
 display(pd.crosstab([sweep["run"], sweep["level"]], sweep["answer_class"]).reindex(columns=[c for c in hard.CLASSES if c in set(sweep["answer_class"])]).rename(columns=hard.CLASS_LABELS))
+""")
+
+md("""
+#### Во что превращаются неверные ответы
+
+Только неверные ответы на уровнях с близнецами: какая их доля обрезана («частично»), потеряла факты («иное») или содержит факты близнеца («путаница», «смешано»). Под столбиком — число неверных ответов; там, где их единицы, доли шумные.
+""")
+code("""
+failed = with_twins[~with_twins["correct"]]
+kinds = [c for c in hard.CLASSES if c != "correct"]
+axes = plots.class_panels(failed, kinds, hard.CLASS_LABELS, title="Неверные ответы на уровнях с близнецами: чем они неверны")
+counts = failed.groupby(["run", "level"]).size()
+order_runs = sorted(failed["run"].unique(), key=lambda r: (failed.loc[failed["run"] == r, "mask"].iloc[0] != "none", r))
+for ax, run in zip(axes[0], order_runs):
+    present = sorted(failed.loc[failed["run"] == run, "level"].unique())
+    ax.set_xticklabels([f"{level}\\nn = {counts[(run, level)]}" for level in present])
+show(axes, "B_failed_kinds")
+
+# сама путаница: сколько таких ответов и на что они похожи больше — на иглу или на близнеца
+print("число ответов с фактами близнецов")
+display(pd.crosstab([with_twins["run"], with_twins["level"]], with_twins["answer_class"])[[c for c in ("confusion", "mixed") if c in set(with_twins["answer_class"])]]
+        .rename(columns=hard.CLASS_LABELS).unstack("level", fill_value=0))
 """)
 
 md("""
