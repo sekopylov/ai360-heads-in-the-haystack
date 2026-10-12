@@ -144,6 +144,7 @@ def load_run(out, limit=None, name=None):
             df[column] = at[column].values
     block = info.get("block_list") or []
     df["run"] = name or os.path.basename(os.path.normpath(out))
+    df["out"] = out   # the folder of the run: tables of several folders may be joined, the head metrics are found by it
     df["mask"] = info.get("mask", "none")
     df["heads"] = len(block)
     if "exact" not in df:
@@ -211,11 +212,14 @@ class Heads:
         """
         self.out, self.ok = path(out), ok
         samples = load_run(self.out) if samples is None else samples
-        has = [os.path.exists(os.path.join(self.out, "heads", f"{i}.npz")) for i in samples["id"]]
+        # the samples may come from several folders (the reference level of another axis): the column out says which
+        folders = samples["out"] if "out" in samples else pd.Series(self.out, index=samples.index)
+        files = [os.path.join(folder, "heads", f"{i}.npz") for folder, i in zip(folders, samples["id"])]
+        has = [os.path.exists(f) for f in files]
         self.samples = samples[has].reset_index(drop=True)
         self._arrays = {}
-        for i in self.samples["id"]:
-            with np.load(os.path.join(self.out, "heads", f"{i}.npz")) as d:
+        for file in [f for f, there in zip(files, has) if there]:
+            with np.load(file) as d:
                 for k in d.files:
                     if limits or "@" not in k:
                         self._arrays.setdefault(k, []).append(d[k])

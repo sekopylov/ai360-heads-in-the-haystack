@@ -13,9 +13,9 @@ from dataclasses import dataclass, field, replace
 import matplotlib as mpl
 from matplotlib.colors import LinearSegmentedColormap
 
-# one hue, light to dark: magnitude (heatmaps) and ordered series (the number of masked heads)
-RAMP = ["#fde3df", "#fbcdc6", "#f8b3aa", "#f4978d", "#ee7a72", "#e55d59", "#d94145", "#c62a36", "#ad1c2c", "#901424",
-        "#720f1d"]
+# light to dark: magnitude (heatmaps), ordered series (the number of masked heads) and ordered classes of the legends
+RAMP = ["#fff3b8", "#fedc7a", "#fdbb53", "#fc9540", "#f66d3a", "#e6453f", "#cb2a55", "#a61c6c", "#7d1778", "#541473",
+        "#2f0f57"]   # several hues, from light yellow through red to dark violet: the lightness falls all the way
 
 
 @dataclass
@@ -59,9 +59,10 @@ def cmap(name):
 
 
 def ordered(n):
-    """n colours of the ramp for ordered series, the lightest still readable on the surface."""
-    steps = RAMP[3:]
-    return [steps[round(i * (len(steps) - 1) / max(n - 1, 1))] for i in range(n)]
+    """n colours spread evenly over the ramp for ordered series and classes, the lightest still readable on the surface."""
+    from matplotlib.colors import to_hex
+    ramp = LinearSegmentedColormap.from_list("ramp", RAMP)
+    return [to_hex(ramp(0.22 + 0.78 * i / max(n - 1, 1))) for i in range(n)]
 
 
 def size(width, height):

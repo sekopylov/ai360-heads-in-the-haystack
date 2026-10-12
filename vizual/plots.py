@@ -342,7 +342,7 @@ def score_distribution(score, ax=None, title=None, subtitle=None):
     score = np.ravel(score)
     counts = [int(test(score).sum()) for _, test in SCORE_BINS]
     share = [100 * c / len(score) for c in counts]
-    colors = [t.grid, t.colors["muted"], style.RAMP[5], style.RAMP[-1]]   # the same as in score_pie
+    colors = [t.grid, t.colors["muted"], style.RAMP[4], style.RAMP[8]]   # the same as in score_pie
     ax.bar(range(len(SCORE_BINS)), share, width=0.62, color=colors)
     for i, (s, c) in enumerate(zip(share, counts)):
         ax.annotate(f"{s:.1f}%\n{c} гол.", (i, s), xytext=(0, 4), textcoords="offset points", ha="center", va="bottom", color=t.ink)
@@ -361,7 +361,7 @@ def score_pie(score, ax=None, title=None, subtitle=None):
     ax = new_ax(ax, 6.4, 4.2)
     score = np.ravel(score)
     counts = [int(test(score).sum()) for _, test in SCORE_BINS]
-    colors = [t.grid, t.colors["muted"], style.RAMP[5], style.RAMP[-1]]
+    colors = [t.grid, t.colors["muted"], style.RAMP[4], style.RAMP[8]]
     wedges, _ = ax.pie(counts, colors=colors, startangle=90, counterclock=False,
                        wedgeprops=dict(width=0.42, edgecolor=t.surface, linewidth=2))
     ax.text(0, 0, f"{len(score)}\nголов", ha="center", va="center", fontsize=t.font + 3, fontweight="semibold", linespacing=1.2)
@@ -621,29 +621,34 @@ def head_table(table, label="retrieval score", vmax=None, ax=None, title=None, s
     return ax
 
 
-def score_scatter(x, y, threshold=0.1, xlabel="скор детекции на простой задаче", ylabel="скор на уровне", ax=None, title=None, subtitle=None):
+def score_scatter(x, y, threshold=0.1, mark=None, mark_label=None, top=None, xlabel="скор детекции на простой задаче", ylabel="скор на уровне",
+                  ax=None, title=None, subtitle=None):
     """
     A point per head: its score in the detection (x) against its score in another condition (y). The heads the
     detection puts above the threshold stand out; on the diagonal the score is kept. The correlations over all
-    heads and over the heads above the threshold are written in the corner.
+    heads and over the heads above the threshold are written in the corner. mark: the heads to stand out when x is
+    not the detection score (a yes/no array over the heads) and mark_label their name; top: the upper limit of both axes.
     """
     t = style.THEME
     ax = new_ax(ax, 5.2, 5.0)
     x, y = np.ravel(x), np.ravel(y)
-    found = x > threshold
-    top = max(1.0, float(x.max()), float(y.max()))
+    found = x > threshold if mark is None else np.ravel(mark)
+    top = top or max(1.0, float(x.max()), float(y.max()))
     ax.plot([0, top], [0, top], color=t.axis, linewidth=1, zorder=1)
     ax.scatter(x[~found], y[~found], s=14 * t.scale ** 2, color=t.colors["muted"], linewidths=0, alpha=0.7, label=f"остальные ({int((~found).sum())})", zorder=2)
-    ax.scatter(x[found], y[found], s=34 * t.scale ** 2, color=style.RAMP[7], edgecolors=t.surface, linewidths=0.8,
-               label=f"детекция выше {threshold:g} ({int(found.sum())})", zorder=3)
+    ax.scatter(x[found], y[found], s=34 * t.scale ** 2, color=style.RAMP[6], edgecolors=t.surface, linewidths=0.8,
+               label=f"{mark_label or f'детекция выше {threshold:g}'} ({int(found.sum())})", zorder=3)
     r = lambda a, b: np.corrcoef(a, b)[0, 1]
     rank = lambda v: pd.Series(v).rank().to_numpy()
-    ax.text(0.97, 0.04, f"все головы: r = {r(x, y):.2f}, ρ = {r(rank(x), rank(y)):.2f}\nвыше {threshold:g}: r = {r(x[found], y[found]):.2f}, "
-            f"ρ = {r(rank(x[found]), rank(y[found])):.2f}", transform=ax.transAxes, ha="right", va="bottom", fontsize=t.font - 1, linespacing=1.5)
+    note = (f"все головы: r = {r(x, y):.2f}, ρ = {r(rank(x), rank(y)):.2f}\n{mark_label or f'выше {threshold:g}'}: r = {r(x[found], y[found]):.2f}, "
+            f"ρ = {r(rank(x[found]), rank(y[found])):.2f}")
+    # the corner that the points leave free: under the diagonal for scores that are kept, above it for the marked heads
+    where = dict(x=0.97, y=0.04, ha="right", va="bottom") if mark is None else dict(x=0.04, y=0.80, ha="left", va="top")
+    ax.text(s=note, transform=ax.transAxes, fontsize=t.font - 1, linespacing=1.5, **where)
     ax.set_xlim(-0.03, top * 1.03)
     ax.set_ylim(-0.03, top * 1.03)
-    round_axis(ax, "x", 0, top, 0.2)
-    round_axis(ax, "y", 0, top, 0.2)
+    round_axis(ax, "x", 0, top, 0.2 if top > 0.6 else 0.1)
+    round_axis(ax, "y", 0, top, 0.2 if top > 0.6 else 0.1)
     ax.set_aspect("equal")
     ax.grid(axis="x", visible=True)
     ax.set_xlabel(xlabel)

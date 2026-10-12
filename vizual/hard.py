@@ -112,3 +112,28 @@ def correlation_table(scores, reference, order, ks=(20, 40, 60), threshold=0.1):
         for subset, idx in subsets.items():
             rows[(name, subset)] = {"голов": len(idx), "пирсон": data.pearson(score[idx], reference[idx]), "спирмен": data.spearman(score[idx], reference[idx])}
     return pd.DataFrame(rows).T.rename_axis(["условие", "головы"]).astype({"голов": int}).round(3)
+
+
+def twin_words(df):
+    """
+    A yes/no column: the answer has a word of a competing insert. The class of the answer counts a fact of an
+    insert only in the spelling of the data ("iron lever"), so "pull the lever" is not a confusion for it. Here the
+    last word of every spelling of the competing facts is looked for ("lever", "clock", "raven"), without the words
+    that the reference or the question have themselves. A softer sign of the same thing; not a class.
+    """
+    out = []
+    for row in df.to_dict("records"):
+        own = set(data.plain(row["reference"]).split()) | set(data.plain(row["question"]).split())
+        words = {data.plain(spelling).split()[-1] for fact in row["confusion_facts"] for spelling in fact} - own
+        out.append(bool(words & set(data.plain(row["response"]).split())))
+    return np.array(out)
+
+
+def selectivity(needle, competing):
+    """
+    How much of the attention that goes to the needle or to its strongest competitor goes to the needle:
+    needle / (needle + competing), per head; 0.5 where the head looks at neither. 1: only the needle, 0.5: both
+    equally, 0: only the competitor.
+    """
+    total = needle + competing
+    return np.where(total > 0, needle / np.where(total > 0, total, 1), 0.5)
