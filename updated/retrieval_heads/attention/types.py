@@ -16,6 +16,8 @@ class AttentionRequest:
     blocked_heads: frozenset[Head] = frozenset()
     mask_mode: MaskMode = "legacy_uniform"
     needle_span: tuple[int, int] | None = None
+    question_span: tuple[int, int] | None = None
+    full_needle_span: tuple[int, int] | None = None
 
 
 @dataclass
@@ -27,12 +29,15 @@ class AttentionStep:
     ``[heads, key_length]`` and contains the full probabilities.
     ``needle_attention_mass`` optionally contains one FP32 sum per head,
     reduced over the requested needle span before transferring to CPU.
+    ``question_attention_mass`` uses the same reduction over question positions.
     """
 
     index: int
     token_id: int
     layers: dict[int, Any] = field(default_factory=dict)
     needle_attention_mass: dict[int, Any] = field(default_factory=dict)
+    question_attention_mass: dict[int, Any] = field(default_factory=dict)
+    full_needle_attention_mass: dict[int, Any] = field(default_factory=dict)
 
 
 class AttentionObserver(Protocol):

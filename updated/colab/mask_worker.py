@@ -16,7 +16,8 @@ NAME = 'qwen3-8b-no-thinking-paul-graham-qrscore-mask'
 PARENT = Path('/content/drive/MyDrive/retrieval-heads-colab')
 OUTPUT = PARENT / NAME
 CONFIG_NAMES = (NAME, 'glm4-6v-flash-no-thinking-paul-graham-qrscore-top-mask',
-                'ministral3-8b-no-thinking-paul-graham-qrscore-top-mask')
+                'ministral3-8b-no-thinking-paul-graham-qrscore-top-mask',
+                'glm4-6v-flash-no-thinking-paul-graham-full-needle-mass-top-mask')
 
 
 def expected_head_keys(adapter):
@@ -74,9 +75,9 @@ def main(resume=False):
     manifest = json.loads((source / 'detection/run.json').read_text())
     if (not manifest['complete'] or manifest['adapter'] != config['adapter'] or
             manifest['run_id'] != config['ranking_source_run_id'] or
-            manifest['retrieval_metrics'] != [config['ranking_metric']] or
+            manifest['retrieval_metrics'] != config.get('ranking_source_metrics', [config['ranking_metric']]) or
             manifest['completed_cases'] != 27):
-        raise ValueError('Wrong or incomplete no-thinking QRScore source')
+        raise ValueError('Wrong or incomplete no-thinking ranking source')
     if resume:
         old_runtime = json.loads((OUTPUT / 'colab_runtime.json').read_text())
         if old_runtime['config'] != config:
@@ -110,7 +111,7 @@ def main(resume=False):
             'head_count': len(history), 'sha256': hashlib.sha256(ranking.read_bytes()).hexdigest(),
             'top10': [[list(head), score] for head, score in ranked[:10]],
         }, indent=2))
-    print(f'Frozen QRScore ranking: {len(expected_heads)} heads, 27 cases; top10:', ranked[:10], flush=True)
+    print(f"Frozen {config['ranking_metric']} ranking: {len(expected_heads)} heads, 27 cases; top10:", ranked[:10], flush=True)
     plan = None
     if resume:
         from colab.mask_resume_plan import resume_plan, condition_command

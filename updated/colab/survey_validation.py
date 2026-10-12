@@ -30,6 +30,18 @@ def validate_survey(output, config, checkpoint_config):
         query, gold = experiment['qrscore_query_span'], experiment['qrscore_gold_span']
         if not 0 <= gold[0] < gold[1] <= query[0] < query[1]:
             raise ValueError('Invalid QRScore spans')
+        if 'full_needle_attention_mass_v1' in config['retrieval_metrics']:
+            if experiment.get('full_needle_attention_span') != gold:
+                raise ValueError('Full needle decode span differs from QRScore gold span')
+            counts = experiment['retrieval_qualifying_steps']
+            if counts['full_needle_attention_mass_v1'] != counts['needle_attention_mass_v1']:
+                raise ValueError('Full and old needle mass must use identical decode steps')
+        if 'question_attention_mass_v1' in config['retrieval_metrics']:
+            if experiment.get('question_attention_span') != query:
+                raise ValueError('Decode question span differs from QRScore question span')
+            counts = experiment['retrieval_qualifying_steps']
+            if counts['question_attention_mass_v1'] != counts['needle_attention_mass_v1']:
+                raise ValueError('Question and needle mass must use identical decode steps')
         for metric in config['retrieval_metrics']:
             scores = experiment['retrieval_scores'][metric]
             if set(scores) != heads or any(not math.isfinite(v) or not 0 <= v <= 1.000001

@@ -10,7 +10,8 @@ parent = Path('/content/drive/MyDrive/retrieval-heads-colab')
 name = globals().get('MASK_NAME', 'qwen3-8b-no-thinking-paul-graham-qrscore-mask')
 if name not in ('qwen3-8b-no-thinking-paul-graham-qrscore-mask',
                 'glm4-6v-flash-no-thinking-paul-graham-qrscore-top-mask',
-                'ministral3-8b-no-thinking-paul-graham-qrscore-top-mask'):
+                'ministral3-8b-no-thinking-paul-graham-qrscore-top-mask',
+                'glm4-6v-flash-no-thinking-paul-graham-full-needle-mass-top-mask'):
     raise ValueError('Unknown masking config')
 if not parent.parent.is_dir():
     raise RuntimeError('Mount Google Drive before launching')

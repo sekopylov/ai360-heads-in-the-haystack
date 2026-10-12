@@ -97,6 +97,8 @@ def main() -> None:
     args = parse_args()
     single_metric, metric_names = select_retrieval_metrics(args.retrieval_metric, args.retrieval_metrics)
     needs_qr = 'query_retrieval_score_v1' in metric_names
+    needs_question = 'question_attention_mass_v1' in metric_names
+    needs_full_needle = 'full_needle_attention_mass_v1' in metric_names
     needs_top1, needs_mass = retrieval_capture_requirements(metric_names)
     effective_capture = args.capture if needs_top1 or args.capture == "full" else "none"
     lengths = (
@@ -169,6 +171,21 @@ def main() -> None:
             'paper': 'https://aclanthology.org/2025.emnlp-main.1214.pdf',
             'equations': [3, 4], 'aggregation': 'mean_all_cases_no_answer_filter',
         }
+    if needs_question:
+        run_config['question_attention_mass'] = {
+            'phase': 'decode', 'target': 'question_tokens',
+            'qualification': 'generated_token_id_in_expected_answer_span',
+            'normalization': 'mean_qualifying_decode_steps',
+            'paired_with': 'needle_attention_mass_v1',
+            'no_qualifying_steps': 'score_zero_and_qualifying_steps_zero',
+        }
+    if needs_full_needle:
+        run_config['full_needle_attention_mass'] = {
+            'phase': 'decode', 'target': 'full_inserted_needle',
+            'qualification': 'generated_token_id_in_expected_answer_span',
+            'normalization': 'mean_qualifying_decode_steps',
+            'locator': 'exact_decoded_text_same_gold_span_as_qrscore',
+        }
     write_json(config_path, run_config)
 
     completed = 0
@@ -186,22 +203,32 @@ def main() -> None:
                     context_length=context_length,
                     depth_percent=depth,
                 )
+                query = None
+                gold = None
+                qr_metadata = {}
+                if needs_qr or needs_question or needs_full_needle:
+                    from retrieval_heads.experiment.query_spans import locate_qr_spans
+                    query, gold = locate_qr_spans(model.tokenizer, prepared.prompt.token_ids,
+                        question=case.question, needle=case.needle)
+                    if needs_question:
+                        qr_metadata['question_attention_span'] = [query.start, query.end]
+                    if needs_full_needle:
+                        qr_metadata['full_needle_attention_span'] = [gold.start, gold.end]
+                        qr_metadata['decode_qualifying_span'] = [prepared.needle_span.start, prepared.needle_span.end]
                 collectors = {name: create_retrieval_collector(
                     name,
                     eligible_heads=model.eligible_heads,
                     prompt_token_ids=prepared.prompt.token_ids,
                     needle_span=prepared.needle_span,
+                    question_span=query,
+                    full_needle_span=gold,
                 ) for name in metric_names}
-                qr_metadata = {}
                 if needs_qr:
-                    from retrieval_heads.experiment.query_spans import locate_qr_spans
-                    query, gold = locate_qr_spans(model.tokenizer, prepared.prompt.token_ids,
-                        question=case.question, needle=case.needle)
                     qr_scores = model.score_query_retrieval(prepared.prompt,
                         query_span=(query.start, query.end), gold_span=(gold.start, gold.end))
                     collectors['query_retrieval_score_v1'].set_prefill_scores(qr_scores)
-                    qr_metadata = {'qrscore_query_span': [query.start, query.end],
-                                   'qrscore_gold_span': [gold.start, gold.end]}
+                    qr_metadata.update({'qrscore_query_span': [query.start, query.end],
+                                        'qrscore_gold_span': [gold.start, gold.end]})
                 full_trace = (
                     FullTraceCollector(prepared.prompt.token_ids)
                     if args.capture == "full"
@@ -211,6 +238,8 @@ def main() -> None:
                 result = runner.run(
                     prepared,
                     attention=AttentionRequest(capture=effective_capture,
+                        question_span=(query.start, query.end) if needs_question else None,
+                        full_needle_span=(gold.start, gold.end) if needs_full_needle else None,
                         needle_span=(prepared.needle_span.start, prepared.needle_span.end) if needs_mass else None),
                     observer=observer,
                 )

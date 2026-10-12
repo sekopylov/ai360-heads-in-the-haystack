@@ -21,7 +21,9 @@ def flash_kernel(device):
 
 
 def validate_flash_request(request, observer=None):
-    if request.capture != "none" or request.needle_span is not None or observer is not None:
+    if (request.capture != "none" or request.needle_span is not None
+            or request.question_span is not None or request.full_needle_span is not None
+            or observer is not None):
         raise ValueError("sdpa_flash decode is masking-only, without attention capture")
     if request.mask_mode != "legacy_uniform":
         raise ValueError("sdpa_flash decode only supports legacy_uniform")

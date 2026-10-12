@@ -10,7 +10,8 @@ if not parent.parent.is_dir():
 parent.mkdir(exist_ok=True)
 name = globals().get('SURVEY_NAME', 'qwen3-8b-no-thinking-qrscore-survey')
 if name not in ('qwen3-8b-no-thinking-qrscore-survey', 'ministral3-8b-no-thinking-qrscore-survey',
-                'glm4-6v-flash-no-thinking-qrscore-survey'):
+                'glm4-6v-flash-no-thinking-qrscore-survey',
+                'glm4-6v-flash-no-thinking-question-mass-survey'):
     raise ValueError('Unknown survey name')
 log = parent / f'{name}-bootstrap.log'
 if log.exists() or (parent / name).exists():

@@ -22,6 +22,8 @@ class AttentionController:
         self._observer: AttentionObserver = NullCollector()
         self._layers: dict[int, Any] = {}
         self._needle_mass: dict[int, Any] = {}
+        self._question_mass: dict[int, Any] = {}
+        self._full_needle_mass: dict[int, Any] = {}
         self._step_index = 0
         self._active = False
         self._step_open = False
@@ -33,14 +35,18 @@ class AttentionController:
     ) -> None:
         if self._active:
             raise RuntimeError("AttentionController is already active")
-        if request.needle_span is not None:
-            start, end = request.needle_span
+        for span in (request.needle_span, request.question_span, request.full_needle_span):
+            if span is None:
+                continue
+            start, end = span
             if not 0 <= start < end:
-                raise ValueError("Needle span must be nonempty and nonnegative")
+                raise ValueError("Attention span must be nonempty and nonnegative")
         self.request = request
         self._observer = observer or NullCollector()
         self._layers = {}
         self._needle_mass = {}
+        self._question_mass = {}
+        self._full_needle_mass = {}
         self._step_index = 0
         self._active = True
         self._step_open = False
@@ -50,6 +56,8 @@ class AttentionController:
         self._observer = NullCollector()
         self._layers = {}
         self._needle_mass = {}
+        self._question_mass = {}
+        self._full_needle_mass = {}
         self._active = False
         self._step_open = False
 
@@ -60,6 +68,8 @@ class AttentionController:
             raise RuntimeError("Previous attention step has not been ended")
         self._layers = {}
         self._needle_mass = {}
+        self._question_mass = {}
+        self._full_needle_mass = {}
         self._step_open = True
 
     def blocked_heads(self, layer_idx: int) -> list[int]:
@@ -72,10 +82,23 @@ class AttentionController:
     def record(self, layer_idx: int, probabilities: torch.Tensor) -> None:
         if not self._step_open:
             raise RuntimeError("No attention step is active")
-        if self.request.capture == "none" and self.request.needle_span is None:
+        if (self.request.capture == "none" and self.request.needle_span is None
+                and self.request.question_span is None and self.request.full_needle_span is None):
             return
 
         last_query = probabilities[0, :, -1, :].detach()
+        if self.request.full_needle_span is not None:
+            start, end = self.request.full_needle_span
+            if end > last_query.shape[-1]:
+                raise ValueError('Full needle span exceeds attention key length')
+            self._full_needle_mass[layer_idx] = last_query[:, start:end].sum(
+                dim=-1, dtype=torch.float32).to(device='cpu')
+        if self.request.question_span is not None:
+            start, end = self.request.question_span
+            if end > last_query.shape[-1]:
+                raise ValueError("Question span exceeds attention key length")
+            self._question_mass[layer_idx] = last_query[:, start:end].sum(
+                dim=-1, dtype=torch.float32).to(device="cpu")
         if self.request.needle_span is not None:
             start, end = self.request.needle_span
             if end > last_query.shape[-1]:
@@ -97,11 +120,17 @@ class AttentionController:
     def end_step(self, token_id: int, *, publish: bool = True) -> None:
         if not self._step_open:
             raise RuntimeError("No attention step is active")
-        if self.request.capture != "none" or self.request.needle_span is not None:
-            missing = self.expected_layers.difference(
-                self._layers if self.request.capture != "none" else self._needle_mass)
+        if (self.request.capture != "none" or self.request.needle_span is not None
+                or self.request.question_span is not None or self.request.full_needle_span is not None):
+            missing = set()
+            if self.request.capture != "none":
+                missing |= self.expected_layers.difference(self._layers)
             if self.request.needle_span is not None:
                 missing |= self.expected_layers.difference(self._needle_mass)
+            if self.request.question_span is not None:
+                missing |= self.expected_layers.difference(self._question_mass)
+            if self.request.full_needle_span is not None:
+                missing |= self.expected_layers.difference(self._full_needle_mass)
             if missing:
                 raise RuntimeError(
                     f"Attention backend did not report layers: {sorted(missing)}"
@@ -113,12 +142,16 @@ class AttentionController:
                         token_id=token_id,
                         layers=dict(self._layers),
                         needle_attention_mass=dict(self._needle_mass),
+                        question_attention_mass=dict(self._question_mass),
+                        full_needle_attention_mass=dict(self._full_needle_mass),
                     )
                 )
         self._step_index += 1
         self._step_open = False
         self._layers = {}
         self._needle_mass = {}
+        self._question_mass = {}
+        self._full_needle_mass = {}
 
 
 def validate_blocked_heads(

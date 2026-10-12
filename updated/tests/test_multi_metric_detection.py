@@ -111,3 +111,28 @@ class MultiMetricDetectionTests(unittest.TestCase):
         self.assertEqual(scores['query_retrieval_score_v1']['0-0'], .75)
         self.assertAlmostEqual(scores['needle_attention_mass_v1']['0-0'], .55, places=6)
         self.assertEqual(scores['needle_token_multiset_v1']['0-0'], .5)
+
+    def test_question_and_needle_mass_share_generation_and_gate(self):
+        manifest, payload, request = self.exercise(
+            'query_retrieval_score_v1,needle_attention_mass_v1,question_attention_mass_v1')
+        self.assertEqual(request.question_span, (2, 3))
+        self.assertEqual(request.capture, 'none')
+        experiment = payload['experiment']
+        self.assertEqual(experiment['question_attention_span'], [2, 3])
+        self.assertAlmostEqual(experiment['retrieval_scores']['question_attention_mass_v1']['0-0'], .2, places=6)
+        self.assertAlmostEqual(experiment['retrieval_scores']['needle_attention_mass_v1']['0-0'], .55, places=6)
+        self.assertEqual(experiment['retrieval_qualifying_steps'], {
+            'needle_attention_mass_v1': 2, 'question_attention_mass_v1': 2})
+        self.assertEqual(manifest['question_attention_mass']['phase'], 'decode')
+
+    def test_full_needle_exact_gold_keeps_old_mass_and_gate(self):
+        manifest, payload, request = self.exercise(
+            'query_retrieval_score_v1,needle_attention_mass_v1,full_needle_attention_mass_v1')
+        self.assertEqual(request.full_needle_span, (0,1))
+        scores = payload['experiment']['retrieval_scores']
+        self.assertAlmostEqual(scores['full_needle_attention_mass_v1']['0-0'], .45, places=6)
+        self.assertAlmostEqual(scores['needle_attention_mass_v1']['0-0'], .55, places=6)
+        self.assertEqual(payload['experiment']['full_needle_attention_span'],[0,1])
+        self.assertEqual(payload['experiment']['retrieval_qualifying_steps'],{
+            'needle_attention_mass_v1':2,'full_needle_attention_mass_v1':2})
+        self.assertEqual(manifest['full_needle_attention_mass']['target'],'full_inserted_needle')

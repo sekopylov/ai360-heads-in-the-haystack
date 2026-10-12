@@ -1,0 +1,25 @@
+name: glm4-6v-flash-no-thinking-paul-graham-full-needle-mass-top-mask
+adapter: glm4_6v_flash_no_thinking
+model: zai-org/GLM-4.6V-Flash
+revision: 411bb4d77144a3f03accbf4b780f5acb8b7cde4e
+dtype: bfloat16
+device_map: cuda:0
+prefill_attention: sdpa_flash
+decode_attention: sdpa_flash
+attention_scope: all_decode_tokens
+lengths: [1000, 4053, 7105, 10158, 13211, 16263, 19316, 22368, 25421, 28474, 30000]
+depths: [0, 11, 22, 33, 44, 56, 67, 78, 89, 100]
+max_new_tokens: 256
+topks: [5, 10, 15, 20, 40]
+mask_selections: [top]
+context_count: 1
+context_seed: 42
+seed: 42
+mask_data: data/validation_haystacks
+mask_case_id: paul-graham-san-francisco
+ranking_metric: full_needle_attention_mass_v1
+ranking_source: glm4-6v-flash-no-thinking-full-needle-mass-survey
+# Bound to the just-completed validated survey by launch_glm_full_needle_experiment.py.
+ranking_source_run_id: null
+ranking_source_metrics: [query_retrieval_score_v1, needle_attention_mass_v1, full_needle_attention_mass_v1]
+ranking_all_cases: true

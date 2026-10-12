@@ -1,0 +1,13 @@
+adapter: glm4_6v_flash_no_thinking
+model: zai-org/GLM-4.6V-Flash
+revision: 411bb4d77144a3f03accbf4b780f5acb8b7cde4e
+dtype: bfloat16
+device_map: cuda:0
+prefill_attention: sdpa_flash
+attention_scope: all_decode_tokens
+lengths: [8000, 16000, 30000]
+depths: [15, 45, 75]
+max_new_tokens: 2048
+context_seed: 42
+retrieval_metrics: [query_retrieval_score_v1, needle_attention_mass_v1, full_needle_attention_mass_v1]
+haystack_root: data/haystack_for_detect

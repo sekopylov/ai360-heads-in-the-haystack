@@ -64,7 +64,9 @@ def main():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config-name', choices=(NAME, 'ministral3-8b-no-thinking-qrscore-survey',
-                                                 'glm4-6v-flash-no-thinking-qrscore-survey'), default=NAME)
+                                                 'glm4-6v-flash-no-thinking-qrscore-survey',
+                                                 'glm4-6v-flash-no-thinking-question-mass-survey',
+                                                 'glm4-6v-flash-no-thinking-full-needle-mass-survey'), default=NAME)
     NAME = parser.parse_args().config_name
     OUTPUT = PARENT / NAME
     STATUS = PARENT / f'{NAME}-status.json'

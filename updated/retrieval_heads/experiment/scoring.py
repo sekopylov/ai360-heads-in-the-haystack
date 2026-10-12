@@ -102,6 +102,7 @@ class NeedleAttentionMassCollector(RetrievalScoreCollector):
 
     metric_name = "needle_attention_mass_v1"
     needs_needle_mass = True
+    mass_attribute = 'needle_attention_mass'
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -113,16 +114,17 @@ class NeedleAttentionMassCollector(RetrievalScoreCollector):
     def on_step(self, step: AttentionStep) -> None:
         if step.token_id not in self.needle_tokens:
             return
-        masses = step.needle_attention_mass
+        masses = getattr(step, self.mass_attribute)
         if not masses:
             # Useful for externally supplied full snapshots; CLI uses GPU reduction.
             masses = {}
             for layer, captured in step.layers.items():
                 if captured.ndim != 2:
                     raise ValueError("needle_attention_mass_v1 needs needle mass or full probabilities, not top1")
-                if captured.shape[-1] < self.needle_span.end:
+                span = getattr(self, 'target_span', self.needle_span)
+                if captured.shape[-1] < span.end:
                     raise ValueError("Needle span exceeds attention key length")
-                masses[layer] = captured[:, self.needle_span.start:self.needle_span.end].float().sum(dim=-1)
+                masses[layer] = captured[:, span.start:span.end].float().sum(dim=-1)
         seen = set()
         for layer, values in masses.items():
             for head, mass in enumerate(values.tolist()):
@@ -138,6 +140,33 @@ class NeedleAttentionMassCollector(RetrievalScoreCollector):
         if seen != set(self.scores):
             raise ValueError("Needle attention mass missing for eligible heads")
         self.qualifying_steps += 1
+
+
+class QuestionAttentionMassCollector(NeedleAttentionMassCollector):
+    """Decode mass on the question, using exactly the needle metric's step gate."""
+
+    metric_name = 'question_attention_mass_v1'
+    mass_attribute = 'question_attention_mass'
+
+    def __init__(self, *, question_span, **kwargs):
+        super().__init__(**kwargs)
+        if question_span is None or not 0 <= question_span.start < question_span.end <= len(self.prompt_token_ids):
+            raise ValueError('Question span must be nonempty and inside prompt tokens')
+        self.question_span = question_span
+        self.target_span = question_span
+
+
+class FullNeedleAttentionMassCollector(NeedleAttentionMassCollector):
+    """Same decode token gate, mass on the exact complete inserted needle."""
+
+    metric_name = 'full_needle_attention_mass_v1'
+    mass_attribute = 'full_needle_attention_mass'
+
+    def __init__(self, *, full_needle_span, **kwargs):
+        super().__init__(**kwargs)
+        if full_needle_span is None or not 0 <= full_needle_span.start < full_needle_span.end <= len(self.prompt_token_ids):
+            raise ValueError('Full needle span must be nonempty and inside prompt tokens')
+        self.target_span = full_needle_span
 
 
 class QueryRetrievalScoreCollector(RetrievalScoreCollector):
@@ -162,6 +191,8 @@ _RETRIEVAL_COLLECTORS: dict[str, type[RetrievalScoreCollector]] = {
     MultisetRetrievalScoreCollector.metric_name: MultisetRetrievalScoreCollector,
     NeedleAttentionMassCollector.metric_name: NeedleAttentionMassCollector,
     QueryRetrievalScoreCollector.metric_name: QueryRetrievalScoreCollector,
+    QuestionAttentionMassCollector.metric_name: QuestionAttentionMassCollector,
+    FullNeedleAttentionMassCollector.metric_name: FullNeedleAttentionMassCollector,
 }
 
 
@@ -188,12 +219,17 @@ def retrieval_capture_requirements(names: list[str]) -> tuple[bool, bool]:
 def create_retrieval_collector(
     metric: str, *, eligible_heads: tuple[Head, ...],
     prompt_token_ids: list[int], needle_span: NeedleSpan,
+    question_span: NeedleSpan | None = None,
+    full_needle_span: NeedleSpan | None = None,
 ) -> RetrievalScoreCollector:
     try:
         collector_class = _RETRIEVAL_COLLECTORS[metric]
     except KeyError as error:
         raise ValueError(f"Unknown retrieval metric: {metric!r}") from error
-    return collector_class(eligible_heads=eligible_heads, prompt_token_ids=prompt_token_ids,
+    extra = {'question_span': question_span} if metric == 'question_attention_mass_v1' else {}
+    if metric == 'full_needle_attention_mass_v1':
+        extra = {'full_needle_span': full_needle_span}
+    return collector_class(**extra, eligible_heads=eligible_heads, prompt_token_ids=prompt_token_ids,
                            needle_span=needle_span)
 
 
