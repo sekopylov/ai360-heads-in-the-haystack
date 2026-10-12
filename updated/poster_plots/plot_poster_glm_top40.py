@@ -2,8 +2,14 @@
 import csv
 import hashlib
 import json
+import sys
 from pathlib import Path
 from statistics import mean
+
+# Support direct script execution from any working directory.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
@@ -11,7 +17,6 @@ from plot_paul_graham_mask import plt, rescore
 from plot_qrscore_experiments import load_archive, LENGTHS, DEPTHS
 from retrieval_heads.experiment.scoring import rank_heads
 
-ROOT = Path(__file__).resolve().parent
 OUT = ROOT / 'report-assets/poster/glm-top40-three-metrics'
 SURVEY = ROOT / 'datasphere-results/glm4-6v-flash-survey-download/glm4-6v-flash-no-thinking-context-only-survey'
 RANKINGS = [('multiset', 'Token multiset', 'needle_token_multiset_v1'),
@@ -221,7 +226,7 @@ def main():
         'Masking: legacy_uniform, только decode, BF16/A100, no-thinking, seed42, выход ≤256 токенов.',
         'Token multiset — модификация исходного hit-score, QRScore — дополнительный query-focused подход. '
         'Это собственное сравнение рейтингов в протоколе исходной статьи.', '',
-        'Воспроизведение из updated: `.venv/bin/python plot_poster_glm_top40.py`.', '']
+        'Воспроизведение из updated: `.venv/bin/python poster_plots/plot_poster_glm_top40.py`.', '']
     (OUT / 'README.md').write_text('\n'.join(lines), encoding='utf-8')
     print(json.dumps(summary, indent=2))
 

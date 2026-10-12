@@ -1,11 +1,17 @@
 """Three poster donuts: fractions of GLM heads in shared mean-score bins."""
 import csv
 import json
+import sys
+from pathlib import Path
+
+_UPDATED_ROOT = Path(__file__).resolve().parents[1]
+if str(_UPDATED_ROOT) not in sys.path:
+    sys.path.insert(0, str(_UPDATED_ROOT))
 
 import numpy as np
 from matplotlib.patches import Patch
 
-from plot_poster_glm_head_scores import LABELS, METRICS, OUT, load_scores, plt
+from poster_plots.plot_poster_glm_head_scores import LABELS, METRICS, OUT, load_scores, plt
 
 NAME = 'head_score_distribution_three_metrics'
 BIN_LABELS = ('0–0,1', '>0,1–0,5', '>0,5–1')
@@ -79,7 +85,7 @@ def main():
              'голов, цвета секторов соответствуют серединам диапазонов. Retrieval Score — '
              'краткая подпись multiset-версии. Границы: ровно 0,1 входит в первый диапазон, '
              'ровно 0,5 — во второй. Значения score не округляются до распределения.', '',
-             'Воспроизведение из updated: `.venv/bin/python plot_poster_glm_score_pies.py`.', '']
+             'Воспроизведение из updated: `.venv/bin/python poster_plots/plot_poster_glm_score_pies.py`.', '']
     (OUT / 'HEAD_SCORE_DISTRIBUTION.md').write_text('\n'.join(lines), encoding='utf-8')
     print(json.dumps(rows, indent=2, ensure_ascii=False))
 

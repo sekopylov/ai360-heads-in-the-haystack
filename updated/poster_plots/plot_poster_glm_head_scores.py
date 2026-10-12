@@ -2,12 +2,18 @@
 import csv
 import hashlib
 import json
+import sys
+from pathlib import Path
 from statistics import mean
 from zipfile import ZipFile
 
+_UPDATED_ROOT = Path(__file__).resolve().parents[1]
+if str(_UPDATED_ROOT) not in sys.path:
+    sys.path.insert(0, str(_UPDATED_ROOT))
+
 import numpy as np
 
-from plot_poster_glm_top40 import OUT, ROOT, SURVEY, plt
+from poster_plots.plot_poster_glm_top40 import OUT, ROOT, SURVEY, plt
 
 LAYERS = 40
 HEADS = 32
@@ -164,7 +170,7 @@ def main():
         'и prompt_sha256 проверено, порядок историй выровнен. Проверены все 1280 идентификаторов '
         'голов для каждой метрики, диапазоны и длины историй, а также совпадение QRScore '
         'с сохранёнными средними. Нет пропусков или подставленных нулей.', '',
-        'Воспроизведение из updated: `.venv/bin/python plot_poster_glm_head_scores.py`.', '',
+        'Воспроизведение из updated: `.venv/bin/python poster_plots/plot_poster_glm_head_scores.py`.', '',
     ]
     (OUT / 'HEAD_SCORES.md').write_text('\n'.join(lines), encoding='utf-8')
     print(json.dumps(dict(output=str(OUT / f'{NAME}.svg'), heads_per_metric=LAYERS*HEADS,

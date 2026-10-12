@@ -2,7 +2,7 @@
 import json
 import numpy as np
 from matplotlib.patches import Rectangle
-from plot_poster_glm_top40 import OUT, plt
+from poster_plots.plot_poster_glm_top40 import OUT, plt
 
 NAME = 'attention_mass_scheme'
 INK, MUTED, ACCENT = '#303039', '#77717d', '#713d8f'

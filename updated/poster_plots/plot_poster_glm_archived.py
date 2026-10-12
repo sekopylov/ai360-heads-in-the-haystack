@@ -1,8 +1,15 @@
 """Re-export the two archived poster layouts with transparent backgrounds."""
+import sys
+from pathlib import Path
+
+_UPDATED_ROOT = Path(__file__).resolve().parents[1]
+if str(_UPDATED_ROOT) not in sys.path:
+    sys.path.insert(0, str(_UPDATED_ROOT))
+
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
 
-from plot_poster_glm_top40 import OUT, ROOT, RANKINGS, load_local, plt, rescore
+from poster_plots.plot_poster_glm_top40 import OUT, ROOT, RANKINGS, load_local, plt, rescore
 from plot_qrscore_experiments import DEPTHS, LENGTHS, load_archive
 
 
