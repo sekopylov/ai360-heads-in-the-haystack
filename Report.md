@@ -9,3 +9,13 @@
 
 09.10.2026
 Сделано: в ветке nastya_hard-context добавила новые иглы по уровням сложности, описанным в retrieval_heads_hard_context_plan, также (в retrieval_heads_hard_context_plan этого не было) добавила ось усложнения - добавление громких отвлекающих факторов, которые должны перетянуть внимание.
+
+11.10.2026
+Сделано: изучила статьи
+Context Rot: How Increasing Input Tokens Impacts LLM Performance, https://www.trychroma.com/research/context-rot#longmemeval 
+Query-Focused Retrieval Heads, https://arxiv.org/abs/2506.09944
+RULER, https://arxiv.org/abs/2404.06654
+Same Task, More Tokens https://arxiv.org/abs/2402.14848
+
+12.10.2026
+Сделано: В ветке timon_metrics участвовала в построении визуализаций, анализ результатов вычислений, подготовка выводов.
