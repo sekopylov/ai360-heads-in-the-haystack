@@ -42,6 +42,8 @@ import time
 from collections import defaultdict
 
 import numpy as np
+
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")  # less fragmentation at long T
 import torch
 import torch.nn.functional as F
 
@@ -65,8 +67,45 @@ def setup_logging(script, name="", log_dir="logs"):
         h.setFormatter(fmt)
         log.addHandler(h)
     log.info(f"log file: {os.path.abspath(path)}")
-    log.info("command: " + " ".join(sys.argv))
+    log.info("command: " + " ".join(sys.argv) + f" | pid {os.getpid()}")
+    install_crash_logging(path)
     return path
+
+
+_CRASH_FH = None
+
+
+def install_crash_logging(path):
+    """Make every way the process can die visible in the log file:
+    uncaught exceptions (incl. CUDA OOM) -> full traceback; SIGTERM/SIGHUP/SIGINT -> a line naming the signal;
+    segfaults / fatal CUDA errors -> faulthandler dump. Only SIGKILL (OOM-killer, `kill -9`, notebook/container
+    limits) cannot be caught: then the log simply stops - see the RAM numbers in the progress lines."""
+    global _CRASH_FH
+    import atexit
+    import faulthandler
+    import signal
+    import traceback
+
+    def excepthook(t, v, tb):
+        log.error("UNCAUGHT EXCEPTION -> process stops:\n" + "".join(traceback.format_exception(t, v, tb)).rstrip())
+        log.error(f"memory at crash: {gpu_mem()}")
+
+    sys.excepthook = excepthook
+    _CRASH_FH = open(path, "a", buffering=1)
+    faulthandler.enable(file=_CRASH_FH, all_threads=True)
+
+    def on_signal(signum, frame):
+        name = signal.Signals(signum).name
+        hint = {"SIGHUP": "terminal/SSH session closed - run with nohup, tmux or screen",
+                "SIGTERM": "killed by job scheduler / notebook / `kill`",
+                "SIGINT": "Ctrl+C"}.get(name, "")
+        log.error(f"received {name} ({hint}) -> stopping. Re-run the same command to resume.")
+        raise SystemExit(128 + signum)
+
+    for name in ("SIGTERM", "SIGHUP", "SIGINT"):
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), on_signal)
+    atexit.register(lambda: log.info(f"process exit (pid {os.getpid()})"))
 
 
 def fmt_time(sec):
@@ -79,12 +118,32 @@ def fmt_time(sec):
     return (f"{d}d " if d else "") + f"{h:02d}:{m:02d}:{s:02d}"
 
 
+def _proc_kb(path, field):
+    try:
+        with open(path) as f:
+            for line in f:
+                if line.startswith(field + ":"):
+                    return int(line.split()[1])
+    except OSError:
+        pass
+    return None
+
+
 def gpu_mem():
-    if not torch.cuda.is_available():
-        return "cpu"
-    a = torch.cuda.memory_allocated() / 2**30
-    p = torch.cuda.max_memory_allocated() / 2**30
-    return f"gpu {a:.1f}G (peak {p:.1f}G)"
+    """GPU memory + process RAM + free system RAM (to spot host OOM kills)."""
+    parts = []
+    if torch.cuda.is_available():
+        a = torch.cuda.memory_allocated() / 2**30
+        p = torch.cuda.max_memory_allocated() / 2**30
+        r = torch.cuda.memory_reserved() / 2**30
+        parts.append(f"gpu {a:.1f}G (peak {p:.1f}G, reserved {r:.1f}G)")
+    else:
+        parts.append("cpu")
+    rss = _proc_kb("/proc/self/status", "VmRSS")
+    avail = _proc_kb("/proc/meminfo", "MemAvailable")
+    if rss is not None:
+        parts.append(f"ram {rss / 2**20:.1f}G" + (f" (free {avail / 2**20:.1f}G)" if avail is not None else ""))
+    return " | ".join(parts)
 
 
 class Progress:
@@ -99,8 +158,8 @@ class Progress:
         self.work = 0.0
         self.t0 = time.time()
 
-    def update(self, work=1.0, msg=""):
-        self.items += 1
+    def update(self, work=1.0, msg="", items=1):
+        self.items += items
         self.work += work
         el = time.time() - self.t0
         frac = min(self.work / self.total_work, 1.0) if self.total_work > 0 else 1.0
@@ -119,6 +178,13 @@ def check_device(device, allow_cpu=False):
 
     log.info(f"python {sys.version.split()[0]} | torch {torch.__version__} (CUDA build {torch.version.cuda}) | "
              f"transformers {transformers.__version__}")
+    import importlib.util
+
+    fast = {m: importlib.util.find_spec(m) is not None for m in ("fla", "causal_conv1d", "kernels")}
+    log.info("fast linear-attention kernels: " + ", ".join(f"{m}={'yes' if v else 'no'}" for m, v in fast.items())
+             + ("" if fast["fla"] and fast["causal_conv1d"] else
+                "  -> Gated DeltaNet probably runs on the slow torch fallback; "
+                "try `pip install flash-linear-attention causal-conv1d kernels` (then re-run selftest.py)"))
     if str(device).startswith("cuda"):
         if not torch.cuda.is_available():
             msg = ("CUDA is NOT available: torch.cuda.is_available() == False. "
@@ -163,6 +229,10 @@ def load_model(model_path, device="cuda", dtype="bfloat16", attn_implementation=
     device = check_device(device, allow_cpu)
     if device == "cpu" and dtype == "bfloat16":
         dtype = "float32"
+    if str(device).startswith("cuda") and torch.cuda.get_device_capability()[0] < 8 and dtype == "bfloat16":
+        log.warning("GPU is pre-Ampere: no flash / memory-efficient SDPA kernels for bf16 -> full-attention layers use "
+                    "the O(T^2) math backend. Prefill is chunked (--prefill_chunk) to keep memory bounded. "
+                    "--dtype float16 may be faster here, but check it with selftest.py first.")
     t0 = time.time()
     tok = AutoTokenizer.from_pretrained(model_path)
     torch_dtype = getattr(torch, dtype)
@@ -175,6 +245,8 @@ def load_model(model_path, device="cuda", dtype="bfloat16", attn_implementation=
             model_path, torch_dtype=torch_dtype, attn_implementation=attn_implementation
         )
     model.to(device).eval()
+    model.requires_grad_(False)
+    torch.set_grad_enabled(False)  # this project never needs gradients
     log.info(f"loaded {model_path} in {time.time() - t0:.1f}s")
     check_model_device(model, device)
     return tok, model, device
@@ -353,17 +425,19 @@ def full_attention_rows(module, x, cos, sin, q_start):
     """Attention probabilities of a Qwen3_5Attention module for query rows q_start..T-1.
     Returns P [H, n, T] (fp32), v [H, T, d] (repeated to query heads) and the output gate [n, H*d]."""
     rope = sys.modules[type(module).__module__].apply_rotary_pos_emb
-    input_shape = x.shape[:-1]
     hd = module.head_dim
-    q, gate = torch.chunk(module.q_proj(x).view(*input_shape, -1, hd * 2), 2, dim=-1)
-    gate = gate.reshape(*input_shape, -1)
-    q = module.q_norm(q.reshape(*input_shape, -1, hd)).transpose(1, 2)
-    k = module.k_norm(module.k_proj(x).view(*input_shape, -1, hd)).transpose(1, 2)
-    v = module.v_proj(x).view(*input_shape, -1, hd).transpose(1, 2)
-    q, k = rope(q, k, cos, sin)
+    xq = x[:, q_start:]  # only the query rows need q / gate
+    n = xq.shape[1]
+    q, gate = torch.chunk(module.q_proj(xq).view(1, n, -1, hd * 2), 2, dim=-1)
+    gate = gate.reshape(1, n, -1)
+    q = module.q_norm(q.reshape(1, n, -1, hd)).transpose(1, 2)
+    k = module.k_norm(module.k_proj(x).view(*x.shape[:-1], -1, hd)).transpose(1, 2)
+    v = module.v_proj(x).view(*x.shape[:-1], -1, hd).transpose(1, 2)
+    q = rope(q, q, cos[..., q_start:, :], sin[..., q_start:, :])[0]
+    k = rope(k, k, cos, sin)[0]
     T = k.shape[2]
     rep = module.num_key_value_groups
-    qs = q[0, :, q_start:].float()  # [H, n, d]
+    qs = q[0].float()  # [H, n, d]
     kk = k[0].float().repeat_interleave(rep, dim=0)
     vv = v[0].float().repeat_interleave(rep, dim=0)
     logits = torch.einsum("hnd,htd->hnt", qs, kk) * module.scaling
@@ -371,17 +445,32 @@ def full_attention_rows(module, x, cos, sin, q_start):
     future = pos[None, :] > torch.arange(q_start, T, device=x.device)[:, None]
     logits.masked_fill_(future[None], float("-inf"))
     P = torch.softmax(logits, dim=-1)
-    return P, vv, gate[0, q_start:].float()
+    return P, vv, gate[0].float()
 
 
 # ----------------------------------------------------------------------------------------
-# Capture: one forward over the whole sequence -> top-k attended positions per head/step
+# Capture: forward over prompt + generated tokens -> top-k attended positions per head/step.
+# The prefix [0, q_start) is run in chunks with a KV/recurrent cache ("collect": the hooks only store
+# each layer's input hidden states); the last chunk [q_start, T) is run with the hooks in "compute" mode,
+# which concatenate the stored inputs and compute the attention rows of the query positions.
+# Memory is O(T) instead of the O(T^2) of a single full-length SDPA call on GPUs without flash kernels.
 # ----------------------------------------------------------------------------------------
 class AttnCapture:
-    def __init__(self, space: HeadSpace, topk=1, chunk=64, verify=False):
+    """Two ways to use it:
+    * detection (fast): pass `capture=cap` to greedy_generate -> the hooks only store each layer's input hidden
+      states during the prefill and decoding forwards that generation does anyway; then `cap.finalize(q_start)`
+      computes the attention rows. No extra forward pass over the long prompt.
+    * verification (selftest): `cap.run(model, seq, q_start)` does its own chunked forward and, with verify=True,
+      also records the real head outputs to compare against.
+    """
+
+    def __init__(self, space: HeadSpace, topk=1, chunk=256, verify=False, prefill_chunk=2048):
         self.space, self.topk, self.chunk, self.verify = space, topk, chunk, verify
-        self.active = False
+        self.prefill_chunk = prefill_chunk
+        self.mode = None  # None | "collect" | "compute"
         self.q_start = None
+        self.buf = defaultdict(list)  # layer -> list of hidden-state chunks [1, t, D]
+        self.pos = defaultdict(list)  # full layers -> list of (cos, sin) chunks
         self.results = {}  # layer -> {variant: (vals [H,n,k], idx [H,n,k])}
         self.recon, self.actual = {}, {}
         self.handles = []
@@ -403,42 +492,63 @@ class AttnCapture:
             out[var] = (vals.cpu(), idx.cpu())
         self.results[l] = out
 
+    def _compute_linear(self, l, module, X):
+        q, k, v, beta, g = gdn_recompute_qkv(module, X)
+        A = gdn_implicit_attention(q, k, beta, g, self.q_start, self.chunk)
+        self._store(l, A, v.norm(dim=-1))
+        if self.verify:
+            self.recon[l] = torch.einsum("hnt,htd->nhd", A, v).cpu()
+
+    def _compute_full(self, l, module, X, C, S):
+        P, vv, gate = full_attention_rows(module, X, C, S, self.q_start)
+        self._store(l, P, vv.norm(dim=-1))
+        if self.verify:
+            o = torch.einsum("hnt,htd->nhd", P, vv).reshape(P.shape[1], -1)
+            self.recon[l] = (o * torch.sigmoid(gate)).reshape(P.shape[1], P.shape[0], -1).cpu()
+
     def _linear_hook(self, l):
         def hook(module, args, kwargs):
-            if not self.active:
+            if self.mode is None:
                 return None
             x = kwargs["hidden_states"] if "hidden_states" in kwargs else args[0]
-            q, k, v, beta, g = gdn_recompute_qkv(module, x)
-            A = gdn_implicit_attention(q, k, beta, g, self.q_start, self.chunk)
-            self._store(l, A, v.norm(dim=-1))
-            if self.verify:
-                self.recon[l] = torch.einsum("hnt,htd->nhd", A, v).cpu()
+            self.buf[l].append(x.detach())
+            if self.mode == "compute":
+                X = torch.cat(self.buf[l], dim=1)
+                self.buf[l] = []
+                self._compute_linear(l, module, X)
             return None
 
         return hook
 
     def _full_hook(self, l):
         def hook(module, args, kwargs):
-            if not self.active:
+            if self.mode is None:
                 return None
             x = kwargs["hidden_states"] if "hidden_states" in kwargs else args[0]
-            cos, sin = kwargs["position_embeddings"]
-            P, vv, gate = full_attention_rows(module, x, cos, sin, self.q_start)
-            self._store(l, P, vv.norm(dim=-1))
-            if self.verify:
-                o = torch.einsum("hnt,htd->nhd", P, vv).reshape(P.shape[1], -1)
-                self.recon[l] = (o * torch.sigmoid(gate)).reshape(P.shape[1], P.shape[0], -1).cpu()
+            self.buf[l].append(x.detach())
+            self.pos[l].append(kwargs["position_embeddings"])
+            if self.mode == "compute":
+                X, C, S = self._take_full(l)
+                self._compute_full(l, module, X, C, S)
             return None
 
         return hook
 
+    def _take_full(self, l):
+        X = torch.cat(self.buf[l], dim=1)
+        C = torch.cat([c for c, _ in self.pos[l]], dim=-2)
+        S = torch.cat([s_ for _, s_ in self.pos[l]], dim=-2)
+        self.buf[l], self.pos[l] = [], []
+        return X, C, S
+
+    # verification hooks: in "compute" mode the current chunk is exactly positions q_start..T-1
     def _actual_linear_hook(self, l):
         H = self.space.n_heads[l]
 
         def hook(module, args):
-            if self.active:
+            if self.mode == "compute":
                 x = args[0]
-                self.actual[l] = x.reshape(-1, H, x.shape[-1])[self.q_start:].float().cpu()
+                self.actual[l] = x.reshape(-1, H, x.shape[-1]).float().cpu()
 
         return hook
 
@@ -446,21 +556,65 @@ class AttnCapture:
         H = self.space.n_heads[l]
 
         def hook(module, args):
-            if self.active:
-                x = args[0][0]  # [T, H*d]
-                self.actual[l] = x[self.q_start:].reshape(-1, H, x.shape[-1] // H).float().cpu()
+            if self.mode == "compute":
+                x = args[0][0]  # [n, H*d]
+                self.actual[l] = x.reshape(-1, H, x.shape[-1] // H).float().cpu()
 
         return hook
 
+    def start_collect(self):
+        self.reset()
+        self.mode = "collect"
+
+    def stop_collect(self):
+        self.mode = None
+
+    def reset(self):
+        self.mode = None
+        self.buf.clear()
+        self.pos.clear()
+        self.results, self.recon, self.actual = {}, {}, {}
+
+    @torch.no_grad()
+    def finalize(self, q_start):
+        """Compute attention rows q_start..T-1 from the hidden states collected during generation."""
+        self.q_start = q_start
+        self.results = {}
+        try:
+            for l, layer in enumerate(self.space.layers):
+                if self.space.kinds[l] == "linear":
+                    X = torch.cat(self.buf[l], dim=1)
+                    self.buf[l] = []
+                    self._compute_linear(l, layer.linear_attn, X)
+                else:
+                    X, C, S = self._take_full(l)
+                    self._compute_full(l, layer.self_attn, X, C, S)
+                del X
+        finally:
+            self.buf.clear()
+            self.pos.clear()
+        return self.results
+
     @torch.no_grad()
     def run(self, model, seq_ids, q_start):
-        """seq_ids: [1, T] on device. Captures rows q_start..T-1."""
-        self.results, self.recon, self.actual = {}, {}, {}
-        self.q_start, self.active = q_start, True
+        """Own chunked forward over seq_ids [1, T]; captures rows q_start..T-1 (used by selftest)."""
+        self.reset()
+        self.q_start = q_start
+        past = None
         try:
-            model(input_ids=seq_ids, use_cache=False, logits_to_keep=1)
+            self.mode = "collect"
+            cs = self.prefill_chunk or q_start
+            for s in range(0, q_start, max(cs, 1)):
+                e = min(s + cs, q_start)
+                out = model(input_ids=seq_ids[:, s:e], past_key_values=past, use_cache=True, logits_to_keep=1)
+                past = out.past_key_values
+            self.mode = "compute"
+            model(input_ids=seq_ids[:, q_start:], past_key_values=past, use_cache=True, logits_to_keep=1)
         finally:
-            self.active = False
+            self.mode = None
+            self.buf.clear()
+            self.pos.clear()
+            del past
         return self.results
 
     def remove(self):
@@ -562,17 +716,135 @@ def stop_token_ids(tok):
     return ids
 
 
+class BatchHeadMasker:
+    """Row b of the batch gets heads head_lists[b] zeroed (same hook points as HeadMasker).
+    Lets several ablation runs decode together from one shared prefill."""
+
+    def __init__(self, space: HeadSpace, head_lists, device):
+        self.enabled = False
+        self.handles = []
+        B = len(head_lists)
+        masks = {}
+        for b, heads in enumerate(head_lists):
+            for h in heads:
+                l, hh = (int(x) for x in str(h).split("-"))
+                if l not in masks:
+                    masks[l] = torch.ones(B, space.n_heads[l])
+                masks[l][b, hh] = 0.0
+        for l, m in masks.items():
+            layer = space.layers[l]
+            if space.kinds[l] == "linear":
+                self.handles.append(layer.linear_attn.norm.register_forward_pre_hook(self._hook(m.to(device), "linear")))
+            else:
+                self.handles.append(layer.self_attn.o_proj.register_forward_pre_hook(self._hook(m.to(device), "full")))
+
+    def _hook(self, m, kind):
+        B, H = m.shape
+
+        def hook(module, args):
+            if not self.enabled:
+                return None
+            x = args[0]
+            if kind == "linear":  # [B*T*H, d]
+                xv = x.reshape(B, -1, H, x.shape[-1]) * m[:, None, :, None].to(x.dtype)
+            else:  # [B, T, H*d]
+                xv = x.reshape(B, x.shape[1], H, -1) * m[:, None, :, None].to(x.dtype)
+            return (xv.reshape(x.shape),) + tuple(args[1:])
+
+        return hook
+
+    def remove(self):
+        for h in self.handles:
+            h.remove()
+        self.handles = []
+
+
 @torch.no_grad()
-def greedy_generate(model, tok, input_ids, max_new_tokens=50, masker: HeadMasker | None = None, scope="decode"):
+def prefill_for_decode(model, input_ids, prefill_chunk=2048):
+    """Prefill prompt[:-1] (unmasked, as in the paper's protocol). Returns the cache."""
+    return chunked_prefill(model, input_ids[:, :-1], prefill_chunk).past_key_values
+
+
+@torch.no_grad()
+def batched_greedy_decode(model, tok, past, last_token, n_rows, max_new_tokens=50, masker=None):
+    """Greedy decoding of n_rows sequences that share the same prefilled cache `past` (batch 1; it is
+    replicated, the original is left untouched). Same stopping rule per row as greedy_generate.
+    Row b uses the head mask of masker row b. Returns a list of token lists."""
+    import copy
+
+    past = copy.deepcopy(past)
+    past.reorder_cache(torch.zeros(n_rows, dtype=torch.long, device=last_token.device))
+    stops = stop_token_ids(tok)
+    inp = last_token.reshape(1, 1).expand(n_rows, 1).contiguous()
+    gens = [[] for _ in range(n_rows)]
+    done = [False] * n_rows
+    t0 = _sync_time()
+    steps = 0
+    try:
+        if masker is not None:
+            masker.enabled = True
+        for _ in range(max_new_tokens):
+            out = model(input_ids=inp, past_key_values=past, use_cache=True)
+            past = out.past_key_values
+            steps += 1
+            logits = out.logits[:, -1]
+            nxt = logits.argmax(-1)
+            nxt_l = nxt.tolist()
+            for b in range(n_rows):
+                if done[b]:
+                    continue
+                if not torch.isfinite(logits[b]).all():
+                    raise RuntimeError("non-finite logits (fp16 overflow?) -> use --dtype bfloat16 or float32")
+                t = nxt_l[b]
+                gens[b].append(t)
+                if t in stops or ("\n" in tok.decode([t]) and tok.decode(gens[b]).strip()):
+                    done[b] = True
+            if all(done):
+                break
+            inp = nxt[:, None]
+    finally:
+        if masker is not None:
+            masker.enabled = False
+        del past
+    LAST_GEN.update(batch_decode_s=_sync_time() - t0, batch_steps=steps, batch_rows=n_rows)
+    return gens
+
+
+@torch.no_grad()
+def chunked_prefill(model, ids, chunk=2048):
+    """Prefill with a cache in chunks of `chunk` tokens (identical result, O(T) attention memory)."""
+    past, out = None, None
+    T = ids.shape[1]
+    cs = chunk if chunk and chunk > 0 else T
+    for s in range(0, T, cs):
+        out = model(input_ids=ids[:, s:s + cs], past_key_values=past, use_cache=True, logits_to_keep=1)
+        past = out.past_key_values
+    return out
+
+
+@torch.no_grad()
+def greedy_generate(model, tok, input_ids, max_new_tokens=50, masker: HeadMasker | None = None, scope="decode",
+                    prefill_chunk=2048, capture: "AttnCapture | None" = None):
     """Original decoding protocol: prefill prompt[:-1], then feed prompt[-1] and decode greedily,
     stopping at the first newline after some text (or EOS). Masking is active for the decoding steps
     (and for the prefill too if scope == 'all')."""
+    global STAGE
     stops = stop_token_ids(tok)
+    peak_reset()
+    STAGE = "prefill"
+    t0 = _sync_time()
+    if capture is not None:
+        # every token fed below (prompt[:-1], prompt[-1], gen[:-1]) is exactly the sequence scored afterwards
+        capture.start_collect()
     try:
         if masker is not None:
             masker.enabled = scope == "all"
-        out = model(input_ids=input_ids[:, :-1], use_cache=True, logits_to_keep=1)
+        out = chunked_prefill(model, input_ids[:, :-1], prefill_chunk)
         past = out.past_key_values
+        t1 = _sync_time()
+        p_prefill = peak_gb()
+        peak_reset()
+        STAGE = "decode"
         if masker is not None:
             masker.enabled = True
         inp = input_ids[:, -1:]
@@ -580,6 +852,8 @@ def greedy_generate(model, tok, input_ids, max_new_tokens=50, masker: HeadMasker
         for _ in range(max_new_tokens):
             out = model(input_ids=inp, past_key_values=past, use_cache=True)
             past = out.past_key_values
+            if not torch.isfinite(out.logits[0, -1]).all():
+                raise RuntimeError("non-finite logits (fp16 overflow?) -> use --dtype bfloat16 or float32")
             nxt = int(out.logits[0, -1].argmax())
             gen.append(nxt)
             if nxt in stops:
@@ -590,7 +864,48 @@ def greedy_generate(model, tok, input_ids, max_new_tokens=50, masker: HeadMasker
     finally:
         if masker is not None:
             masker.enabled = False
+        if capture is not None:
+            capture.stop_collect()
+    t2 = _sync_time()
+    LAST_GEN.update(prefill_s=t1 - t0, decode_s=t2 - t1, steps=len(gen), prompt_tokens=int(input_ids.shape[1]),
+                    prefill_peak=p_prefill, decode_peak=peak_gb())
     return gen
+
+
+LAST_GEN = {}
+STAGE = None  # which stage of a sample is running (for OOM reports)
+
+
+def peak_reset():
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+
+
+def peak_gb():
+    return torch.cuda.max_memory_allocated() / 2**30 if torch.cuda.is_available() else 0.0
+
+
+def free_gpu():
+    import gc
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+def _sync_time():
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    return time.time()
+
+
+def gen_timing_str():
+    g = LAST_GEN
+    if not g:
+        return ""
+    per = g["decode_s"] / max(g["steps"], 1)
+    return (f"prefill {g['prefill_s']:.1f}s (peak {g['prefill_peak']:.1f}G) + {g['steps']} tok x {per:.2f}s "
+            f"(peak {g['decode_peak']:.1f}G)")
 
 
 _SCORER = None

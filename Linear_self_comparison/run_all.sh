@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # Full pipeline for Qwen3.5-0.8B. Usage: bash run_all.sh [model_path] [max_len]
 set -euo pipefail
 MODEL=${1:-Qwen/Qwen3.5-0.8B}

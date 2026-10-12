@@ -33,17 +33,39 @@ SF_ANSWER = "eat a sandwich and sit in Dolores Park on a sunny day"
 
 
 def run_niah(model, tok, args, lengths, depths, haystack, masker, path, run_meta, prog):
+    """Writes to <path>.part and renames to <path> when complete; an interrupted .part is continued."""
     tmp = path + ".part"
-    scores = []
+    scores, done = [], set()
+    if os.path.exists(tmp):
+        for line in open(tmp, encoding="utf-8"):
+            try:
+                d = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if "meta" not in d:
+                done.add((d["context_length"], d["depth_percent"]))
+                scores.append(d["score"])
+        if done:
+            log.info(f"RESUME {run_meta['run']}: {len(done)} samples already in {tmp}")
+            for L in lengths:  # keep the global progress honest
+                for depth in depths:
+                    if (L, depth) in done:
+                        prog.total_work -= L
+                        prog.total_items -= 1
     t_run = time.time()
-    with open(tmp, "w") as f:
+    f = open_append(tmp)
+    if not os.path.getsize(tmp):
         f.write(json.dumps({"meta": run_meta}) + "\n")
+    with f:
         for L in lengths:
             for depth in depths:
+                if (L, depth) in done:
+                    continue
                 t0 = time.time()
                 context = rc.insert_needle(tok, haystack, SF_NEEDLE, depth, L)
                 ids = rc.build_prompt_ids(tok, context, SF_QUESTION, args.prompt_format).to(args.device)
-                gen = rc.greedy_generate(model, tok, ids, args.max_new_tokens, masker=masker, scope=args.scope)
+                gen = rc.greedy_generate(model, tok, ids, args.max_new_tokens, masker=masker, scope=args.scope,
+                                         prefill_chunk=args.prefill_chunk)
                 resp = tok.decode(gen, skip_special_tokens=True).strip()
                 score = rc.rouge_recall(SF_ANSWER, resp)
                 scores.append(score)
@@ -51,11 +73,105 @@ def run_niah(model, tok, args, lengths, depths, haystack, masker, path, run_meta
                                    ensure_ascii=False) + "\n")
                 f.flush()
                 prog.update(L, f"{run_meta['run']}: len={L} depth={depth}% score={score:.0f} "
-                               f"({time.time() - t0:.1f}s, run mean {np.mean(scores):.1f}) {resp[:50]!r}")
+                               f"({time.time() - t0:.1f}s: {rc.gen_timing_str()}; run mean {np.mean(scores):.1f}) "
+                               f"{resp[:40]!r}")
     os.replace(tmp, path)
     log.info(f"=== finished {run_meta['run']}: mean NIAH score {np.mean(scores):.2f} "
              f"over {len(scores)} samples in {rc.fmt_time(time.time() - t_run)} -> {path}")
     return float(np.mean(scores))
+
+
+def read_part(tmp):
+    """{(L, depth): score} already written to a run's .part file."""
+    done = {}
+    if os.path.exists(tmp):
+        for line in open(tmp, encoding="utf-8"):
+            try:
+                d = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if "meta" not in d:
+                done[(d["context_length"], d["depth_percent"])] = d["score"]
+    return done
+
+
+def run_grid_batched(model, tok, args, space, lengths, depths, haystack, todo, metas):
+    """scope=decode: the prefill is identical for every run at a grid point (masks act only while decoding),
+    so each grid point is prefilled ONCE and all runs that still need it are decoded together as one batch,
+    each batch row with its own head mask."""
+    files, done = {}, {}
+    for run, heads, path in todo:
+        tmp = path + ".part"
+        done[run] = read_part(tmp)
+        f = open_append(tmp)
+        if os.path.getsize(tmp) == 0:
+            f.write(json.dumps({"meta": metas[run]}) + "\n")
+            f.flush()
+        files[run] = f
+        if done[run]:
+            log.info(f"RESUME {run}: {len(done[run])} samples already in {tmp}")
+    grid = [(L, d) for L in lengths for d in depths]
+    pending = {(L, d): [r for r, _, _ in todo if (L, d) not in done[r]] for L, d in grid}
+    n_items = sum(len(v) for v in pending.values())
+    prog = rc.Progress(n_items, sum(L * len(pending[(L, d)]) for L, d in grid), name="ablate")
+    heads_of = {r: h for r, h, _ in todo}
+    run_scores = {r: list(done[r].values()) for r, _, _ in todo}
+    try:
+        for L, depth in grid:
+            rows = pending[(L, depth)]
+            if not rows:
+                continue
+            t0 = time.time()
+            context = rc.insert_needle(tok, haystack, SF_NEEDLE, depth, L)
+            ids = rc.build_prompt_ids(tok, context, SF_QUESTION, args.prompt_format).to(args.device)
+            tp = rc._sync_time()
+            past = rc.prefill_for_decode(model, ids, args.prefill_chunk)
+            t_prefill = rc._sync_time() - tp
+            t_dec, steps = 0.0, 0
+            for g in range(0, len(rows), args.batch_runs):
+                group = rows[g:g + args.batch_runs]
+                masker = rc.BatchHeadMasker(space, [heads_of[r] for r in group], args.device)
+                try:
+                    gens = rc.batched_greedy_decode(model, tok, past, ids[0, -1], len(group),
+                                                    args.max_new_tokens, masker)
+                finally:
+                    masker.remove()
+                t_dec += rc.LAST_GEN["batch_decode_s"]
+                steps += rc.LAST_GEN["batch_steps"]
+                for r, gen in zip(group, gens):
+                    resp = tok.decode(gen, skip_special_tokens=True).strip()
+                    score = rc.rouge_recall(SF_ANSWER, resp)
+                    run_scores[r].append(score)
+                    files[r].write(json.dumps(dict(context_length=L, depth_percent=depth, score=score, response=resp),
+                                              ensure_ascii=False) + "\n")
+                    files[r].flush()
+            del past
+            line = ", ".join(f"{r}={run_scores[r][-1]:.0f}" for r in rows[:6]) + (" ..." if len(rows) > 6 else "")
+            prog.update(L * len(rows), f"len={L} depth={depth}%: {len(rows)} runs in {time.time() - t0:.1f}s "
+                                       f"(prefill {t_prefill:.1f}s once + {steps} batched steps {t_dec:.1f}s) | {line}",
+                        items=len(rows))
+    finally:
+        for f in files.values():
+            f.close()
+    results = {}
+    for run, heads, path in todo:
+        tmp = path + ".part"
+        if len(read_part(tmp)) == len(grid):
+            os.replace(tmp, path)
+            results[run] = float(np.mean(run_scores[run]))
+            log.info(f"=== finished {run}: mean NIAH score {results[run]:.2f} -> {path}")
+    return results
+
+
+def open_append(path):
+    if os.path.exists(path) and os.path.getsize(path) > 0:
+        with open(path, "rb") as fh:
+            fh.seek(-1, os.SEEK_END)
+            last = fh.read(1)
+        if last != b"\n":
+            with open(path, "a") as fh:
+                fh.write("\n")
+    return open(path, "a", encoding="utf-8")
 
 
 def main():
@@ -78,6 +194,10 @@ def main():
     p.add_argument("--num_depths", type=int, default=10)
     p.add_argument("--prompt_format", choices=["chat", "raw"], default="chat")
     p.add_argument("--max_new_tokens", type=int, default=50)
+    p.add_argument("--prefill_chunk", type=int, default=2048, help="prefill in chunks (bounds memory; 0 = off)")
+    p.add_argument("--batch_runs", type=int, default=16,
+                   help="runs decoded together from one shared prefill (scope=decode). Lower it if you hit OOM: "
+                        "the KV cache of the 6 full-attention layers is replicated per row (~12 MB per 1k tokens)")
     p.add_argument("--out_dir", default="results/niah")
     p.add_argument("--overwrite", action="store_true")
     p.add_argument("--device", default="cuda")
@@ -128,19 +248,25 @@ def main():
     n_per_run = len(lengths) * len(depths)
     log.info(f"{len(runs)} runs planned, {len(todo)} to do ({len(runs) - len(todo)} already done); "
              f"{n_per_run} samples per run, {len(todo) * n_per_run} samples total")
-    prog = rc.Progress(len(todo) * n_per_run, len(todo) * len(depths) * sum(lengths), name="ablate")
+    metas = {run: dict(run=run, heads=heads, head_scores=[round(scores[h], 4) for h in heads],
+                       kinds=[space.kind_of[h] for h in heads], scope=args.scope, model=args.model_path)
+             for run, heads, _ in todo}
+    for run, heads, _ in todo:
+        log.info(f"   {run}: {len(heads)} heads {heads[:16]}{'...' if len(heads) > 16 else ''}"
+                 + (f" | scores {metas[run]['head_scores'][:16]}" if heads else ""))
     results = {}
-    for i, (run, heads, path) in enumerate(todo):
-        meta = dict(run=run, heads=heads, head_scores=[round(scores[h], 4) for h in heads],
-                    kinds=[space.kind_of[h] for h in heads], scope=args.scope, model=args.model_path)
-        log.info(f"=== run {i + 1}/{len(todo)}: {run} | {len(heads)} heads {heads[:16]}{'...' if len(heads) > 16 else ''}"
-                 + (f" | their scores {meta['head_scores'][:16]}" if heads else ""))
-        masker = rc.HeadMasker(space, heads) if heads else None
-        try:
-            results[run] = run_niah(model, tok, args, lengths, depths, haystack, masker, path, meta, prog)
-        finally:
-            if masker is not None:
-                masker.remove()
+    if args.scope == "decode" and todo:
+        results = run_grid_batched(model, tok, args, space, lengths, depths, haystack, todo, metas)
+    else:  # masks also act during prefill -> every run needs its own prefill
+        prog = rc.Progress(len(todo) * n_per_run, len(todo) * len(depths) * sum(lengths), name="ablate")
+        for i, (run, heads, path) in enumerate(todo):
+            log.info(f"=== run {i + 1}/{len(todo)}: {run}")
+            masker = rc.HeadMasker(space, heads) if heads else None
+            try:
+                results[run] = run_niah(model, tok, args, lengths, depths, haystack, masker, path, metas[run], prog)
+            finally:
+                if masker is not None:
+                    masker.remove()
     if results:
         log.info("summary of this session (mean NIAH score): "
                  + ", ".join(f"{r}={v:.1f}" for r, v in results.items()))
