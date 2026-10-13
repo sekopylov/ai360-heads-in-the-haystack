@@ -4,7 +4,7 @@ An AI360 student project studying how language models retrieve information from 
 
 **Needle-in-a-Haystack (NIAH)** places a fact—the *needle*—inside a long distracting text—the *haystack*—and asks the model to recover it. We inspect attention heads and selectively disable them to investigate which components contribute to retrieval.
 
-**Poster:** [Team 14 — final A0 poster (PDF)](poster/heads-in-the-haystack.pdf).
+**Poster:** [Final A0 poster (PDF)](poster/heads-in-the-haystack.pdf).
 
 ## Research directions
 
