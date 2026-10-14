@@ -17,3 +17,7 @@ An AI360 student project studying how language models retrieve information from 
 4. **Compare attention architectures.** Study NIAH with standard, linear, and hybrid attention. Compare full and linear attention within Qwen3.5-0.8B and investigate retrieval in [Mamba-2](https://arxiv.org/abs/2405.21060) 2.7B.
 
 5. **Explore context extension.** Compare native RoPE with [YaRN](https://arxiv.org/abs/2309.00071) on Qwen2.5-7B-Instruct, within and beyond its native context window.
+
+## Project team
+
+![The Heads in the Haystack team presenting the project poster](assets/team-photo.png)
